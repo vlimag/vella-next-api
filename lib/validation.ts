@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { fail } from '@/lib/http';
 
-export const localeSchema = z.enum(['en', 'pt', 'es']).default('en');
+export const localeSchema = z.enum(['en', 'es', 'pt', 'fr', 'de', 'it', 'ru', 'pl']).default('en');
 export const isoDaySchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)

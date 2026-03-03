@@ -27,5 +27,21 @@ export async function GET(req: Request) {
     .order('duration_days', { ascending: true });
 
   if (error) return fail('Could not load journey templates', 500, error.message);
+  if (data && data.length > 0) return ok(data);
+
+  if (language !== 'en') {
+    const { data: fallback, error: fallbackError } = await supabase
+      .from('journey_templates')
+      .select('id, slug, language_code, title, subtitle, description, duration_days, is_premium, theme_tags')
+      .eq('is_published', true)
+      .eq('version', 1)
+      .eq('language_code', 'en')
+      .order('is_premium', { ascending: true })
+      .order('duration_days', { ascending: true });
+
+    if (fallbackError) return fail('Could not load fallback journey templates', 500, fallbackError.message);
+    return ok(fallback ?? []);
+  }
+
   return ok(data ?? []);
 }

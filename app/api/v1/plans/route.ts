@@ -26,6 +26,18 @@ export async function GET(req: Request) {
     .order('duration_days', { ascending: true });
 
   if (error) return fail('Could not load plans', 500, error.message);
+  if (data && data.length > 0) return ok(data);
 
-  return ok(data);
+  if (lang !== 'en') {
+    const { data: fallbackData, error: fallbackError } = await supabase
+      .from('reading_plans')
+      .select('id, slug, title, description, language_code, duration_days, is_premium')
+      .eq('language_code', 'en')
+      .eq('is_published', true)
+      .order('duration_days', { ascending: true });
+    if (fallbackError) return fail('Could not load fallback plans', 500, fallbackError.message);
+    return ok(fallbackData ?? []);
+  }
+
+  return ok(data ?? []);
 }
