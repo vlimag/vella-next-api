@@ -159,25 +159,14 @@ async function queryByReference(lang: string, chapter: number, verse: number, bo
   return { data: (data as VerseRow[]) ?? [] };
 }
 
-function fallbackTermsFromQuery(query: string, lang: string) {
+function fallbackTermsFromQuery(query: string) {
   const compact = query
     .toLowerCase()
     .replace(/[^a-z0-9\s]/g, ' ')
     .split(/\s+/)
     .filter((token) => token.length >= 3);
 
-  const defaultsByLanguage: Record<string, string[]> = {
-    pt: ['deus', 'jesus', 'amor', 'fe', 'graca', 'esperanca'],
-    es: ['dios', 'jesus', 'amor', 'fe', 'gracia', 'esperanza'],
-    fr: ['dieu', 'jesus', 'amour', 'foi', 'grace', 'esperance'],
-    de: ['gott', 'jesus', 'liebe', 'glaube', 'gnade', 'hoffnung'],
-    it: ['dio', 'gesu', 'amore', 'fede', 'grazia', 'speranza'],
-    ru: ['bog', 'iisus', 'lyubov', 'vera', 'blagodat', 'nadezhda'],
-    pl: ['bog', 'jezus', 'milosc', 'wiara', 'laska', 'nadzieja'],
-    en: ['god', 'jesus', 'grace', 'faith', 'love', 'hope'],
-  };
-  const defaults = defaultsByLanguage[lang] ?? defaultsByLanguage.en;
-  return uniqueStrings([query, ...compact, ...defaults]).slice(0, 12);
+  return uniqueStrings([query, ...compact]).slice(0, 12);
 }
 
 function uniqueStrings(values: string[]) {
@@ -197,7 +186,7 @@ function uniqueStrings(values: string[]) {
 async function expandQueryWithAI(query: string, lang: string) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return { terms: fallbackTermsFromQuery(query, lang), provider: 'fallback' as const };
+    return { terms: fallbackTermsFromQuery(query), provider: 'fallback' as const };
   }
 
   const languageNames: Record<string, string> = {
@@ -225,7 +214,7 @@ async function expandQueryWithAI(query: string, lang: string) {
           {
             role: 'system',
             content:
-              'You expand Bible search intents. Return JSON only with shape {"terms": string[]}. Include up to 8 terms.',
+              'You expand Bible search intents. Return ONLY strict JSON with shape {"terms": string[]}. Include up to 8 terms and no markdown.',
           },
           {
             role: 'user',
@@ -236,7 +225,7 @@ async function expandQueryWithAI(query: string, lang: string) {
     });
 
     if (!response.ok) {
-      return { terms: fallbackTermsFromQuery(query, lang), provider: 'fallback' as const };
+      return { terms: fallbackTermsFromQuery(query), provider: 'fallback' as const };
     }
 
     const payload = (await response.json()) as {
@@ -246,11 +235,11 @@ async function expandQueryWithAI(query: string, lang: string) {
     const parsed = JSON.parse(content) as { terms?: unknown };
     const terms = Array.isArray(parsed.terms) ? parsed.terms.filter((term): term is string => typeof term === 'string') : [];
     return {
-      terms: uniqueStrings([query, ...terms, ...fallbackTermsFromQuery(query, lang)]).slice(0, 14),
+      terms: uniqueStrings([query, ...terms, ...fallbackTermsFromQuery(query)]).slice(0, 14),
       provider: 'openai' as const,
     };
   } catch {
-    return { terms: fallbackTermsFromQuery(query, lang), provider: 'fallback' as const };
+    return { terms: fallbackTermsFromQuery(query), provider: 'fallback' as const };
   }
 }
 
