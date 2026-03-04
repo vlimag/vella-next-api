@@ -81,6 +81,52 @@ const BOOK_ALIASES: Record<string, Record<string, string>> = {
   },
 };
 
+const INTENT_ALIASES: Record<string, Record<string, string[]>> = {
+  en: {
+    jesus: ['son', 'christ', 'messiah', 'lord', 'savior'],
+    optimism: ['hope', 'joy', 'peace', 'trust'],
+  },
+  pt: {
+    jesus: ['filho', 'cristo', 'senhor', 'salvador'],
+    otimismo: ['esperanca', 'alegria', 'paz', 'confianca'],
+  },
+  es: {
+    jesus: ['hijo', 'cristo', 'senor', 'salvador'],
+    optimismo: ['esperanza', 'gozo', 'paz', 'confianza'],
+  },
+  fr: {
+    jesus: ['fils', 'christ', 'seigneur', 'sauveur'],
+    optimisme: ['esperance', 'joie', 'paix', 'confiance'],
+  },
+  de: {
+    jesus: ['sohn', 'christus', 'herr', 'retter'],
+    optimismus: ['hoffnung', 'freude', 'frieden', 'vertrauen'],
+  },
+  it: {
+    gesu: ['figlio', 'cristo', 'signore', 'salvatore'],
+    ottimismo: ['speranza', 'gioia', 'pace', 'fiducia'],
+  },
+  ru: {
+    iisus: ['syn', 'khristos', 'gospod', 'spasitel'],
+    optimizm: ['nadezhda', 'radost', 'mir', 'doverie'],
+  },
+  pl: {
+    jezus: ['syn', 'chrystus', 'pan', 'zbawiciel'],
+    optymizm: ['nadzieja', 'radosc', 'pokoj', 'zaufanie'],
+  },
+};
+
+const SEARCH_STOPWORDS: Record<string, Set<string>> = {
+  en: new Set(['some', 'verse', 'verses', 'about', 'the', 'and', 'for', 'with', 'that', 'this', 'what', 'which']),
+  pt: new Set(['algum', 'verso', 'versos', 'sobre', 'com', 'para', 'que', 'este', 'esta', 'qual']),
+  es: new Set(['algun', 'verso', 'versos', 'sobre', 'con', 'para', 'que', 'este', 'esta', 'cual']),
+  fr: new Set(['quelque', 'verset', 'versets', 'sur', 'avec', 'pour', 'que', 'ce', 'cette', 'quel']),
+  de: new Set(['einige', 'vers', 'verse', 'uber', 'mit', 'fur', 'dass', 'dies', 'welche']),
+  it: new Set(['alcuni', 'versetto', 'versetti', 'su', 'con', 'per', 'che', 'questo', 'quale']),
+  ru: new Set(['nekotorye', 'stikh', 'stikhi', 'pro', 's', 'dlya', 'chto', 'kakoy']),
+  pl: new Set(['jakis', 'werset', 'wersety', 'o', 'z', 'dla', 'ze', 'jaki']),
+};
+
 function normalizeForLookup(value: string) {
   return value
     .normalize('NFD')
@@ -159,14 +205,16 @@ async function queryByReference(lang: string, chapter: number, verse: number, bo
   return { data: (data as VerseRow[]) ?? [] };
 }
 
-function fallbackTermsFromQuery(query: string) {
-  const compact = query
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, ' ')
+function fallbackTermsFromQuery(query: string, lang: string) {
+  const stopwords = SEARCH_STOPWORDS[lang] ?? SEARCH_STOPWORDS.en;
+  const compact = normalizeForLookup(query)
     .split(/\s+/)
-    .filter((token) => token.length >= 3);
+    .filter((token) => token.length >= 3 && !stopwords.has(token));
 
-  return uniqueStrings([query, ...compact]).slice(0, 12);
+  const aliases = INTENT_ALIASES[lang] ?? INTENT_ALIASES.en;
+  const expandedAliases = compact.flatMap((token) => aliases[token] ?? []);
+
+  return uniqueStrings([query, ...expandedAliases, ...compact]).slice(0, 20);
 }
 
 function uniqueStrings(values: string[]) {
@@ -183,10 +231,23 @@ function uniqueStrings(values: string[]) {
   return result;
 }
 
-async function expandQueryWithAI(query: string, lang: string) {
+function buildRequestId() {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+}
+
+function logSearch(requestId: string, stage: string, details?: Record<string, unknown>) {
+  console.info(`[verse-search][${requestId}] ${stage}`, details ?? {});
+}
+
+async function expandQueryWithAI(query: string, lang: string, requestId: string) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return { terms: fallbackTermsFromQuery(query), provider: 'fallback' as const };
+    logSearch(requestId, 'ai_skipped_missing_api_key');
+    return { terms: fallbackTermsFromQuery(query, lang), provider: 'fallback' as const };
   }
 
   const languageNames: Record<string, string> = {
@@ -201,6 +262,7 @@ async function expandQueryWithAI(query: string, lang: string) {
   };
 
   try {
+    logSearch(requestId, 'ai_expand_started', { model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini' });
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -225,7 +287,9 @@ async function expandQueryWithAI(query: string, lang: string) {
     });
 
     if (!response.ok) {
-      return { terms: fallbackTermsFromQuery(query), provider: 'fallback' as const };
+      const errorText = await response.text();
+      logSearch(requestId, 'ai_expand_failed_status', { status: response.status, body: errorText.slice(0, 400) });
+      return { terms: fallbackTermsFromQuery(query, lang), provider: 'fallback' as const };
     }
 
     const payload = (await response.json()) as {
@@ -234,12 +298,18 @@ async function expandQueryWithAI(query: string, lang: string) {
     const content = payload.choices?.[0]?.message?.content ?? '';
     const parsed = JSON.parse(content) as { terms?: unknown };
     const terms = Array.isArray(parsed.terms) ? parsed.terms.filter((term): term is string => typeof term === 'string') : [];
+    logSearch(requestId, 'ai_expand_succeeded', { term_count: terms.length });
+    const mergedTerms = uniqueStrings([query, ...fallbackTermsFromQuery(query, lang), ...terms]).slice(0, 24);
+    logSearch(requestId, 'ai_expand_terms', { terms: mergedTerms });
     return {
-      terms: uniqueStrings([query, ...terms, ...fallbackTermsFromQuery(query)]).slice(0, 14),
+      terms: mergedTerms,
       provider: 'openai' as const,
     };
-  } catch {
-    return { terms: fallbackTermsFromQuery(query), provider: 'fallback' as const };
+  } catch (error) {
+    logSearch(requestId, 'ai_expand_exception', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { terms: fallbackTermsFromQuery(query, lang), provider: 'fallback' as const };
   }
 }
 
@@ -253,22 +323,37 @@ export async function GET(req: Request) {
 
   if ('error' in parsed) return parsed.error;
 
+  const requestId = req.headers.get('x-request-id') ?? buildRequestId();
   const lang = parsed.data.lang ?? 'en';
   const limit = parsed.data.limit ?? 30;
   const query = parsed.data.q.trim();
+  logSearch(requestId, 'request_received', { query, lang, limit });
 
   const reference = parseReferenceQuery(query, lang);
   if (reference) {
+    logSearch(requestId, 'reference_detected', {
+      chapter: reference.chapter,
+      verse: reference.verse,
+      book_code: reference.bookCode ?? null,
+    });
     const { data, error } = await queryByReference(lang, reference.chapter, reference.verse, reference.bookCode, limit);
-    if (error) return fail('Verse reference search failed', 500, error.message);
+    if (error) {
+      logSearch(requestId, 'reference_query_failed', { error: error.message });
+      return fail('Verse reference search failed', 500, error.message);
+    }
+    logSearch(requestId, 'reference_query_done', { count: data.length, language: lang });
 
     if (data.length > 0) {
-      return ok({ query, count: data.length, items: data, strategy: 'reference' as const });
+      return ok({ query, count: data.length, items: data, strategy: 'reference' as const, request_id: requestId });
     }
 
     if (lang !== 'en') {
       const fallbackReference = await queryByReference('en', reference.chapter, reference.verse, reference.bookCode, limit);
-      if (fallbackReference.error) return fail('Verse reference fallback failed', 500, fallbackReference.error.message);
+      if (fallbackReference.error) {
+        logSearch(requestId, 'reference_fallback_failed', { error: fallbackReference.error.message });
+        return fail('Verse reference fallback failed', 500, fallbackReference.error.message);
+      }
+      logSearch(requestId, 'reference_fallback_done', { count: fallbackReference.data.length, fallback_language: 'en' });
       if (fallbackReference.data.length > 0) {
         return ok({
           query,
@@ -276,18 +361,24 @@ export async function GET(req: Request) {
           items: fallbackReference.data,
           strategy: 'reference' as const,
           fallback_language: 'en',
+          request_id: requestId,
         });
       }
     }
   }
 
   const lexical = await queryLexical(lang, query, limit);
-  if (lexical.error) return fail('Verse search failed', 500, lexical.error.message);
+  if (lexical.error) {
+    logSearch(requestId, 'lexical_query_failed', { error: lexical.error.message });
+    return fail('Verse search failed', 500, lexical.error.message);
+  }
+  logSearch(requestId, 'lexical_query_done', { count: lexical.data.length, language: lang });
   if (lexical.data.length >= Math.min(3, limit)) {
-    return ok({ query, count: lexical.data.length, items: lexical.data, strategy: 'lexical' as const });
+    return ok({ query, count: lexical.data.length, items: lexical.data, strategy: 'lexical' as const, request_id: requestId });
   }
 
-  const expanded = await expandQueryWithAI(query, lang);
+  const expanded = await expandQueryWithAI(query, lang, requestId);
+  logSearch(requestId, 'ai_terms_ready', { provider: expanded.provider, term_count: expanded.terms.length });
   const aiResults: VerseRow[] = [...lexical.data];
 
   for (const term of expanded.terms) {
@@ -310,6 +401,13 @@ export async function GET(req: Request) {
     }
   }
 
+  logSearch(requestId, 'search_completed', {
+    strategy: deduped.length > 0 ? 'ai-expanded' : 'lexical',
+    provider: expanded.provider,
+    count: deduped.length,
+    fallback_language: fallbackLanguage ?? null,
+  });
+
   return ok({
     query,
     count: deduped.length,
@@ -317,5 +415,6 @@ export async function GET(req: Request) {
     strategy: deduped.length > 0 ? ('ai-expanded' as const) : ('lexical' as const),
     ai_provider: expanded.provider,
     fallback_language: fallbackLanguage ?? undefined,
+    request_id: requestId,
   });
 }
