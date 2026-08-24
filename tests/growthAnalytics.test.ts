@@ -500,4 +500,108 @@ describe('growth analytics ingestion', () => {
     expect(profileMigration).toContain(') not valid;');
     expect(profileMigration).not.toMatch(/validate constraint growth_analytics_(?:properties|events_event_name)_check/);
   });
+
+  it('keeps authoritative subscription transitions private, coarse, and atomically idempotent', () => {
+    const migrationsPath = path.resolve(process.cwd(), '../supabase/migrations');
+    const migrationName = fs.readdirSync(migrationsPath)
+      .find((name) => name.endsWith('_subscription_marketing_transitions.sql'));
+    expect(migrationName).toBeDefined();
+
+    const migration = fs.readFileSync(path.join(migrationsPath, migrationName!), 'utf8');
+    const transitionTable = migration.match(
+      /create table faith_harbor\.subscription_marketing_transitions \(([\s\S]*?)\n\);/,
+    )?.[1] ?? '';
+    const syncFunction = migration.match(
+      /create or replace function faith_harbor\.sync_iap_entitlement\([\s\S]*?\n\$\$;/,
+    )?.[0] ?? '';
+
+    expect(transitionTable).toContain('user_id uuid references auth.users(id) on delete set null');
+    expect(transitionTable).toContain('subscription_id uuid not null');
+    expect(transitionTable).not.toMatch(/subscription_id[^\n]*references/i);
+    expect(transitionTable).toContain("provider text not null check (provider in ('apple', 'google'))");
+    expect(transitionTable).toContain("plan text not null check (plan in ('monthly', 'yearly'))");
+    expect(transitionTable).toContain("phase text not null check (phase in ('trial', 'paid'))");
+    expect(transitionTable).toContain('claimed_at timestamptz');
+    expect(transitionTable).toContain('delivered_at timestamptz');
+    expect(transitionTable).toContain('unique (subscription_id, phase)');
+    expect(transitionTable).not.toMatch(/receipt|purchase_token|transaction_id|content|email|name/i);
+
+    expect(migration).toContain('enable row level security');
+    expect(migration).toMatch(/revoke all on table faith_harbor\.subscription_marketing_transitions from public, anon, authenticated;/);
+    expect(migration).toMatch(/grant select, insert, update, delete on table faith_harbor\.subscription_marketing_transitions to service_role;/);
+    expect(migration).toContain('idx_subscription_marketing_transitions_oldest_undelivered');
+    expect(migration).toContain('idx_subscription_marketing_transitions_occurred_phase');
+
+    expect(migration).toMatch(
+      /create or replace function faith_harbor\.sync_iap_entitlement\(\s*p_user_id uuid,\s*p_provider text,\s*p_store_product_id text,\s*p_store_transaction_id text,\s*p_active boolean,\s*p_entitlement_code text,\s*p_ends_at timestamptz,\s*p_auto_renew boolean,\s*p_platform text,\s*p_environment text,\s*p_billing_phase text\s*\)/,
+    );
+    expect(syncFunction).toMatch(
+      /if p_billing_phase is not null and p_billing_phase not in \('trial', 'paid'\) then/,
+    );
+    expect(migration).toContain(
+      'drop function if exists faith_harbor.apply_iap_subscription_state(text, text, boolean, timestamptz, timestamptz, boolean);',
+    );
+    expect(migration).toMatch(
+      /create function faith_harbor\.apply_iap_subscription_state\(\s*p_provider text,\s*p_store_transaction_id text,\s*p_active boolean,\s*p_ends_at timestamptz,\s*p_event_at timestamptz,\s*p_auto_renew boolean,\s*p_billing_phase text\s*\)/,
+    );
+    expect(migration.match(/create function faith_harbor\.apply_iap_subscription_state\(/g)).toHaveLength(1);
+
+    expect(migration.match(
+      /on conflict on constraint subscription_marketing_transitions_subscription_id_phase_key do nothing/g,
+    )).toHaveLength(2);
+    expect(migration).toMatch(/lower\(btrim\(p_environment\)\) = 'production'/);
+    expect(migration).toMatch(/p_active[\s\S]*p_billing_phase in \('trial', 'paid'\)/);
+    expect(migration).toMatch(/p_billing_phase <> 'trial'[\s\S]*phase = 'paid'/);
+    expect(migration).toMatch(/vella\.premium\.monthly[\s\S]*'monthly'/);
+    expect(migration).toMatch(/vella\.premium\.yearly[\s\S]*'yearly'/);
+  });
+
+  it('leases the oldest transition until ACK without exposing identity or delivery state', () => {
+    const migrationsPath = path.resolve(process.cwd(), '../supabase/migrations');
+    const migrationName = fs.readdirSync(migrationsPath)
+      .find((name) => name.endsWith('_subscription_marketing_transitions.sql'));
+    const migration = fs.readFileSync(path.join(migrationsPath, migrationName!), 'utf8');
+    const claimFunction = migration.match(
+      /create function faith_harbor\.claim_subscription_marketing_transition\([\s\S]*?\n\$\$;/,
+    )?.[0] ?? '';
+    const claimProjection = claimFunction.match(/returns table \(([\s\S]*?)\)\s*language/)?.[1] ?? '';
+    const ackFunction = migration.match(
+      /create function faith_harbor\.ack_subscription_marketing_transition\([\s\S]*?\n\$\$;/,
+    )?.[0] ?? '';
+
+    expect(claimFunction).toContain('security invoker');
+    expect(claimFunction).toMatch(/returns table \(\s*transition_id uuid,\s*plan text,\s*phase text,\s*occurred_at timestamptz\s*\)/);
+    expect(claimFunction).toMatch(/delivered_at is null[\s\S]*order by[\s\S]*occurred_at[\s\S]*limit 1/);
+    expect(claimFunction).toContain('for update skip locked');
+    expect(claimFunction).toMatch(/claimed_at > [^;]*interval '5 minutes'[\s\S]*return;/);
+    expect(claimFunction).toMatch(/set claimed_at = clock_timestamp\(\)/);
+    expect(claimProjection).not.toMatch(/user_id|claimed_at|delivered_at/);
+
+    expect(ackFunction).toContain('security invoker');
+    expect(ackFunction).toMatch(/p_user_id uuid,\s*p_transition_id uuid/);
+    expect(ackFunction).toContain('returns boolean');
+    expect(ackFunction).toMatch(/user_id = p_user_id[\s\S]*transition_id = p_transition_id/);
+    expect(ackFunction).toMatch(/delivered_at = coalesce\(delivered_at, clock_timestamp\(\)\)/);
+
+    expect(migration).toMatch(/revoke all on function faith_harbor\.claim_subscription_marketing_transition\(uuid\) from public, anon, authenticated;/);
+    expect(migration).toMatch(/grant execute on function faith_harbor\.claim_subscription_marketing_transition\(uuid\) to service_role;/);
+    expect(migration).toMatch(/revoke all on function faith_harbor\.ack_subscription_marketing_transition\(uuid, uuid\) from public, anon, authenticated;/);
+    expect(migration).toMatch(/grant execute on function faith_harbor\.ack_subscription_marketing_transition\(uuid, uuid\) to service_role;/);
+  });
+
+  it('bounds transition retention at 400 days using occurred_at', () => {
+    const migrationsPath = path.resolve(process.cwd(), '../supabase/migrations');
+    const migrationName = fs.readdirSync(migrationsPath)
+      .find((name) => name.endsWith('_subscription_marketing_transitions.sql'));
+    const migration = fs.readFileSync(path.join(migrationsPath, migrationName!), 'utf8');
+    const purgeFunction = migration.match(
+      /create function faith_harbor\.purge_expired_subscription_marketing_transitions\([\s\S]*?\n\$\$;/,
+    )?.[0] ?? '';
+
+    expect(purgeFunction).toContain('security invoker');
+    expect(purgeFunction).toMatch(/occurred_at < date_trunc\('day', clock_timestamp\(\)\) - interval '400 days'/);
+    expect(purgeFunction).toMatch(/limit greatest\(1, least\(coalesce\(p_limit, 50000\), 50000\)\)/);
+    expect(migration).toMatch(/revoke all on function faith_harbor\.purge_expired_subscription_marketing_transitions\(integer\) from public, anon, authenticated;/);
+    expect(migration).toMatch(/grant execute on function faith_harbor\.purge_expired_subscription_marketing_transitions\(integer\) to service_role;/);
+  });
 });

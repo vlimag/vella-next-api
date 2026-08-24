@@ -6,7 +6,11 @@ import {
 } from '../lib/accountDeletion';
 import { buildAvatarStoragePath } from '../lib/profileAvatar';
 
-function mockClient(rows: Array<Record<string, unknown>>, queryError: string | null = null) {
+function mockClient(
+  rows: Array<Record<string, unknown>>,
+  queryError: string | null = null,
+  mutationErrors: Record<string, { code: string; message: string }> = {},
+) {
   const remove = vi.fn().mockResolvedValue({ error: null });
   const deleteCalls: Array<{ table: string; column: string; value: string }> = [];
   const updateCalls: Array<{ table: string; column: string; value: string; values: Record<string, unknown> }> = [];
@@ -20,13 +24,13 @@ function mockClient(rows: Array<Record<string, unknown>>, queryError: string | n
     delete: () => ({
       eq: (column: string, value: string) => {
         deleteCalls.push({ table, column, value });
-        return Promise.resolve({ error: null });
+        return Promise.resolve({ error: mutationErrors[table] ?? null });
       },
     }),
     update: (values: Record<string, unknown>) => ({
       eq: (column: string, value: string) => {
         updateCalls.push({ table, column, value, values });
-        return Promise.resolve({ error: null });
+        return Promise.resolve({ error: mutationErrors[table] ?? null });
       },
     }),
   }));
@@ -131,7 +135,59 @@ describe('account media deletion', () => {
     expect(updateCalls).toEqual(
       expect.arrayContaining([
         { table: 'in_app_purchase_receipts', column: 'user_id', value: userId, values: { user_id: null } },
+        {
+          table: 'subscription_marketing_transitions',
+          column: 'user_id',
+          value: userId,
+          values: { user_id: null },
+        },
       ]),
     );
+  });
+
+  it.each([
+    [
+      'PGRST205',
+      "Could not find the table 'faith_harbor.subscription_marketing_transitions' in the schema cache",
+    ],
+    ['42P01', 'relation "faith_harbor.subscription_marketing_transitions" does not exist'],
+  ])(
+    'keeps account deletion available before the transition table migration is installed (%s)',
+    async (code, message) => {
+      const userId = '11111111-1111-1111-1111-111111111111';
+      const { client, deleteCalls } = mockClient([], null, {
+        subscription_marketing_transitions: { code, message },
+      });
+
+      await expect(deleteUserApplicationData(client as never, userId)).resolves.toEqual({});
+      expect(deleteCalls).toContainEqual({ table: 'subscriptions', column: 'user_id', value: userId });
+    },
+  );
+
+  it.each([
+    ['PGRST205', "Could not find the table 'faith_harbor.another_table' in the schema cache"],
+    ['42P01', 'relation "faith_harbor.trigger_dependency" does not exist'],
+  ])('does not hide unrelated %s errors while clearing transition ownership', async (code, message) => {
+    const userId = '11111111-1111-1111-1111-111111111111';
+    const { client, deleteCalls } = mockClient([], null, {
+      subscription_marketing_transitions: { code, message },
+    });
+
+    await expect(deleteUserApplicationData(client as never, userId)).resolves.toEqual({
+      error: `Could not clear subscription_marketing_transitions.user_id: ${message}`,
+    });
+    expect(deleteCalls).toEqual([]);
+  });
+
+  it('never hides a transition-table permission or database failure', async () => {
+    const userId = '11111111-1111-1111-1111-111111111111';
+    const { client, deleteCalls } = mockClient([], null, {
+      subscription_marketing_transitions: { code: '42501', message: 'permission denied' },
+    });
+
+    await expect(deleteUserApplicationData(client as never, userId)).resolves.toEqual({
+      error: 'Could not clear subscription_marketing_transitions.user_id: permission denied',
+    });
+    expect(deleteCalls).toEqual([]);
   });
 });

@@ -1,6 +1,8 @@
 import {
   AutoRenewStatus,
   Environment,
+  OfferDiscountType,
+  OfferType,
   SignedDataVerifier,
   Status,
   type JWSTransactionDecodedPayload,
@@ -8,6 +10,7 @@ import {
   type ResponseBodyV2DecodedPayload,
 } from '@apple/app-store-server-library';
 import { APPLE_ROOT_CERTIFICATES } from '@/lib/appleRootCertificates';
+import type { IapBillingPhase } from '@/lib/iapAudit';
 
 const DEFAULT_BUNDLE_ID = 'io.vella.app';
 const DEFAULT_APP_APPLE_ID = 6_790_616_297;
@@ -37,6 +40,7 @@ type AppleSubscriptionUpdate = {
   endsAt: string | null;
   eventAt: string;
   autoRenew?: boolean;
+  billingPhase: IapBillingPhase | null;
 };
 
 let productionVerifier: SignedDataVerifier | null = null;
@@ -146,6 +150,12 @@ export function deriveAppleSubscriptionUpdate(
   );
 
   const active = !explicitlyInactive && Boolean(effectiveEndsMs && effectiveEndsMs > nowMs);
+  const billingPhase: IapBillingPhase | null = transaction
+    ? transaction.offerType === OfferType.INTRODUCTORY_OFFER &&
+      transaction.offerDiscountType === OfferDiscountType.FREE_TRIAL
+      ? 'trial'
+      : 'paid'
+    : null;
 
   return {
     originalTransactionId,
@@ -153,6 +163,7 @@ export function deriveAppleSubscriptionUpdate(
     active,
     endsAt,
     eventAt: new Date(signedAtMs as number).toISOString(),
+    billingPhase,
     ...(typeof renewal?.autoRenewStatus === 'number'
       ? { autoRenew: renewal.autoRenewStatus === AutoRenewStatus.ON }
       : {}),

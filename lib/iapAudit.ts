@@ -60,7 +60,7 @@ export async function recordValidIapReceipt(params: {
   proof?: string | null;
   expiresAt: string | null;
   autoRenew: boolean;
-  billingPhase: IapBillingPhase;
+  billingPhase: IapBillingPhase | null;
 }) {
   const supabase = createServiceClient();
   const { error } = await supabase.from('in_app_purchase_receipts').upsert({
@@ -86,4 +86,3 @@ export async function recordValidIapReceipt(params: {
   }
   return true;
 }
-

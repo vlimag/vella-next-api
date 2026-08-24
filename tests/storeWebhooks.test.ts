@@ -111,6 +111,7 @@ describe('store webhook delivery', () => {
       active: true,
       autoRenew: true,
       eventAt: '2023-11-14T22:13:20.000Z',
+      billingPhase: null,
     }));
   });
 
@@ -133,6 +134,7 @@ describe('store webhook delivery', () => {
       storeTransactionId: 'voided-token',
       active: false,
       autoRenew: false,
+      billingPhase: null,
     }));
   });
 
@@ -165,6 +167,98 @@ describe('store webhook delivery', () => {
     expect(mocks.getGooglePlaySubscription).not.toHaveBeenCalled();
   });
 
+  it('leaves an unlinked verified webhook unprocessed so the store retries it', async () => {
+    mocks.getGooglePlaySubscription.mockResolvedValue({
+      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+      lineItems: [{
+        productId: 'vella.premium.monthly',
+        expiryTime: new Date(Date.now() + 86_400_000).toISOString(),
+      }],
+    });
+    mocks.updateIapSubscriptionState.mockResolvedValue({ updated: false, unlinked: true });
+
+    const response = await googleWebhook(googleRequest({
+      packageName: 'io.vella.app',
+      eventTimeMillis: '1700000000000',
+      subscriptionNotification: { notificationType: 2, purchaseToken: 'unlinked-token' },
+    }));
+
+    expect(response.status).toBe(503);
+    expect(mocks.billingUpdate).not.toHaveBeenCalled();
+  });
+
+  it('leaves a malformed RPC result unprocessed so the store retries it', async () => {
+    mocks.getGooglePlaySubscription.mockResolvedValue({
+      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+      lineItems: [{
+        productId: 'vella.premium.monthly',
+        expiryTime: new Date(Date.now() + 86_400_000).toISOString(),
+      }],
+    });
+    mocks.updateIapSubscriptionState.mockResolvedValue({
+      updated: false,
+      error: 'Invalid subscription state response',
+    });
+
+    const response = await googleWebhook(googleRequest({
+      packageName: 'io.vella.app',
+      eventTimeMillis: '1700000000000',
+      subscriptionNotification: { notificationType: 2, purchaseToken: 'malformed-rpc-token' },
+    }));
+
+    expect(response.status).toBe(503);
+    expect(mocks.billingUpdate).not.toHaveBeenCalled();
+  });
+
+  it('marks a stale verified webhook processed without changing entitlement state', async () => {
+    mocks.getGooglePlaySubscription.mockResolvedValue({
+      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+      lineItems: [{
+        productId: 'vella.premium.monthly',
+        expiryTime: new Date(Date.now() + 86_400_000).toISOString(),
+      }],
+    });
+    mocks.updateIapSubscriptionState.mockResolvedValue({ updated: false, stale: true });
+
+    const response = await googleWebhook(googleRequest({
+      packageName: 'io.vella.app',
+      eventTimeMillis: '1700000000000',
+      subscriptionNotification: { notificationType: 2, purchaseToken: 'stale-token' },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.billingUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates Apple verified free-trial phase into the atomic state update', async () => {
+    mocks.verifyAppleNotification.mockResolvedValue({
+      notification: { notificationUUID: 'apple-trial-1', notificationType: 'DID_RENEW' },
+      transaction: null,
+      renewal: null,
+    });
+    mocks.deriveAppleSubscriptionUpdate.mockReturnValue({
+      originalTransactionId: 'apple-original-1',
+      productId: 'vella.premium.yearly',
+      active: true,
+      endsAt: '2026-08-30T00:00:00.000Z',
+      eventAt: '2026-07-30T00:00:00.000Z',
+      autoRenew: true,
+      billingPhase: 'trial',
+    });
+
+    const response = await appleWebhook(new Request('https://vella.one/api/v1/webhooks/apple', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ signedPayload: 'signed-apple-payload' }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.updateIapSubscriptionState).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'apple',
+      billingPhase: 'trial',
+    }));
+  });
+
   it('asks Apple to retry when entitlement persistence fails', async () => {
     mocks.verifyAppleNotification.mockResolvedValue({
       notification: { notificationUUID: 'apple-event-1', notificationType: 'DID_RENEW' },
@@ -178,6 +272,7 @@ describe('store webhook delivery', () => {
       endsAt: '2026-08-30T00:00:00.000Z',
       eventAt: '2026-07-30T00:00:00.000Z',
       autoRenew: true,
+      billingPhase: 'paid',
     });
     mocks.updateIapSubscriptionState.mockResolvedValue({ updated: false, error: 'database unavailable' });
 

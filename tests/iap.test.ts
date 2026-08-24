@@ -36,9 +36,8 @@ const verified = {
 
 describe('IAP entitlement synchronization', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    mocks.rpc.mockReturnValue({ maybeSingle: mocks.atomicMaybeSingle });
-    mocks.atomicMaybeSingle.mockResolvedValue({
+    mocks.rpc.mockReset().mockReturnValue({ maybeSingle: mocks.atomicMaybeSingle });
+    mocks.atomicMaybeSingle.mockReset().mockResolvedValue({
       data: {
         active: true,
         entitlement_code: 'premium_individual',
@@ -48,7 +47,7 @@ describe('IAP entitlement synchronization', () => {
       },
       error: null,
     });
-    mocks.receiptUpsert.mockResolvedValue({ error: null });
+    mocks.receiptUpsert.mockReset().mockResolvedValue({ error: null });
   });
 
   it('maps only explicitly family-named products to the family entitlement', () => {
@@ -82,7 +81,106 @@ describe('IAP entitlement synchronization', () => {
     expect(mocks.rpc).toHaveBeenCalledWith('sync_iap_entitlement', expect.objectContaining({
       p_store_transaction_id: 'stable-google-token',
       p_user_id: 'user-1',
+      p_billing_phase: 'trial',
     }));
+  });
+
+  it('sends a production annual trial through the existing eleven-argument RPC contract', async () => {
+    await syncIapEntitlement({
+      requestId: '00000000-0000-4000-8000-000000000004',
+      userId: 'user-1',
+      platform: 'ios',
+      verified: { ...verified, environment: 'Production' },
+    });
+
+    expect(mocks.rpc).toHaveBeenCalledWith('sync_iap_entitlement', {
+      p_user_id: 'user-1',
+      p_provider: 'apple',
+      p_store_product_id: 'vella.premium.yearly',
+      p_store_transaction_id: 'order-renewal-id',
+      p_active: true,
+      p_entitlement_code: 'premium_individual',
+      p_ends_at: verified.expiresAt.toISOString(),
+      p_auto_renew: true,
+      p_platform: 'ios',
+      p_environment: 'Production',
+      p_billing_phase: 'trial',
+    });
+  });
+
+  it('sends a production monthly paid purchase through the same RPC contract', async () => {
+    await syncIapEntitlement({
+      requestId: '00000000-0000-4000-8000-000000000005',
+      userId: 'user-1',
+      platform: 'android',
+      purchaseToken: 'monthly-token',
+      verified: {
+        ...verified,
+        productId: 'vella.premium.monthly',
+        originalTransactionId: 'GPA.monthly',
+        billingPhase: 'paid',
+        environment: 'Production',
+      },
+    });
+
+    expect(mocks.rpc).toHaveBeenCalledWith('sync_iap_entitlement', expect.objectContaining({
+      p_store_product_id: 'vella.premium.monthly',
+      p_store_transaction_id: 'monthly-token',
+      p_environment: 'Production',
+      p_billing_phase: 'paid',
+    }));
+  });
+
+  it('keeps unknown direct phase out of marketing without blocking access during the staged rollout', async () => {
+    mocks.atomicMaybeSingle
+      .mockResolvedValueOnce({
+        data: null,
+        error: { code: '22023', message: 'billing_phase must be trial or paid' },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          active: true,
+          entitlement_code: 'premium_individual',
+          ends_at: verified.expiresAt.toISOString(),
+          subscription_id: 'subscription-db-id',
+          linked_to_other_account: false,
+        },
+        error: null,
+      });
+
+    const result = await syncIapEntitlement({
+      requestId: '00000000-0000-4000-8000-000000000006',
+      userId: 'user-1',
+      platform: 'android',
+      purchaseToken: 'unknown-phase-token',
+      verified: { ...verified, billingPhase: null, environment: 'Production' },
+    });
+
+    expect(result).toMatchObject({ active: true, subscriptionId: 'subscription-db-id' });
+    expect(mocks.rpc).toHaveBeenNthCalledWith(1, 'sync_iap_entitlement', expect.objectContaining({
+      p_billing_phase: null,
+    }));
+    expect(mocks.rpc).toHaveBeenNthCalledWith(2, 'sync_iap_entitlement', expect.objectContaining({
+      p_billing_phase: 'paid',
+    }));
+  });
+
+  it('does not retry an unknown phase after any unrelated database error', async () => {
+    mocks.atomicMaybeSingle.mockResolvedValue({
+      data: null,
+      error: { code: '42501', message: 'permission denied' },
+    });
+
+    const result = await syncIapEntitlement({
+      requestId: '00000000-0000-4000-8000-000000000007',
+      userId: 'user-1',
+      platform: 'android',
+      purchaseToken: 'unknown-phase-token',
+      verified: { ...verified, billingPhase: null, environment: 'Production' },
+    });
+
+    expect(result).toEqual({ error: 'permission denied' });
+    expect(mocks.rpc).toHaveBeenCalledTimes(1);
   });
 
   it('does not reassign a store subscription linked to another Vella account', async () => {

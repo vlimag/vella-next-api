@@ -1,6 +1,6 @@
 import { X509Certificate } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { Status } from '@apple/app-store-server-library';
+import { OfferDiscountType, OfferType, Status } from '@apple/app-store-server-library';
 import { APPLE_ROOT_CERTIFICATES } from '../lib/appleRootCertificates';
 import { deriveAppleSubscriptionUpdate } from '../lib/appleNotifications';
 import { verifyAppleReceipt } from '../lib/appStore';
@@ -78,7 +78,45 @@ describe('store validation normalization', () => {
       active: true,
       endsAt: new Date(2_000).toISOString(),
       eventAt: new Date(1_000).toISOString(),
+      billingPhase: 'paid',
     });
+  });
+
+  it('derives an Apple trial only from verified introductory free-trial evidence', () => {
+    const trial = deriveAppleSubscriptionUpdate(appleInput({
+      transaction: {
+        originalTransactionId: 'apple-original-1',
+        productId: 'vella.premium.yearly',
+        expiresDate: 2_000,
+        offerType: OfferType.INTRODUCTORY_OFFER,
+        offerDiscountType: OfferDiscountType.FREE_TRIAL,
+      },
+    }), 1_000);
+    const paidIntroductoryOffer = deriveAppleSubscriptionUpdate(appleInput({
+      transaction: {
+        originalTransactionId: 'apple-original-1',
+        productId: 'vella.premium.yearly',
+        expiresDate: 2_000,
+        offerType: OfferType.INTRODUCTORY_OFFER,
+        offerDiscountType: OfferDiscountType.PAY_UP_FRONT,
+      },
+    }), 1_000);
+
+    expect(trial?.billingPhase).toBe('trial');
+    expect(paidIntroductoryOffer?.billingPhase).toBe('paid');
+  });
+
+  it('keeps Apple access updates phase-unknown when no verified transaction is present', () => {
+    const update = deriveAppleSubscriptionUpdate(appleInput({
+      transaction: null,
+      renewal: {
+        originalTransactionId: 'apple-original-1',
+        productId: 'vella.premium.yearly',
+        renewalDate: 2_000,
+      },
+    }), 1_000);
+
+    expect(update).toMatchObject({ active: true, billingPhase: null });
   });
 
   it('uses the verified Apple grace-period expiry and rejects refunds', () => {
@@ -124,6 +162,7 @@ describe('store validation normalization', () => {
         expiryTime: expiry,
         latestSuccessfulOrderId: 'GPA.1',
         autoRenewingPlan: { autoRenewEnabled: true },
+        offerPhase: { basePrice: {} },
       }],
     }, 'vella.premium.yearly', 'purchase-token', 10_000);
     expect(active).toMatchObject({
@@ -141,18 +180,17 @@ describe('store validation normalization', () => {
     expect(canceled).not.toBeNull();
   });
 
-  it('identifies the configured 14-day Google yearly trial from store dates', () => {
-    const startMs = Date.parse('2026-08-10T12:00:00.000Z');
+  it('derives Google trial only from the authoritative current free-trial phase', () => {
+    const nowMs = Date.parse('2026-08-10T12:00:00.000Z');
     const trial = verifiedPurchaseFromPlaySubscription({
       subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
-      startTime: new Date(startMs).toISOString(),
       lineItems: [{
         productId: 'vella.premium.yearly',
-        expiryTime: new Date(startMs + 14 * 86_400_000).toISOString(),
-        offerDetails: { offerId: 'trial-14-days' },
+        expiryTime: new Date(nowMs + 14 * 86_400_000).toISOString(),
+        offerPhase: { freeTrial: {} },
         autoRenewingPlan: { autoRenewEnabled: true },
       }],
-    }, 'vella.premium.yearly', 'purchase-token', startMs + 1_000);
+    }, 'vella.premium.yearly', 'purchase-token', nowMs);
 
     expect(trial?.billingPhase).toBe('trial');
   });
@@ -188,6 +226,82 @@ describe('store validation normalization', () => {
       active: false,
       productId: 'vella.premium.monthly',
       expiresAt: new Date(20_000),
+      billingPhase: null,
     });
+  });
+
+  it('derives Google webhook trial then paid from the authoritative offer phase', () => {
+    const startMs = Date.parse('2026-08-10T12:00:00.000Z');
+    const trial = subscriptionStateFromPlaySubscription({
+      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+      lineItems: [{
+        productId: 'vella.premium.yearly',
+        expiryTime: new Date(startMs + 14 * 86_400_000).toISOString(),
+        offerPhase: { freeTrial: {} },
+      }],
+    }, new Set(['vella.premium.yearly']), startMs + 1_000);
+    const paidRenewal = subscriptionStateFromPlaySubscription({
+      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+      lineItems: [{
+        productId: 'vella.premium.yearly',
+        expiryTime: new Date(startMs + 379 * 86_400_000).toISOString(),
+        latestSuccessfulOrderId: 'GPA.paid-renewal',
+        offerPhase: { basePrice: {} },
+      }],
+    }, new Set(['vella.premium.yearly']), startMs + 20 * 86_400_000);
+
+    expect(trial?.billingPhase).toBe('trial');
+    expect(paidRenewal?.billingPhase).toBe('paid');
+  });
+
+  it.each([
+    ['absent', undefined],
+    ['introductory price', { introductoryPrice: {} }],
+    ['proration', { prorationPeriod: {} }],
+    ['base price without a successful order', { basePrice: {} }],
+  ])('keeps Google %s phase out of marketing truth', (_label, offerPhase) => {
+    const state = subscriptionStateFromPlaySubscription({
+      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+      lineItems: [{
+        productId: 'vella.premium.yearly',
+        expiryTime: new Date(20_000).toISOString(),
+        offerPhase,
+      }],
+    }, new Set(['vella.premium.yearly']), 10_000);
+
+    expect(state?.billingPhase).toBeNull();
+  });
+
+  it('does not turn a trial into paid when its first renewal enters grace', () => {
+    const expiryTime = new Date(20_000).toISOString();
+    const trial = subscriptionStateFromPlaySubscription({
+      subscriptionState: 'SUBSCRIPTION_STATE_ACTIVE',
+      lineItems: [{
+        productId: 'vella.premium.yearly',
+        expiryTime,
+        offerPhase: { freeTrial: {} },
+      }],
+    }, new Set(['vella.premium.yearly']), 10_000);
+    const declinedRenewal = subscriptionStateFromPlaySubscription({
+      subscriptionState: 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD',
+      lineItems: [{
+        productId: 'vella.premium.yearly',
+        expiryTime,
+        latestSuccessfulOrderId: 'GPA.trial-start',
+        offerPhase: { basePrice: {} },
+      }],
+    }, new Set(['vella.premium.yearly']), 10_000);
+    const staleTrialPhaseInGrace = subscriptionStateFromPlaySubscription({
+      subscriptionState: 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD',
+      lineItems: [{
+        productId: 'vella.premium.yearly',
+        expiryTime,
+        offerPhase: { freeTrial: {} },
+      }],
+    }, new Set(['vella.premium.yearly']), 10_000);
+
+    expect(trial?.billingPhase).toBe('trial');
+    expect(declinedRenewal?.billingPhase).toBeNull();
+    expect(staleTrialPhaseInGrace?.billingPhase).toBeNull();
   });
 });

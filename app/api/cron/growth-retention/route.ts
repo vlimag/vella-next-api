@@ -9,6 +9,16 @@ function authorized(req: Request) {
   return Boolean(secret) && req.headers.get('authorization') === `Bearer ${secret}`;
 }
 
+function transitionPurgeRpcIsNotInstalled(error: { code?: string; message?: string } | null) {
+  const message = error?.message ?? '';
+  return error?.code === 'PGRST202' &&
+    message.includes(
+      'Could not find the function faith_harbor.' +
+      'purge_expired_subscription_marketing_transitions(p_limit)',
+    ) &&
+    message.includes('schema cache');
+}
+
 export async function GET(req: Request) {
   if (!authorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -16,6 +26,7 @@ export async function GET(req: Request) {
 
   const supabase = createServiceClient();
   let deleted = 0;
+  let subscriptionTransitionsDeleted = 0;
   try {
     // Bound work per run while allowing a delayed job to catch up safely.
     for (let batch = 0; batch < 10; batch += 1) {
@@ -28,8 +39,31 @@ export async function GET(req: Request) {
       deleted += batchDeleted;
       if (batchDeleted < 50_000) break;
     }
-    console.info('[growth-analytics] retention_completed', { deleted });
-    return NextResponse.json({ ok: true, deleted, retention_days: 90 });
+
+    for (let batch = 0; batch < 10; batch += 1) {
+      const { data, error } = await supabase.rpc(
+        'purge_expired_subscription_marketing_transitions',
+        { p_limit: 50_000 },
+      );
+      if (transitionPurgeRpcIsNotInstalled(error)) break;
+      if (error) throw new Error(error.message);
+      const batchDeleted = typeof data === 'number' ? data : Number(data ?? 0);
+      if (!Number.isFinite(batchDeleted) || batchDeleted < 0) throw new Error('invalid purge result');
+      subscriptionTransitionsDeleted += batchDeleted;
+      if (batchDeleted < 50_000) break;
+    }
+
+    console.info('[growth-analytics] retention_completed', {
+      deleted,
+      subscriptionTransitionsDeleted,
+    });
+    return NextResponse.json({
+      ok: true,
+      deleted,
+      retention_days: 90,
+      subscription_transitions_deleted: subscriptionTransitionsDeleted,
+      subscription_transition_retention_days: 400,
+    });
   } catch (error) {
     console.error('[growth-analytics] retention_failed', {
       message: error instanceof Error ? error.message : 'unknown',

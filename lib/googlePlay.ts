@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import type { VerifiedPurchase } from '@/lib/iap';
+import type { IapBillingPhase } from '@/lib/iapAudit';
+import { vellaSubscriptionPlan } from '@/lib/iapProducts';
 
 // Google Play subscription verification via the Play Developer API. We mint an
 // OAuth2 access token from a service account (RS256 JWT, no extra deps) and ask
@@ -64,6 +66,12 @@ export type PlaySubscriptionV2 = {
     latestSuccessfulOrderId?: string;
     autoRenewingPlan?: { autoRenewEnabled?: boolean };
     offerDetails?: { offerId?: string };
+    offerPhase?: {
+      prorationPeriod?: Record<string, unknown>;
+      freeTrial?: Record<string, unknown>;
+      introductoryPrice?: Record<string, unknown>;
+      basePrice?: Record<string, unknown>;
+    };
   }>;
 };
 
@@ -72,6 +80,7 @@ export type GooglePlaySubscriptionState = {
   productId: string | null;
   expiresAt: Date | null;
   autoRenew: boolean;
+  billingPhase: IapBillingPhase | null;
   environment: 'Test' | 'Production';
   raw: PlaySubscriptionV2;
 };
@@ -82,6 +91,32 @@ const ACCESS_GRANTING_STATES = new Set([
   // Canceling turns auto-renew off but access remains valid until expiry.
   'SUBSCRIPTION_STATE_CANCELED',
 ]);
+
+const SUCCESSFUL_PAID_PHASE_STATES = new Set([
+  'SUBSCRIPTION_STATE_ACTIVE',
+  'SUBSCRIPTION_STATE_CANCELED',
+]);
+
+/**
+ * Derive only Vella's coarse billing phase from Google's authoritative current
+ * offer-phase union. Offer IDs and date arithmetic are not payment evidence.
+ */
+export function billingPhaseFromPlaySubscription(
+  subscription: PlaySubscriptionV2,
+  item: NonNullable<PlaySubscriptionV2['lineItems']>[number],
+): IapBillingPhase | null {
+  if (!item.productId || !vellaSubscriptionPlan(item.productId)) return null;
+  if (subscription.subscriptionState === 'SUBSCRIPTION_STATE_IN_GRACE_PERIOD') return null;
+  if (item.offerPhase?.freeTrial !== undefined) return 'trial';
+  if (
+    item.offerPhase?.basePrice !== undefined &&
+    Boolean(item.latestSuccessfulOrderId?.trim()) &&
+    SUCCESSFUL_PAID_PHASE_STATES.has(subscription.subscriptionState ?? '')
+  ) {
+    return 'paid';
+  }
+  return null;
+}
 
 export function subscriptionStateFromPlaySubscription(
   subscription: PlaySubscriptionV2,
@@ -107,6 +142,7 @@ export function subscriptionStateFromPlaySubscription(
     productId: latest?.item.productId ?? matchingItems[0]?.productId ?? null,
     expiresAt,
     autoRenew: matchingItems.some((item) => item.autoRenewingPlan?.autoRenewEnabled === true),
+    billingPhase: billingPhaseFromPlaySubscription(subscription, latest?.item ?? matchingItems[0]!),
     environment: subscription.testPurchase ? 'Test' : 'Production',
     raw: subscription,
   };
@@ -133,24 +169,12 @@ export function verifiedPurchaseFromPlaySubscription(
     .sort((a, b) => Date.parse(b.expiryTime ?? '') - Date.parse(a.expiryTime ?? ''))[0];
   if (!latest) return null;
 
-  const startMs = Date.parse(subscription.startTime ?? '');
-  const initialPeriodMs = Number.isFinite(startMs)
-    ? state.expiresAt.getTime() - startMs
-    : Number.NaN;
-  // Vella's only yearly offer is the 14-day free trial. Use the authoritative
-  // start/expiry window when available, with offer presence as a fallback for
-  // older Play responses that omit startTime.
-  const isYearlyTrial = expectedProductId.toLowerCase().includes('yearly') && (
-    (Number.isFinite(initialPeriodMs) && initialPeriodMs > 0 && initialPeriodMs <= 45 * 86_400_000) ||
-    (!Number.isFinite(initialPeriodMs) && Boolean(latest.offerDetails?.offerId))
-  );
-
   return {
     productId: expectedProductId,
     originalTransactionId: latest.latestSuccessfulOrderId ?? purchaseToken,
     expiresAt: state.expiresAt,
     autoRenew: state.autoRenew,
-    billingPhase: isYearlyTrial ? 'trial' : 'paid',
+    billingPhase: billingPhaseFromPlaySubscription(subscription, latest),
     environment: state.environment,
     raw: subscription,
   };

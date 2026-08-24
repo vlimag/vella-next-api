@@ -100,8 +100,10 @@ export async function POST(req: Request) {
         endsAt: eventAt,
         eventAt,
         autoRenew: false,
+        billingPhase: null,
       });
       if (update.error) throw new Error(update.error);
+      if (update.unlinked) throw new Error('subscription is not linked yet');
     } else if (decoded.subscriptionNotification?.purchaseToken) {
       const purchaseToken = decoded.subscriptionNotification.purchaseToken;
       const subscription = await getGooglePlaySubscription({
@@ -120,8 +122,10 @@ export async function POST(req: Request) {
           endsAt: state.expiresAt?.toISOString() ?? null,
           eventAt,
           autoRenew: state.autoRenew,
+          billingPhase: state.billingPhase,
         });
         if (update.error) throw new Error(update.error);
+        if (update.unlinked) throw new Error('subscription is not linked yet');
       }
     }
 

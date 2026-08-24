@@ -56,8 +56,10 @@ export async function POST(req: Request) {
         endsAt: update.endsAt,
         eventAt: update.eventAt,
         autoRenew: update.autoRenew,
+        billingPhase: update.billingPhase,
       });
       if (result.error) throw new Error(result.error);
+      if (result.unlinked) throw new Error('subscription is not linked yet');
     }
 
     const { error: processedError } = await supabase

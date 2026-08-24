@@ -48,10 +48,26 @@ const USER_ROW_DELETE_TARGETS = [
 ] as const;
 
 const USER_ROW_SET_NULL_TARGETS = [
+  { table: 'subscription_marketing_transitions', column: 'user_id' },
   { table: 'in_app_purchase_receipts', column: 'user_id' },
   { table: 'failed_receipts', column: 'user_id' },
   { table: 'iap_client_events', column: 'user_id' },
 ] as const;
+
+function transitionTableIsNotInstalled(
+  error: { code?: string; message?: string } | null,
+): boolean {
+  const message = error?.message ?? '';
+  const target = 'faith_harbor.subscription_marketing_transitions';
+  if (!message.includes(target)) return false;
+  if (error?.code === 'PGRST205') {
+    return message.includes('Could not find the table') && message.includes('schema cache');
+  }
+  if (error?.code === '42P01') {
+    return message.includes('relation') && message.includes('does not exist');
+  }
+  return false;
+}
 
 function allowedFeedMediaBuckets() {
   return new Set([
@@ -144,6 +160,26 @@ export async function deleteUserApplicationData(
   supabase: ServiceClient,
   userId: string,
 ): Promise<{ error?: string }> {
+  // Preserve retained coarse billing history without its account link
+  // before deleting the live subscription and entitlement records.
+  for (const target of USER_ROW_SET_NULL_TARGETS) {
+    const { error } = await supabase
+      .from(target.table)
+      .update({ [target.column]: null })
+      .eq(target.column, userId);
+
+    if (
+      error &&
+      target.table === 'subscription_marketing_transitions' &&
+      transitionTableIsNotInstalled(error)
+    ) {
+      continue;
+    }
+    if (error) {
+      return { error: `Could not clear ${target.table}.${target.column}: ${error.message}` };
+    }
+  }
+
   for (const target of USER_ROW_DELETE_TARGETS) {
     const { error } = await supabase
       .from(target.table)
@@ -152,17 +188,6 @@ export async function deleteUserApplicationData(
 
     if (error) {
       return { error: `Could not delete ${target.table}.${target.column}: ${error.message}` };
-    }
-  }
-
-  for (const target of USER_ROW_SET_NULL_TARGETS) {
-    const { error } = await supabase
-      .from(target.table)
-      .update({ [target.column]: null })
-      .eq(target.column, userId);
-
-    if (error) {
-      return { error: `Could not clear ${target.table}.${target.column}: ${error.message}` };
     }
   }
 
