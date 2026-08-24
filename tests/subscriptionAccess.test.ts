@@ -18,6 +18,8 @@ const AUTH_ONLY_ROUTES = new Set([
   'iap/validate-receipt',
   'me',
   'me/entitlements',
+  'me/subscription-transitions/ack',
+  'me/subscription-transitions/claim',
 ]);
 
 const PUBLIC_CALLBACK_ROUTES = new Set([
