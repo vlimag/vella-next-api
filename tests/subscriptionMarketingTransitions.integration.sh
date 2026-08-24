@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-MIGRATION_PATH="$SCRIPT_DIR/../../supabase/migrations/20260824220028_subscription_marketing_transitions.sql"
+MIGRATION_PATH="$SCRIPT_DIR/../../supabase/migrations/20260824230422_subscription_marketing_transitions.sql"
 TASK3_PG_ROOT=$(mktemp -d)
 TASK3_PG_DATA="$TASK3_PG_ROOT/data"
 TASK3_PG_PORT=${TASK3_PG_PORT:-55439}
