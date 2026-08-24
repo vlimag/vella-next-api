@@ -2,6 +2,14 @@ import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
 import { localeSchema, parseQuery } from '@/lib/validation';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import {
+  detectSearchLanguage,
+  fallbackTermsFromQuery,
+  normalizeSearchText,
+  referencesForIntent,
+  resolveSearchIntent,
+} from '@/lib/verseSearchTerms';
 
 const querySchema = z.object({
   q: z.string().trim().min(2).max(80),
@@ -24,11 +32,53 @@ type VerseRow = {
 
 const BOOK_ALIASES: Record<string, Record<string, string>> = {
   en: {
+    genesis: 'GEN', gen: 'GEN',
+    exodus: 'EXO', exo: 'EXO',
+    leviticus: 'LEV', lev: 'LEV',
+    numbers: 'NUM', num: 'NUM',
+    deuteronomy: 'DEU', deut: 'DEU',
+    joshua: 'JOS', josh: 'JOS',
+    judges: 'JDG', judg: 'JDG',
+    ruth: 'RUT',
+    '1 samuel': '1SA', '1sa': '1SA',
+    '2 samuel': '2SA', '2sa': '2SA',
+    '1 kings': '1KI', '1ki': '1KI',
+    '2 kings': '2KI', '2ki': '2KI',
+    '1 chronicles': '1CH', '1ch': '1CH',
+    '2 chronicles': '2CH', '2ch': '2CH',
+    ezra: 'EZR', nehemiah: 'NEH', neh: 'NEH', esther: 'EST', job: 'JOB',
     john: 'JHN',
     jn: 'JHN',
     psalm: 'PSA',
     psalms: 'PSA',
     ps: 'PSA',
+    proverbs: 'PRO', prov: 'PRO',
+    ecclesiastes: 'ECC', eccl: 'ECC',
+    'song of solomon': 'SNG', song: 'SNG',
+    isaiah: 'ISA', isa: 'ISA',
+    jeremiah: 'JER', jer: 'JER',
+    lamentations: 'LAM', lam: 'LAM',
+    ezekiel: 'EZK', ezek: 'EZK',
+    daniel: 'DAN', dan: 'DAN',
+    hosea: 'HOS', joel: 'JOL', amos: 'AMO', obadiah: 'OBA', obad: 'OBA',
+    jonah: 'JON', micah: 'MIC', nahum: 'NAM', habakkuk: 'HAB', hab: 'HAB',
+    zephaniah: 'ZEP', zeph: 'ZEP', haggai: 'HAG', hag: 'HAG',
+    zechariah: 'ZEC', zech: 'ZEC', malachi: 'MAL', mal: 'MAL',
+    matthew: 'MAT', matt: 'MAT', mark: 'MRK', mrk: 'MRK', luke: 'LUK',
+    acts: 'ACT', romans: 'ROM', rom: 'ROM',
+    '1 corinthians': '1CO', '1co': '1CO',
+    '2 corinthians': '2CO', '2co': '2CO',
+    galatians: 'GAL', gal: 'GAL', ephesians: 'EPH', eph: 'EPH',
+    philippians: 'PHP', phil: 'PHP', colossians: 'COL', col: 'COL',
+    '1 thessalonians': '1TH', '1th': '1TH',
+    '2 thessalonians': '2TH', '2th': '2TH',
+    '1 timothy': '1TI', '1ti': '1TI',
+    '2 timothy': '2TI', '2ti': '2TI',
+    titus: 'TIT', philemon: 'PHM', phlm: 'PHM',
+    hebrews: 'HEB', heb: 'HEB', james: 'JAS', jas: 'JAS',
+    '1 peter': '1PE', '1pe': '1PE', '2 peter': '2PE', '2pe': '2PE',
+    '1 john': '1JN', '1jn': '1JN', '2 john': '2JN', '2jn': '2JN', '3 john': '3JN', '3jn': '3JN',
+    jude: 'JUD', revelation: 'REV', rev: 'REV',
   },
   pt: {
     joao: 'JHN',
@@ -81,59 +131,8 @@ const BOOK_ALIASES: Record<string, Record<string, string>> = {
   },
 };
 
-const INTENT_ALIASES: Record<string, Record<string, string[]>> = {
-  en: {
-    jesus: ['son', 'christ', 'messiah', 'lord', 'savior'],
-    optimism: ['hope', 'joy', 'peace', 'trust'],
-  },
-  pt: {
-    jesus: ['filho', 'cristo', 'senhor', 'salvador'],
-    otimismo: ['esperanca', 'alegria', 'paz', 'confianca'],
-  },
-  es: {
-    jesus: ['hijo', 'cristo', 'senor', 'salvador'],
-    optimismo: ['esperanza', 'gozo', 'paz', 'confianza'],
-  },
-  fr: {
-    jesus: ['fils', 'christ', 'seigneur', 'sauveur'],
-    optimisme: ['esperance', 'joie', 'paix', 'confiance'],
-  },
-  de: {
-    jesus: ['sohn', 'christus', 'herr', 'retter'],
-    optimismus: ['hoffnung', 'freude', 'frieden', 'vertrauen'],
-  },
-  it: {
-    gesu: ['figlio', 'cristo', 'signore', 'salvatore'],
-    ottimismo: ['speranza', 'gioia', 'pace', 'fiducia'],
-  },
-  ru: {
-    iisus: ['syn', 'khristos', 'gospod', 'spasitel'],
-    optimizm: ['nadezhda', 'radost', 'mir', 'doverie'],
-  },
-  pl: {
-    jezus: ['syn', 'chrystus', 'pan', 'zbawiciel'],
-    optymizm: ['nadzieja', 'radosc', 'pokoj', 'zaufanie'],
-  },
-};
-
-const SEARCH_STOPWORDS: Record<string, Set<string>> = {
-  en: new Set(['some', 'verse', 'verses', 'about', 'the', 'and', 'for', 'with', 'that', 'this', 'what', 'which']),
-  pt: new Set(['algum', 'verso', 'versos', 'sobre', 'com', 'para', 'que', 'este', 'esta', 'qual']),
-  es: new Set(['algun', 'verso', 'versos', 'sobre', 'con', 'para', 'que', 'este', 'esta', 'cual']),
-  fr: new Set(['quelque', 'verset', 'versets', 'sur', 'avec', 'pour', 'que', 'ce', 'cette', 'quel']),
-  de: new Set(['einige', 'vers', 'verse', 'uber', 'mit', 'fur', 'dass', 'dies', 'welche']),
-  it: new Set(['alcuni', 'versetto', 'versetti', 'su', 'con', 'per', 'che', 'questo', 'quale']),
-  ru: new Set(['nekotorye', 'stikh', 'stikhi', 'pro', 's', 'dlya', 'chto', 'kakoy']),
-  pl: new Set(['jakis', 'werset', 'wersety', 'o', 'z', 'dla', 'ze', 'jaki']),
-};
-
 function normalizeForLookup(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '')
-    .trim();
+  return normalizeSearchText(value);
 }
 
 function uniqueById(items: VerseRow[]) {
@@ -150,7 +149,7 @@ function uniqueById(items: VerseRow[]) {
 function parseReferenceQuery(query: string, lang: string) {
   const match = query
     .trim()
-    .match(/^(?:(?<book>[A-Za-zÀ-ÿ0-9.\s]+?)\s+)?(?<chapter>\d{1,3})\s*[:.]\s*(?<verse>\d{1,3})$/i);
+    .match(/^(?:(?<book>[\p{L}0-9.\s]+?)\s+)?(?<chapter>\d{1,3})\s*[:.]\s*(?<verse>\d{1,3})$/iu);
 
   if (!match?.groups?.chapter || !match.groups.verse) {
     return null;
@@ -205,18 +204,6 @@ async function queryByReference(lang: string, chapter: number, verse: number, bo
   return { data: (data as VerseRow[]) ?? [] };
 }
 
-function fallbackTermsFromQuery(query: string, lang: string) {
-  const stopwords = SEARCH_STOPWORDS[lang] ?? SEARCH_STOPWORDS.en;
-  const compact = normalizeForLookup(query)
-    .split(/\s+/)
-    .filter((token) => token.length >= 3 && !stopwords.has(token));
-
-  const aliases = INTENT_ALIASES[lang] ?? INTENT_ALIASES.en;
-  const expandedAliases = compact.flatMap((token) => aliases[token] ?? []);
-
-  return uniqueStrings([query, ...expandedAliases, ...compact]).slice(0, 20);
-}
-
 function uniqueStrings(values: string[]) {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -262,7 +249,7 @@ async function expandQueryWithAI(query: string, lang: string, requestId: string)
   };
 
   try {
-    logSearch(requestId, 'ai_expand_started', { model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini' });
+    logSearch(requestId, 'ai_expand_started', { model: process.env.OPENAI_MODEL ?? 'gpt-5.6' });
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -270,8 +257,7 @@ async function expandQueryWithAI(query: string, lang: string, requestId: string)
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
-        temperature: 0.2,
+        model: process.env.OPENAI_MODEL ?? 'gpt-5.6',
         messages: [
           {
             role: 'system',
@@ -314,6 +300,9 @@ async function expandQueryWithAI(query: string, lang: string, requestId: string)
 }
 
 export async function GET(req: Request) {
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
+
   const { searchParams } = new URL(req.url);
   const parsed = parseQuery(querySchema, {
     q: searchParams.get('q') ?? '',
@@ -324,10 +313,11 @@ export async function GET(req: Request) {
   if ('error' in parsed) return parsed.error;
 
   const requestId = req.headers.get('x-request-id') ?? buildRequestId();
-  const lang = parsed.data.lang ?? 'en';
   const limit = parsed.data.limit ?? 30;
   const query = parsed.data.q.trim();
-  logSearch(requestId, 'request_received', { query, lang, limit });
+  const requestedLang = parsed.data.lang ?? 'en';
+  const lang = detectSearchLanguage(query, requestedLang);
+  logSearch(requestId, 'request_received', { query, lang, requested_lang: requestedLang, limit });
 
   const reference = parseReferenceQuery(query, lang);
   if (reference) {
@@ -375,6 +365,44 @@ export async function GET(req: Request) {
   logSearch(requestId, 'lexical_query_done', { count: lexical.data.length, language: lang });
   if (lexical.data.length >= Math.min(3, limit)) {
     return ok({ query, count: lexical.data.length, items: lexical.data, strategy: 'lexical' as const, request_id: requestId });
+  }
+
+  const intent = resolveSearchIntent(query);
+  if (intent) {
+    logSearch(requestId, 'intent_detected', { intent });
+    const intentReferenceResults = await Promise.all(
+      referencesForIntent(intent).map((reference) =>
+        queryByReference(lang, reference.chapter, reference.verse, reference.bookCode, 2),
+      ),
+    );
+    let deterministicResults = uniqueById([
+      ...lexical.data,
+      ...intentReferenceResults.flatMap((result) => result.data),
+    ]).slice(0, limit);
+    let intentFallbackLanguage: string | null = null;
+
+    if (deterministicResults.length === 0 && lang !== 'en') {
+      intentFallbackLanguage = 'en';
+      const englishReferenceResults = await Promise.all(
+        referencesForIntent(intent).map((reference) =>
+          queryByReference('en', reference.chapter, reference.verse, reference.bookCode, 2),
+        ),
+      );
+      deterministicResults = uniqueById(englishReferenceResults.flatMap((result) => result.data)).slice(0, limit);
+    }
+
+    if (deterministicResults.length > 0) {
+      logSearch(requestId, 'intent_query_done', { intent, count: deterministicResults.length });
+      return ok({
+        query,
+        count: deterministicResults.length,
+        items: deterministicResults,
+        strategy: 'intent' as const,
+        intent,
+        fallback_language: intentFallbackLanguage ?? undefined,
+        request_id: requestId,
+      });
+    }
   }
 
   const expanded = await expandQueryWithAI(query, lang, requestId);

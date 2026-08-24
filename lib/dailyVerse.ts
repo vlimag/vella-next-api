@@ -1,38 +1,36 @@
 import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+type AppSupabaseClient = SupabaseClient<any, any, any, any, any>;
+
 export const SUPPORTED_LANGUAGES = ['en', 'pt', 'es', 'fr', 'de', 'it', 'ru', 'pl'] as const;
 type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
-export type DailyVerseCacheRow = {
+export type ApprovedCorpusVerse = {
   id: string;
-  day: string;
-  language_code: string;
+  book_id: string;
   book_code: string;
   chapter: number;
   verse: number;
   text_content: string;
-  reflection_prompt: string | null;
-  provider: string;
-  model: string | null;
-};
-
-type BaseVerse = {
-  book_code: string;
-  chapter: number;
-  verse: number;
-  text_content: string;
-  reflection_prompt: string;
-};
-
-type LocalizedVerse = {
   language_code: SupportedLanguage;
-  text_content: string;
+  version_code: string;
+};
+
+export type DailyVerseInsert = {
+  day: string;
+  language_code: SupportedLanguage;
+  verse_id: string;
   reflection_prompt: string;
+};
+
+type ExistingDailyVerse = {
+  language_code: string;
+  bible_verses: unknown;
 };
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-5.2';
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-5.6';
 
 const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
   en: 'English',
@@ -52,41 +50,52 @@ const REFLECTION_PROMPTS: Record<SupportedLanguage, string[]> = {
     'Write one prayer inspired by this verse for your current season.',
   ],
   pt: [
-    'Que parte deste versiculo pode guiar uma decisao concreta hoje?',
-    'Em que area voce sente que deve confiar mais em Deus hoje?',
-    'Escreva uma oracao inspirada neste versiculo para este momento.',
+    'Que parte deste versículo pode guiar uma decisão concreta hoje?',
+    'Em que área você sente que deve confiar mais em Deus hoje?',
+    'Escreva uma oração inspirada neste versículo para este momento.',
   ],
   es: [
-    'Que parte de este versiculo puede guiar una decision concreta hoy?',
-    'En que area sientes que debes confiar mas en Dios hoy?',
-    'Escribe una oracion inspirada en este versiculo para esta etapa.',
+    '¿Qué parte de este versículo puede guiar una decisión concreta hoy?',
+    '¿En qué área sientes que debes confiar más en Dios hoy?',
+    'Escribe una oración inspirada en este versículo para esta etapa.',
   ],
   fr: [
-    'Quelle partie de ce verset peut guider une decision concrete aujourd hui?',
-    'Dans quel domaine te sens-tu invite a faire plus confiance a Dieu aujourd hui?',
-    'Ecris une priere inspiree de ce verset pour cette saison.',
+    "Quelle partie de ce verset peut guider une décision concrète aujourd'hui ?",
+    "Dans quel domaine te sens-tu invité à faire davantage confiance à Dieu aujourd'hui ?",
+    'Écris une prière inspirée de ce verset pour cette période de ta vie.',
   ],
   de: [
     'Welcher Teil dieses Verses kann heute eine konkrete Entscheidung leiten?',
     'Wo bist du heute eingeladen, Gott mehr zu vertrauen?',
-    'Schreibe ein Gebet, inspiriert von diesem Vers, fuer deinen aktuellen Abschnitt.',
+    'Schreibe ein Gebet, inspiriert von diesem Vers, für deinen aktuellen Lebensabschnitt.',
   ],
   it: [
-    'Quale parte di questo versetto puo guidare una decisione concreta oggi?',
-    'In quale area senti di dover confidare di piu in Dio oggi?',
+    'Quale parte di questo versetto può guidare una decisione concreta oggi?',
+    'In quale ambito senti di dover confidare di più in Dio oggi?',
     'Scrivi una preghiera ispirata a questo versetto per questo periodo.',
   ],
   ru: [
-    'Kakaya chast etogo stikha mozhet segodnya napravit konkretnoe reshenie?',
-    'V kakoy sfere ty segodnya prizvan bolshe doveryat Bogu?',
-    'Napishe odnu molitvu, vdokhnovlennuyu etim stikhom, dlya etogo perioda.',
+    'Какая часть этого стиха может направить одно конкретное решение сегодня?',
+    'В какой сфере ты сегодня чувствуешь призыв больше доверять Богу?',
+    'Напиши одну молитву, вдохновлённую этим стихом, для нынешнего периода жизни.',
   ],
   pl: [
-    'Ktora czesc tego wersetu moze dzis poprowadzic konkretna decyzje?',
-    'W jakim obszarze jestes dzis zaproszony, by bardziej ufac Bogu?',
-    'Napisz jedna modlitwe zainspirowana tym wersetem na ten okres.',
+    'Która część tego wersetu może dziś poprowadzić jedną konkretną decyzję?',
+    'W jakim obszarze czujesz dziś zaproszenie, by bardziej ufać Bogu?',
+    'Napisz jedną modlitwę zainspirowaną tym wersetem na ten czas.',
   ],
 };
+
+const CORPUS_SELECT = `
+  id,
+  book_id,
+  chapter,
+  verse,
+  text_content,
+  language_code,
+  bible_books!inner(code),
+  bible_versions!inner(code, is_active)
+`;
 
 function isSupportedLanguage(value: string): value is SupportedLanguage {
   return SUPPORTED_LANGUAGES.some((code) => code === value);
@@ -94,8 +103,7 @@ function isSupportedLanguage(value: string): value is SupportedLanguage {
 
 function stableIndex(seed: string, size: number) {
   const hash = crypto.createHash('sha256').update(seed).digest();
-  const value = hash.readUInt32BE(0);
-  return value % size;
+  return hash.readUInt32BE(0) % size;
 }
 
 function pickReflectionPrompt(lang: SupportedLanguage, day: string) {
@@ -103,11 +111,46 @@ function pickReflectionPrompt(lang: SupportedLanguage, day: string) {
   return prompts[stableIndex(`${lang}:${day}:prompt`, prompts.length)];
 }
 
-function normalizeBookCode(value: unknown) {
-  if (typeof value !== 'string') return null;
-  const code = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (code.length < 2 || code.length > 5) return null;
-  return code;
+function firstRelation(value: unknown): Record<string, unknown> | null {
+  const relation = Array.isArray(value) ? value[0] : value;
+  return relation && typeof relation === 'object' ? (relation as Record<string, unknown>) : null;
+}
+
+function normalizeCorpusVerse(input: unknown): ApprovedCorpusVerse | null {
+  if (!input || typeof input !== 'object') return null;
+  const row = input as Record<string, unknown>;
+  const book = firstRelation(row.bible_books);
+  const version = firstRelation(row.bible_versions);
+  const language = typeof row.language_code === 'string' ? row.language_code : '';
+  const chapter = Number(row.chapter);
+  const verse = Number(row.verse);
+
+  if (
+    typeof row.id !== 'string' ||
+    typeof row.book_id !== 'string' ||
+    typeof row.text_content !== 'string' ||
+    !isSupportedLanguage(language) ||
+    !Number.isInteger(chapter) ||
+    chapter < 1 ||
+    !Number.isInteger(verse) ||
+    verse < 1 ||
+    typeof book?.code !== 'string' ||
+    typeof version?.code !== 'string' ||
+    version.is_active !== true
+  ) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    book_id: row.book_id,
+    book_code: book.code,
+    chapter,
+    verse,
+    text_content: row.text_content,
+    language_code: language,
+    version_code: version.code,
+  };
 }
 
 function parseJsonObject(text: string) {
@@ -128,53 +171,46 @@ function parseJsonObject(text: string) {
   }
 }
 
-function validateBaseVerse(input: Record<string, unknown>): BaseVerse | null {
-  const book_code = normalizeBookCode(input.book_code);
-  const chapter = Number(input.chapter);
-  const verse = Number(input.verse);
-  const text_content = typeof input.text_content === 'string' ? input.text_content.trim() : '';
-  const reflection_prompt = typeof input.reflection_prompt === 'string' ? input.reflection_prompt.trim() : '';
+function parseReflectionItems(input: Record<string, unknown>, languages: SupportedLanguage[]) {
+  const target = new Set(languages);
+  const prompts = new Map<SupportedLanguage, string>();
+  const items = Array.isArray(input.items) ? input.items : [];
 
-  if (!book_code || !Number.isFinite(chapter) || chapter < 1 || !Number.isFinite(verse) || verse < 1) return null;
-  if (text_content.length < 16 || reflection_prompt.length < 8) return null;
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const payload = item as Record<string, unknown>;
+    const language = typeof payload.language_code === 'string' ? payload.language_code.toLowerCase() : '';
+    const prompt = typeof payload.reflection_prompt === 'string' ? payload.reflection_prompt.trim() : '';
+    if (isSupportedLanguage(language) && target.has(language) && prompt.length >= 8) {
+      prompts.set(language, prompt);
+    }
+  }
 
+  return prompts;
+}
+
+/**
+ * The AI payload is deliberately unable to set any Scripture field. Only its
+ * reflection_prompt is accepted; identity, locale and reference stay attached
+ * to the approved corpus row selected by the server.
+ */
+export function buildDailyVerseInsert(
+  day: string,
+  verse: ApprovedCorpusVerse,
+  aiPayload?: Record<string, unknown> | null,
+): DailyVerseInsert {
+  const generatedPrompt = typeof aiPayload?.reflection_prompt === 'string' ? aiPayload.reflection_prompt.trim() : '';
   return {
-    book_code,
-    chapter: Math.floor(chapter),
-    verse: Math.floor(verse),
-    text_content,
-    reflection_prompt,
+    day,
+    language_code: verse.language_code,
+    verse_id: verse.id,
+    reflection_prompt: generatedPrompt.length >= 8 ? generatedPrompt : pickReflectionPrompt(verse.language_code, day),
   };
 }
 
-function parseLocalizationItems(input: Record<string, unknown>, targetLanguages: SupportedLanguage[]) {
-  const target = new Set(targetLanguages);
-  const rawItems = Array.isArray(input.items) ? input.items : [];
-  const items = new Map<SupportedLanguage, LocalizedVerse>();
-
-  for (const raw of rawItems) {
-    if (!raw || typeof raw !== 'object') continue;
-    const payload = raw as Record<string, unknown>;
-    const language_code = typeof payload.language_code === 'string' ? payload.language_code.trim().toLowerCase() : '';
-    if (!isSupportedLanguage(language_code) || !target.has(language_code)) continue;
-
-    const text_content = typeof payload.text_content === 'string' ? payload.text_content.trim() : '';
-    const reflection_prompt = typeof payload.reflection_prompt === 'string' ? payload.reflection_prompt.trim() : '';
-
-    if (text_content.length < 12 || reflection_prompt.length < 8) continue;
-    items.set(language_code, { language_code, text_content, reflection_prompt });
-  }
-
-  return items;
-}
-
-function buildRequestId(day: string) {
-  return `dailyverse_${day}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-async function runChatCompletion(requestId: string, messages: Array<{ role: 'system' | 'user'; content: string }>) {
+async function runReflectionCompletion(verses: ApprovedCorpusVerse[], day: string) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('OPENAI_API_KEY is not configured');
+  if (!apiKey || verses.length === 0) return new Map<SupportedLanguage, string>();
 
   const response = await fetch(OPENAI_URL, {
     method: 'POST',
@@ -184,187 +220,145 @@ async function runChatCompletion(requestId: string, messages: Array<{ role: 'sys
     },
     body: JSON.stringify({
       model: OPENAI_MODEL,
-      temperature: 0.35,
       response_format: { type: 'json_object' },
-      messages,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'Write reflection prompts about the supplied Scripture. Return JSON only. Scripture text, reference, edition, and language are immutable source data: do not rewrite, translate, correct, or return them.',
+        },
+        {
+          role: 'user',
+          content: [
+            `Day: ${day}`,
+            'For each source below, write one concise reflection question in its language.',
+            ...verses.map(
+              (verse) =>
+                `${verse.language_code} (${LANGUAGE_LABELS[verse.language_code]}), ${verse.book_code} ${verse.chapter}:${verse.verse}, ${verse.version_code}: ${JSON.stringify(verse.text_content)}`,
+            ),
+            'Return exactly: {"items":[{"language_code":"en","reflection_prompt":"..."}]}',
+          ].join('\n'),
+        },
+      ],
     }),
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI daily verse request failed (${response.status}): ${body.slice(0, 260)}`);
+    throw new Error(`OpenAI reflection request failed (${response.status})`);
   }
 
-  const payload = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = payload.choices?.[0]?.message?.content ?? '';
-  const parsed = parseJsonObject(content);
-  if (!parsed) throw new Error('OpenAI returned invalid JSON for daily verse');
-
-  console.info('[daily-verse-ai] completion_ok', { requestId, model: OPENAI_MODEL });
-  return parsed;
+  const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+  const parsed = parseJsonObject(payload.choices?.[0]?.message?.content ?? '');
+  if (!parsed) throw new Error('OpenAI returned invalid JSON for daily reflection');
+  return parseReflectionItems(parsed, verses.map((verse) => verse.language_code));
 }
 
-async function generateBaseVerse(day: string, requestId: string) {
-  const parsed = await runChatCompletion(requestId, [
-    {
-      role: 'system',
-      content:
-        'You select one biblical verse for the day and return STRICT JSON only. Never include markdown. Keep book_code canonical (e.g., JHN, PSA, ROM, MAT).',
-    },
-    {
-      role: 'user',
-      content: [
-        `Target day: ${day}.`,
-        'Pick one meaningful Bible verse for broad encouragement and faith.',
-        'Return JSON with exact shape:',
-        '{"book_code":"PSA","chapter":23,"verse":1,"text_content":"...","reflection_prompt":"..."}',
-        'Rules:',
-        '- Use a real Bible verse.',
-        '- reflection_prompt should be one concise sentence in English.',
-      ].join('\n'),
-    },
-  ]);
+async function selectDeterministicEnglishVerse(supabase: AppSupabaseClient, day: string) {
+  const countResult = await supabase
+    .from('bible_verses')
+    .select('id, bible_versions!inner(is_active)', { count: 'exact', head: true })
+    .eq('language_code', 'en')
+    .eq('bible_versions.is_active', true);
 
-  const base = validateBaseVerse(parsed);
-  if (!base) throw new Error('Daily verse base output failed validation');
-  return base;
+  if (countResult.error) throw new Error(`Failed to count approved Scripture corpus: ${countResult.error.message}`);
+  if (!countResult.count) throw new Error('Approved Scripture corpus has no active English verse');
+
+  const offset = stableIndex(`daily-verse:${day}`, countResult.count);
+  const { data, error } = await supabase
+    .from('bible_verses')
+    .select(CORPUS_SELECT)
+    .eq('language_code', 'en')
+    .eq('bible_versions.is_active', true)
+    .order('id', { ascending: true })
+    .range(offset, offset)
+    .maybeSingle();
+
+  if (error) throw new Error(`Failed to select approved Scripture verse: ${error.message}`);
+  const verse = normalizeCorpusVerse(data);
+  if (!verse) throw new Error('Selected Scripture row is not an active approved corpus verse');
+  return verse;
 }
 
-async function localizeBaseVerse(base: BaseVerse, languages: SupportedLanguage[], requestId: string) {
-  if (languages.length === 0) return new Map<SupportedLanguage, LocalizedVerse>();
-
-  const parsed = await runChatCompletion(requestId, [
-    {
-      role: 'system',
-      content:
-        'You localize biblical verse text and reflection prompts. Return STRICT JSON only, no markdown.',
-    },
-    {
-      role: 'user',
-      content: [
-        `Reference: ${base.book_code} ${base.chapter}:${base.verse}`,
-        `English verse text: "${base.text_content}"`,
-        `English reflection prompt: "${base.reflection_prompt}"`,
-        `Target languages: ${languages.map((lang) => `${lang} (${LANGUAGE_LABELS[lang]})`).join(', ')}`,
-        'Return JSON in this exact shape:',
-        '{"items":[{"language_code":"pt","text_content":"...","reflection_prompt":"..."}]}',
-        'Rules:',
-        '- Return one item per target language.',
-        '- Keep meaning faithful to the original verse.',
-        '- reflection_prompt should be one concise sentence in each language.',
-      ].join('\n'),
-    },
-  ]);
-
-  return parseLocalizationItems(parsed, languages);
+function existingReference(rows: ExistingDailyVerse[]) {
+  const normalized = rows
+    .map((row) => normalizeCorpusVerse(row.bible_verses))
+    .filter((row): row is ApprovedCorpusVerse => row !== null)
+    .sort((left, right) => {
+      if (left.language_code === 'en') return -1;
+      if (right.language_code === 'en') return 1;
+      return left.language_code.localeCompare(right.language_code);
+    });
+  return normalized[0] ?? null;
 }
 
-export async function ensureDailyVersesForDay(supabase: SupabaseClient, day: string) {
-  const requestId = buildRequestId(day);
-  const selectColumns = 'id, day, language_code, book_code, chapter, verse, text_content, reflection_prompt, provider, model';
+async function translatedCorpusRows(supabase: AppSupabaseClient, base: ApprovedCorpusVerse) {
+  const { data, error } = await supabase
+    .from('bible_verses')
+    .select(CORPUS_SELECT)
+    .eq('book_id', base.book_id)
+    .eq('chapter', base.chapter)
+    .eq('verse', base.verse)
+    .eq('bible_versions.is_active', true)
+    .in('language_code', [...SUPPORTED_LANGUAGES]);
 
-  const { data: existingRows, error: existingError } = await supabase
-    .from('daily_verse_ai_cache')
-    .select(selectColumns)
-    .eq('day', day);
+  if (error) throw new Error(`Failed to load approved Scripture localizations: ${error.message}`);
 
-  if (existingError) {
-    throw new Error(`Failed to inspect daily verse AI cache: ${existingError.message}`);
+  const verses = (data ?? [])
+    .map(normalizeCorpusVerse)
+    .filter((row): row is ApprovedCorpusVerse => row !== null)
+    .sort((left, right) =>
+      `${left.language_code}:${left.version_code}:${left.id}`.localeCompare(
+        `${right.language_code}:${right.version_code}:${right.id}`,
+      ),
+    );
+  const byLanguage = new Map<SupportedLanguage, ApprovedCorpusVerse>([[base.language_code, base]]);
+  for (const verse of verses) {
+    if (!byLanguage.has(verse.language_code)) byLanguage.set(verse.language_code, verse);
   }
+  return [...byLanguage.values()];
+}
 
-  const existingByLanguage = new Map<string, DailyVerseCacheRow>();
-  for (const row of (existingRows ?? []) as DailyVerseCacheRow[]) {
-    existingByLanguage.set(row.language_code, row);
-  }
+export async function ensureDailyVersesForDay(supabase: AppSupabaseClient, day: string) {
+  const existingSelect = `
+    language_code,
+    bible_verses!inner(${CORPUS_SELECT})
+  `;
+  const { data: existingData, error: existingError } = await supabase
+    .from('daily_verses')
+    .select(existingSelect)
+    .eq('day', day)
+    .eq('bible_verses.bible_versions.is_active', true);
 
-  const missing = SUPPORTED_LANGUAGES.filter((lang) => !existingByLanguage.has(lang));
-  if (missing.length === 0) {
-    return { generated: 0, provider: 'cache' as const };
-  }
+  if (existingError) throw new Error(`Failed to inspect daily verses: ${existingError.message}`);
+  const existingRows = (existingData ?? []) as unknown as ExistingDailyVerse[];
+  const base = existingReference(existingRows) ?? (await selectDeterministicEnglishVerse(supabase, day));
+  const corpusRows = await translatedCorpusRows(supabase, base);
+  const existingLanguages = new Set(existingRows.map((row) => row.language_code));
+  const missingRows = corpusRows.filter((row) => !existingLanguages.has(row.language_code));
 
-  const englishExisting = existingByLanguage.get('en');
-  const baseVerse: BaseVerse = englishExisting
-    ? {
-        book_code: englishExisting.book_code,
-        chapter: englishExisting.chapter,
-        verse: englishExisting.verse,
-        text_content: englishExisting.text_content,
-        reflection_prompt: englishExisting.reflection_prompt ?? pickReflectionPrompt('en', day),
-      }
-    : await generateBaseVerse(day, requestId);
+  if (missingRows.length === 0) return { generated: 0, provider: 'cache' as const };
 
-  const rowsToUpsert: Array<{
-    day: string;
-    language_code: SupportedLanguage;
-    book_code: string;
-    chapter: number;
-    verse: number;
-    text_content: string;
-    reflection_prompt: string;
-    provider: string;
-    model: string;
-  }> = [];
-
-  if (missing.includes('en')) {
-    rowsToUpsert.push({
+  let aiPrompts = new Map<SupportedLanguage, string>();
+  try {
+    aiPrompts = await runReflectionCompletion(missingRows, day);
+  } catch (error) {
+    console.error('[daily-verse-ai] reflection_failed', {
       day,
-      language_code: 'en',
-      book_code: baseVerse.book_code,
-      chapter: baseVerse.chapter,
-      verse: baseVerse.verse,
-      text_content: baseVerse.text_content,
-      reflection_prompt: baseVerse.reflection_prompt,
-      provider: 'openai',
-      model: OPENAI_MODEL,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 
-  const nonEnglishMissing = missing.filter((lang) => lang !== 'en');
-  let localizedMap = new Map<SupportedLanguage, LocalizedVerse>();
-  if (nonEnglishMissing.length > 0) {
-    try {
-      localizedMap = await localizeBaseVerse(baseVerse, nonEnglishMissing, requestId);
-    } catch (error) {
-      console.error('[daily-verse-ai] localization_failed', {
-        requestId,
-        day,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
-
-  for (const lang of nonEnglishMissing) {
-    const localized = localizedMap.get(lang);
-    rowsToUpsert.push({
-      day,
-      language_code: lang,
-      book_code: baseVerse.book_code,
-      chapter: baseVerse.chapter,
-      verse: baseVerse.verse,
-      text_content: localized?.text_content ?? baseVerse.text_content,
-      reflection_prompt: localized?.reflection_prompt ?? pickReflectionPrompt(lang, day),
-      provider: 'openai',
-      model: OPENAI_MODEL,
-    });
-  }
-
-  const { error: upsertError } = await supabase
-    .from('daily_verse_ai_cache')
-    .upsert(rowsToUpsert, { onConflict: 'day,language_code' });
-
-  if (upsertError) {
-    throw new Error(`Failed to persist daily verse AI cache: ${upsertError.message}`);
-  }
+  const inserts = missingRows.map((verse) =>
+    buildDailyVerseInsert(day, verse, { reflection_prompt: aiPrompts.get(verse.language_code) }),
+  );
+  const { error: upsertError } = await supabase.from('daily_verses').upsert(inserts, {
+    onConflict: 'language_code,day',
+  });
+  if (upsertError) throw new Error(`Failed to persist daily verses: ${upsertError.message}`);
 
   return {
-    generated: rowsToUpsert.length,
-    provider: 'openai' as const,
-    reference: {
-      book_code: baseVerse.book_code,
-      chapter: baseVerse.chapter,
-      verse: baseVerse.verse,
-    },
+    generated: inserts.length,
+    provider: aiPrompts.size > 0 ? ('openai-reflection' as const) : ('fallback-reflection' as const),
+    reference: { book_code: base.book_code, chapter: base.chapter, verse: base.verse },
   };
 }

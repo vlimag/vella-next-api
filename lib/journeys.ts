@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { localizeJourneyBlocksWithAI } from '@/lib/aiLocalizer';
 
+type AppSupabaseClient = SupabaseClient<any, any, any, any, any>;
+
 type TemplateStep = {
   step_order: number;
   step_type: string;
@@ -53,6 +55,23 @@ type LocalizationRow = {
   cta_text: string | null;
 };
 
+type CanonicalScriptureReference = {
+  bookCode: string;
+  chapter: number;
+  verse: number;
+};
+
+export type ApprovedJourneyScripture = {
+  verseId: string;
+  bookCode: string;
+  chapter: number;
+  verse: number;
+  text: string;
+  languageCode: string;
+  versionCode: string;
+  versionName: string;
+};
+
 export type JourneyStepPayload = {
   stepOrder: number;
   stepType: string;
@@ -61,9 +80,24 @@ export type JourneyStepPayload = {
   title: string;
   body: string;
   scriptureRef: string | null;
+  scriptureVerseId: string | null;
+  scriptureVersionCode: string | null;
+  scriptureVersionName: string | null;
+  scriptureLanguageCode: string | null;
   ctaText: string | null;
   tag: string;
   required: boolean;
+};
+
+const ENGLISH_BOOK_CODES: Record<string, string> = {
+  john: 'JHN',
+  jhn: 'JHN',
+  jeremiah: 'JER',
+  jer: 'JER',
+  psalm: 'PSA',
+  psalms: 'PSA',
+  psa: 'PSA',
+  ps: 'PSA',
 };
 
 function stableIndex(seed: string, size: number) {
@@ -74,6 +108,110 @@ function stableIndex(seed: string, size: number) {
 
 function chooseLocalization(localizations: BlockLocalization[], language: string) {
   return localizations.find((loc) => loc.language_code === language) ?? localizations.find((loc) => loc.language_code === 'en') ?? localizations[0] ?? null;
+}
+
+function firstRelation(value: unknown): Record<string, unknown> | null {
+  const relation = Array.isArray(value) ? value[0] : value;
+  return relation && typeof relation === 'object' ? (relation as Record<string, unknown>) : null;
+}
+
+export function parseJourneyScriptureReference(value: string | null): CanonicalScriptureReference | null {
+  if (!value) return null;
+  const match = value.trim().match(/^(.+?)\s+(\d{1,3})\s*:\s*(\d{1,3})$/i);
+  if (!match) return null;
+
+  const bookCode = ENGLISH_BOOK_CODES[match[1].trim().toLowerCase().replace(/\.$/, '')];
+  const chapter = Number(match[2]);
+  const verse = Number(match[3]);
+  if (!bookCode || !Number.isInteger(chapter) || chapter < 1 || !Number.isInteger(verse) || verse < 1) {
+    return null;
+  }
+
+  return { bookCode, chapter, verse };
+}
+
+export function selectApprovedJourneyScripture(
+  rows: unknown,
+  language: string,
+  reference: CanonicalScriptureReference,
+): ApprovedJourneyScripture | null {
+  if (!Array.isArray(rows)) return null;
+  const requestedLanguage = language.toLowerCase();
+  const candidates: ApprovedJourneyScripture[] = [];
+
+  for (const input of rows) {
+    if (!input || typeof input !== 'object') continue;
+    const row = input as Record<string, unknown>;
+    const book = firstRelation(row.bible_books);
+    const version = firstRelation(row.bible_versions);
+    const chapter = Number(row.chapter);
+    const verse = Number(row.verse);
+    const languageCode = typeof row.language_code === 'string' ? row.language_code.toLowerCase() : '';
+    const text = typeof row.text_content === 'string' ? row.text_content.trim() : '';
+    const versionCode = typeof version?.code === 'string' ? version.code.trim() : '';
+    const versionName = typeof version?.name === 'string' ? version.name.trim() : '';
+
+    if (
+      typeof row.id !== 'string' ||
+      book?.code !== reference.bookCode ||
+      chapter !== reference.chapter ||
+      verse !== reference.verse ||
+      (languageCode !== requestedLanguage && languageCode !== 'en') ||
+      text.length === 0 ||
+      versionCode.length === 0 ||
+      versionName.length === 0 ||
+      version?.is_active !== true
+    ) {
+      continue;
+    }
+
+    candidates.push({
+      verseId: row.id,
+      bookCode: reference.bookCode,
+      chapter,
+      verse,
+      text,
+      languageCode,
+      versionCode,
+      versionName,
+    });
+  }
+
+  candidates.sort((left, right) => {
+    const languageDifference = Number(right.languageCode === requestedLanguage) - Number(left.languageCode === requestedLanguage);
+    if (languageDifference !== 0) return languageDifference;
+    return `${left.versionCode}:${left.verseId}`.localeCompare(`${right.versionCode}:${right.verseId}`);
+  });
+  return candidates[0] ?? null;
+}
+
+export function applyApprovedJourneyScripture(
+  step: JourneyStepPayload,
+  scripture: ApprovedJourneyScripture | null,
+): JourneyStepPayload {
+  if (step.stepType !== 'verse') return step;
+  if (!scripture) {
+    return {
+      ...step,
+      body: '',
+      scriptureRef: null,
+      scriptureVerseId: null,
+      scriptureVersionCode: null,
+      scriptureVersionName: null,
+      scriptureLanguageCode: null,
+      ctaText: null,
+    };
+  }
+
+  return {
+    ...step,
+    body: scripture.text,
+    scriptureRef: `${scripture.bookCode} ${scripture.chapter}:${scripture.verse}`,
+    scriptureVerseId: scripture.verseId,
+    scriptureVersionCode: scripture.versionCode,
+    scriptureVersionName: scripture.versionName,
+    scriptureLanguageCode: scripture.languageCode,
+  };
 }
 
 function normalizeStoredSteps(raw: unknown): JourneyStepPayload[] {
@@ -96,7 +234,7 @@ function normalizeStoredSteps(raw: unknown): JourneyStepPayload[] {
     const body = typeof step.body === 'string' ? step.body : '';
     const stepOrderRaw = typeof step.stepOrder === 'number' ? step.stepOrder : typeof step.step_order === 'number' ? step.step_order : 0;
 
-    if (!blockId || !stepType || !blockSlug || !title || !body || !Number.isFinite(stepOrderRaw)) {
+    if (!blockId || !stepType || !blockSlug || !title || (!body && stepType !== 'verse') || !Number.isFinite(stepOrderRaw)) {
       continue;
     }
 
@@ -113,6 +251,10 @@ function normalizeStoredSteps(raw: unknown): JourneyStepPayload[] {
           : step.scripture_ref === null || typeof step.scripture_ref === 'string'
             ? step.scripture_ref
             : null,
+      scriptureVerseId: null,
+      scriptureVersionCode: null,
+      scriptureVersionName: null,
+      scriptureLanguageCode: null,
       ctaText:
         step.ctaText === null || typeof step.ctaText === 'string'
           ? step.ctaText
@@ -128,7 +270,7 @@ function normalizeStoredSteps(raw: unknown): JourneyStepPayload[] {
 }
 
 async function localizeAssignedSteps(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   steps: JourneyStepPayload[],
   language: string,
 ) {
@@ -173,17 +315,15 @@ async function localizeAssignedSteps(
     if (!englishRowsError && englishRows && englishRows.length > 0) {
       try {
         const requestId = `journey_blocks_${language}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const verseBlockIds = new Set(steps.filter((step) => step.stepType === 'verse').map((step) => step.blockId));
         const localized = await localizeJourneyBlocksWithAI({
           requestId,
           targetLanguage: language,
           sourceLanguage: 'en',
-          blocks: englishRows as Array<{
-            block_id: string;
-            title: string;
-            body: string;
-            scripture_ref: string | null;
-            cta_text: string | null;
-          }>,
+          blocks: (englishRows as LocalizationRow[]).map((row) => ({
+            ...row,
+            is_scripture: verseBlockIds.has(row.block_id),
+          })),
         });
 
         if (localized.length > 0) {
@@ -253,12 +393,105 @@ async function localizeAssignedSteps(
   });
 }
 
+async function hydrateJourneyScripture(
+  supabase: AppSupabaseClient,
+  steps: JourneyStepPayload[],
+  language: string,
+) {
+  const verseSteps = steps.filter((step) => step.stepType === 'verse');
+  if (verseSteps.length === 0) return steps;
+
+  const safeSteps = steps.map((step) => applyApprovedJourneyScripture(step, null));
+  const blockIds = [...new Set(verseSteps.map((step) => step.blockId))];
+  const { data: referenceRows, error: referenceError } = await supabase
+    .from('journey_block_localizations')
+    .select('block_id, scripture_ref')
+    .in('block_id', blockIds)
+    .eq('language_code', 'en');
+
+  if (referenceError || !referenceRows) {
+    console.warn('[journeys] scripture_reference_lookup_failed', {
+      error: referenceError?.message ?? 'No canonical references returned',
+    });
+    return safeSteps;
+  }
+
+  const referencesByBlock = new Map<string, CanonicalScriptureReference>();
+  for (const row of referenceRows as Array<{ block_id: string; scripture_ref: string | null }>) {
+    const parsed = parseJourneyScriptureReference(row.scripture_ref);
+    if (parsed) referencesByBlock.set(row.block_id, parsed);
+  }
+
+  const approvedByReference = new Map<string, ApprovedJourneyScripture | null>();
+  for (const reference of referencesByBlock.values()) {
+    const key = `${reference.bookCode}:${reference.chapter}:${reference.verse}`;
+    if (approvedByReference.has(key)) continue;
+
+    const languages = [...new Set([language.toLowerCase(), 'en'])];
+    const { data, error } = await supabase
+      .from('bible_verses')
+      .select(
+        'id, chapter, verse, text_content, language_code, bible_books!inner(code), bible_versions!inner(code, name, is_active)',
+      )
+      .eq('bible_books.code', reference.bookCode)
+      .eq('chapter', reference.chapter)
+      .eq('verse', reference.verse)
+      .eq('bible_versions.is_active', true)
+      .in('language_code', languages);
+
+    if (error) {
+      console.warn('[journeys] scripture_corpus_lookup_failed', { reference: key, error: error.message });
+      approvedByReference.set(key, null);
+      continue;
+    }
+    approvedByReference.set(key, selectApprovedJourneyScripture(data, language, reference));
+  }
+
+  const hydratedSteps = safeSteps.map((step) => {
+    const reference = referencesByBlock.get(step.blockId);
+    if (!reference) return step;
+    const key = `${reference.bookCode}:${reference.chapter}:${reference.verse}`;
+    return applyApprovedJourneyScripture(step, approvedByReference.get(key) ?? null);
+  });
+
+  // A blank "verse" card is neither useful nor trustworthy. When the approved
+  // corpus does not contain that reference, omit the step until an edition is
+  // imported; the remaining reflection, prayer, and action steps still form a
+  // complete session.
+  return hydratedSteps.filter(
+    (step) => step.stepType !== 'verse' || Boolean(step.scriptureVerseId && step.body && step.scriptureRef),
+  );
+}
+
+async function prepareAssignedSteps(
+  supabase: AppSupabaseClient,
+  steps: JourneyStepPayload[],
+  language: string,
+) {
+  const localized = await localizeAssignedSteps(supabase, steps, language);
+  return hydrateJourneyScripture(supabase, localized, language);
+}
+
 async function fetchBlockCandidates(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   stepType: string,
   tag: string,
+  preferredTag?: string | null,
 ) {
   const baseSelect = 'id, slug, block_type, theme_tags, journey_block_localizations(language_code, title, body, scripture_ref, cta_text)';
+
+  if (preferredTag) {
+    const preferred = await supabase
+      .from('journey_blocks')
+      .select(baseSelect)
+      .eq('block_type', stepType)
+      .eq('is_active', true)
+      .contains('theme_tags', [preferredTag]);
+
+    if (!preferred.error && preferred.data && preferred.data.length > 0) {
+      return preferred.data as BlockCandidate[];
+    }
+  }
 
   const tagged = await supabase
     .from('journey_blocks')
@@ -285,11 +518,12 @@ async function fetchBlockCandidates(
 }
 
 async function buildDaySteps(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   templateId: string,
   journeyId: string,
   dayNumber: number,
   language: string,
+  preferredTag?: string | null,
 ) {
   const { data: templateSteps, error: templateStepsError } = await supabase
     .from('journey_template_steps')
@@ -305,7 +539,7 @@ async function buildDaySteps(
   const resolvedSteps: JourneyStepPayload[] = [];
 
   for (const step of templateSteps as TemplateStep[]) {
-    const candidates = await fetchBlockCandidates(supabase, step.step_type, step.block_pool_tag);
+    const candidates = await fetchBlockCandidates(supabase, step.step_type, step.block_pool_tag, preferredTag);
     if (candidates.length === 0) {
       continue;
     }
@@ -325,6 +559,10 @@ async function buildDaySteps(
       title: localization.title,
       body: localization.body,
       scriptureRef: localization.scripture_ref,
+      scriptureVerseId: null,
+      scriptureVersionCode: null,
+      scriptureVersionName: null,
+      scriptureLanguageCode: null,
       ctaText: localization.cta_text,
       tag: step.block_pool_tag,
       required: step.required,
@@ -335,25 +573,35 @@ async function buildDaySteps(
 }
 
 export async function getOrCreateDayAssignment(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   journeyId: string,
   templateId: string,
   dayNumber: number,
   language: string,
+  preferredTag?: string | null,
 ) {
   const { data: existingAssignment, error: existingError } = await supabase
     .from('user_journey_day_assignments')
-    .select('steps')
+    .select('id, steps')
     .eq('user_journey_id', journeyId)
     .eq('day_number', dayNumber)
     .single();
 
   if (!existingError && existingAssignment?.steps) {
     const existingSteps = normalizeStoredSteps(existingAssignment.steps);
-    return localizeAssignedSteps(supabase, existingSteps, language);
+    const safeSteps = await prepareAssignedSteps(supabase, existingSteps, language);
+    const { error: sanitizeError } = await supabase
+      .from('user_journey_day_assignments')
+      .update({ steps: safeSteps })
+      .eq('id', existingAssignment.id);
+    if (sanitizeError) {
+      console.warn('[journeys] assignment_sanitize_write_failed', { assignmentId: existingAssignment.id });
+    }
+    return safeSteps;
   }
 
-  const steps = await buildDaySteps(supabase, templateId, journeyId, dayNumber, language);
+  const builtSteps = await buildDaySteps(supabase, templateId, journeyId, dayNumber, language, preferredTag);
+  const steps = await prepareAssignedSteps(supabase, builtSteps, language);
   const { error: insertError } = await supabase.from('user_journey_day_assignments').insert({
     user_journey_id: journeyId,
     day_number: dayNumber,
@@ -364,5 +612,5 @@ export async function getOrCreateDayAssignment(
     throw new Error('Could not create journey day assignment');
   }
 
-  return localizeAssignedSteps(supabase, steps, language);
+  return steps;
 }

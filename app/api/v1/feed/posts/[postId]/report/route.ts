@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { getUserIdFromAuthHeader } from '@/lib/auth';
 import { parseQuery } from '@/lib/validation';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const bodySchema = z.object({
   reason_code: z.string().trim().min(2).max(60),
@@ -15,8 +15,8 @@ type RouteParams = {
 
 export async function POST(req: Request, { params }: RouteParams) {
   const { postId } = await params;
-  const auth = await getUserIdFromAuthHeader();
-  if (!('userId' in auth)) return fail(auth.error, 401);
+  const auth = await requireActiveSubscription();
+  if ('response' in auth) return auth.response;
 
   const body = await req.json().catch(() => null);
   const parsed = parseQuery(bodySchema, body);
@@ -26,11 +26,22 @@ export async function POST(req: Request, { params }: RouteParams) {
 
   const { data: post, error: postError } = await supabase
     .from('social_posts')
-    .select('id')
+    .select('id, status')
     .eq('id', postId)
     .maybeSingle();
 
-  if (postError || !post) return fail('Post not found', 404);
+  if (postError || !post || post.status !== 'active') return fail('Post not found', 404);
+
+  const { data: existingReport } = await supabase
+    .from('social_reports')
+    .select('id')
+    .eq('reporter_user_id', auth.userId)
+    .eq('target_type', 'post')
+    .eq('target_post_id', postId)
+    .in('status', ['open', 'reviewing'])
+    .limit(1)
+    .maybeSingle();
+  if (existingReport?.id) return ok({ reported: true, duplicate: true });
 
   const { error } = await supabase
     .from('social_reports')
@@ -44,6 +55,8 @@ export async function POST(req: Request, { params }: RouteParams) {
     });
 
   if (error) return fail('Could not submit report', 500, error.message);
+
+  console.info('[social-report] queued', { targetType: 'post', targetId: postId });
 
   return ok({ reported: true }, { status: 201 });
 }

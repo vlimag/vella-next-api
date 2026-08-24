@@ -1,10 +1,12 @@
 import { ok, fail } from '@/lib/http';
-import { resolveJourneyActor } from '@/lib/actor';
+import { authenticatedJourneyActor } from '@/lib/actor';
 import { createServiceClient } from '@/lib/supabase';
 import { getOrCreateDayAssignment } from '@/lib/journeys';
+import { isMissingJourneyThemePreference } from '@/lib/journeyCompatibility';
 import { localizeJourneyTemplateWithAI } from '@/lib/aiLocalizer';
 import { localeSchema, parseQuery } from '@/lib/validation';
 import { z } from 'zod';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const querySchema = z.object({
   lang: localeSchema.optional(),
@@ -23,6 +25,7 @@ type ActiveJourneyRow = {
   consistency_score: number;
   last_completed_on: string | null;
   start_date: string;
+  theme_preference: string | null;
   journey_templates:
     | {
         id: string;
@@ -50,37 +53,49 @@ type ActiveJourneyRow = {
       }>;
 };
 
+const ACTIVE_JOURNEY_FIELDS =
+  'id, user_id, anonymous_profile_id, template_id, status, current_day, streak_count, best_streak, total_completed_days, consistency_score, last_completed_on, start_date';
+const ACTIVE_JOURNEY_TEMPLATE =
+  'journey_templates!inner(id, slug, language_code, title, subtitle, description, duration_days, is_premium, theme_tags, version)';
+
 export async function GET(req: Request) {
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
+
   const { searchParams } = new URL(req.url);
   const parsed = parseQuery(querySchema, {
     lang: searchParams.get('lang') ?? undefined,
   });
   if ('error' in parsed) return parsed.error;
 
-  const actorResult = await resolveJourneyActor(true);
-  if (!('actor' in actorResult)) {
-    return fail(actorResult.error, actorResult.status);
-  }
-
-  const actor = actorResult.actor;
+  const actor = authenticatedJourneyActor(access.userId);
   const supabase = createServiceClient();
 
-  let query = supabase
-    .from('user_journeys')
-    .select(
-      'id, user_id, anonymous_profile_id, template_id, status, current_day, streak_count, best_streak, total_completed_days, consistency_score, last_completed_on, start_date, journey_templates!inner(id, slug, language_code, title, subtitle, description, duration_days, is_premium, theme_tags, version)',
-    )
-    .eq('status', 'active')
-    .order('updated_at', { ascending: false })
-    .limit(1);
+  const loadActiveJourney = async (includeThemePreference: boolean) => {
+    const fields = includeThemePreference
+      ? `${ACTIVE_JOURNEY_FIELDS}, theme_preference, ${ACTIVE_JOURNEY_TEMPLATE}`
+      : `${ACTIVE_JOURNEY_FIELDS}, ${ACTIVE_JOURNEY_TEMPLATE}`;
+    let query = supabase
+      .from('user_journeys')
+      .select(fields)
+      .eq('status', 'active')
+      .order('updated_at', { ascending: false })
+      .limit(1);
 
-  if (actor.kind === 'user') {
-    query = query.eq('user_id', actor.userId);
-  } else {
-    query = query.eq('anonymous_profile_id', actor.anonymousProfileId);
+    if (actor.kind === 'user') {
+      query = query.eq('user_id', actor.userId);
+    } else {
+      query = query.eq('anonymous_profile_id', actor.anonymousProfileId);
+    }
+
+    return query.maybeSingle();
+  };
+
+  let { data, error } = await loadActiveJourney(true);
+  if (isMissingJourneyThemePreference(error)) {
+    console.warn('[journeys] theme_preference_missing_using_default', { route: 'active' });
+    ({ data, error } = await loadActiveJourney(false));
   }
-
-  const { data, error } = await query.maybeSingle();
   if (error) return fail('Could not load active journey', 500, error.message);
   if (!data) return ok(null);
 
@@ -208,6 +223,7 @@ export async function GET(req: Request) {
     journey.template_id,
     assignmentDay,
     requestedLanguage,
+    journey.theme_preference ?? null,
   );
 
   let milestonesQuery = supabase

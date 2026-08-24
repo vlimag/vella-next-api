@@ -1,10 +1,20 @@
 import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { getOptionalUserIdFromAuthHeader, getUserIdFromAuthHeader } from '@/lib/auth';
 import { parseQuery } from '@/lib/validation';
-import { ensureSocialProfile, isBlockedPair, processMentions, refreshPostCounts } from '@/lib/social';
+import {
+  CURRENT_SOCIAL_EULA_VERSION,
+  ensureSocialProfile,
+  getBlockedUserIdsForViewer,
+  hasAcceptedSocialEula,
+  isBlockedPair,
+  isSocialUserSuspended,
+  processMentions,
+  refreshPostCounts,
+  safeSocialAvatarUrl,
+} from '@/lib/social';
 import { moderateFaithContent } from '@/lib/socialModeration';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const bodySchema = z.object({
   body: z.string().trim().min(1).max(1200),
@@ -15,8 +25,11 @@ type RouteParams = {
 };
 
 export async function GET(_req: Request, { params }: RouteParams) {
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
+
   const { postId } = await params;
-  const viewerUserId = await getOptionalUserIdFromAuthHeader();
+  const viewerUserId = access.userId;
   const supabase = createServiceClient();
 
   const { data: post, error: postError } = await supabase
@@ -41,8 +54,15 @@ export async function GET(_req: Request, { params }: RouteParams) {
 
   if (error) return fail('Could not load comments', 500, error.message);
 
-  const authorIds = [...new Set((comments ?? []).map((comment) => String(comment.author_user_id)))];
-  const commentIds = (comments ?? []).map((comment) => String(comment.id));
+  const blockedUserIds = viewerUserId
+    ? await getBlockedUserIdsForViewer(supabase, viewerUserId)
+    : new Set<string>();
+  const visibleComments = (comments ?? []).filter(
+    (comment) => !blockedUserIds.has(String(comment.author_user_id)),
+  );
+
+  const authorIds = [...new Set(visibleComments.map((comment) => String(comment.author_user_id)))];
+  const commentIds = visibleComments.map((comment) => String(comment.id));
 
   const [{ data: profiles }, { data: likedRows }] = await Promise.all([
     authorIds.length > 0
@@ -65,14 +85,14 @@ export async function GET(_req: Request, { params }: RouteParams) {
     profileById.set(String(profile.user_id), {
       handle: String(profile.handle ?? 'faith_user'),
       display_name: String(profile.display_name ?? 'Faith user'),
-      avatar_url: profile.avatar_url ? String(profile.avatar_url) : null,
+      avatar_url: safeSocialAvatarUrl(String(profile.user_id), profile.avatar_url),
     });
   }
 
   const likedSet = new Set((likedRows ?? []).map((row) => String(row.comment_id)));
 
   return ok({
-    items: (comments ?? []).map((comment) => {
+    items: visibleComments.map((comment) => {
       const author = profileById.get(String(comment.author_user_id));
       return {
         id: comment.id,
@@ -94,14 +114,30 @@ export async function GET(_req: Request, { params }: RouteParams) {
 
 export async function POST(req: Request, { params }: RouteParams) {
   const { postId } = await params;
-  const auth = await getUserIdFromAuthHeader();
-  if (!('userId' in auth)) return fail(auth.error, 401);
+  const auth = await requireActiveSubscription();
+  if ('response' in auth) return auth.response;
 
   const body = await req.json().catch(() => null);
   const parsed = parseQuery(bodySchema, body);
   if ('error' in parsed) return parsed.error;
 
   const supabase = createServiceClient();
+
+  if (await isSocialUserSuspended(supabase, auth.userId)) {
+    return fail('Community commenting is unavailable for this account.', 403, { code: 'social_suspended' });
+  }
+
+  const acceptedEula = await hasAcceptedSocialEula(
+    supabase,
+    auth.userId,
+    CURRENT_SOCIAL_EULA_VERSION,
+  );
+  if (!acceptedEula) {
+    return fail('You must accept the community terms before commenting.', 403, {
+      code: 'social_eula_required',
+      required_version: CURRENT_SOCIAL_EULA_VERSION,
+    });
+  }
 
   const { data: post, error: postError } = await supabase
     .from('social_posts')

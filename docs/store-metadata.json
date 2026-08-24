@@ -1,0 +1,186 @@
+{
+  "reviewedAt": "2026-07-31",
+  "copyStatus": "Copy-ready after the release blockers in STORE_SUBMISSION_PACKAGE.md are closed. Prices must come from App Store Connect and Play Console; no price is hard-coded here.",
+  "app": {
+    "name": "Vella",
+    "iosBundleId": "io.vella.app",
+    "appleId": "6790616297",
+    "androidPackage": "io.vella.app",
+    "categoryPrimary": "Lifestyle",
+    "categorySecondary": "Reference",
+    "contentRights": "Contains third-party public-domain Bible text; provenance is documented in SCRIPTURE_CONTENT_RIGHTS.md. Answer Yes to the App Store content-rights question.",
+    "copyright": "2026 Madai Tecnologia LTDA",
+    "supportUrl": "https://vella.one/support",
+    "marketingUrl": "https://vella.one",
+    "privacyPolicyUrl": "https://vella.one/privacy",
+    "termsUrl": "https://vella.one/terms",
+    "accountDeletionUrl": "https://vella.one/delete-account",
+    "communityGuidelinesUrl": "https://vella.one/community-guidelines",
+    "brandedUrlsAfterDnsCutover": {
+      "supportUrl": "https://vella.one/support",
+      "marketingUrl": "https://vella.one",
+      "privacyPolicyUrl": "https://vella.one/privacy",
+      "termsUrl": "https://vella.one/terms",
+      "accountDeletionUrl": "https://vella.one/delete-account",
+      "communityGuidelinesUrl": "https://vella.one/community-guidelines"
+    }
+  },
+  "locales": {
+    "en": {
+      "appStoreLocale": "en-US",
+      "playLocale": "en-US",
+      "name": "Vella",
+      "playTitle": "Vella: Scripture & Prayer",
+      "subtitle": "Scripture, prayer & journeys",
+      "promotionalText": "Build a steadier faith rhythm with daily Scripture, guided seven-day journeys, thoughtful Bible search, private notes, optional reminders, and Faith Feed.",
+      "shortDescription": "Daily Scripture, guided journeys, private notes and a safer faith community.",
+      "keywords": "scripture,bible,prayer,devotional,faith,reflection,journal,christian",
+      "releaseNotes": "Welcome to Vella. Build a steady faith rhythm with daily Scripture, personalized seven-day journeys, Bible search, private notes, trusted groups, Faith Feed, and a daily reminder at the time and in the style you choose.",
+      "description": "Make room for Scripture, prayer, and reflection every day.\n\nVella helps you build a calm, consistent Christian faith rhythm around the time and season you are living through.\n\n• Begin with a daily Bible verse and reflection prompt.\n• Follow a personalized seven-day guided journey.\n• Search Scripture by reference, keyword, or an everyday-language theme.\n• Save favorite verses and keep private notes.\n• Create or join invite-code groups with people you trust.\n• Share prayer, testimony, Scripture, and encouragement in Faith Feed.\n• Optionally set a private daily reminder at your local time, with Scripture and prayer or quiet encouragement without a verse.\n\nNotifications stay off until you explicitly enable them and can be changed or disabled anytime. Faith Feed includes automated safety checks plus reporting, following, blocking, and unblocking controls. Public posts, comments, profile details, and selected images are visible to other Vella users.\n\nAI may expand search intent, draft reflection prompts, and support community safety checks. Displayed Scripture comes from an approved stored edition and is never written or translated by AI. AI-drafted commentary can be wrong and is not spiritual authority or professional advice.\n\nBefore account creation, each new user receives exactly one anonymous, personalized first Vella moment. Account creation follows that moment. After sign-in, app content and features remain locked until an active Vella Premium subscription or active eligible introductory trial is confirmed; there is no permanent free tier.\n\nThe monthly plan is charged immediately and has no free trial. Eligible new annual subscribers may receive exactly 14 days from Apple or Google; the store determines eligibility and shows the full localized annual renewal price and terms before confirmation. The annual subscription renews automatically. Manage or cancel it in Apple or Google subscription settings. Cancel before the trial ends and you will not be charged the annual price. If you are not eligible for the annual offer or choose monthly, no free trial is offered.\n\nVella is not an emergency service and does not replace pastoral, medical, mental-health, legal, or other qualified support.\n\nTerms of Use: https://vella.one/terms\nPrivacy Policy: https://vella.one/privacy"
+    },
+    "pt": {
+      "appStoreLocale": "pt-BR",
+      "playLocale": "pt-BR",
+      "name": "Vella",
+      "playTitle": "Vella: Bíblia e Oração",
+      "subtitle": "Bíblia, oração e jornadas",
+      "promotionalText": "Crie um ritmo de fé mais constante com Bíblia diária, jornadas guiadas de sete dias, busca bíblica, notas privadas, lembretes opcionais e o Faith Feed.",
+      "shortDescription": "Bíblia diária, jornadas guiadas, notas privadas e comunidade cristã segura.",
+      "keywords": "biblia,oracao,devocional,fe,versiculo,reflexao,jornada,cristao",
+      "releaseNotes": "Boas-vindas à Vella. Crie um ritmo de fé constante com Bíblia diária, jornadas personalizadas, busca bíblica, notas privadas, grupos, Faith Feed e um lembrete diário no horário e estilo que você escolher.",
+      "description": "Abra espaço todos os dias para a Bíblia, a oração e a reflexão.\n\nA Vella ajuda você a criar um ritmo cristão calmo e constante, de acordo com o tempo disponível e a fase que está vivendo.\n\n• Comece com um versículo do dia e uma pergunta para reflexão.\n• Siga uma jornada guiada e personalizada de sete dias.\n• Busque na Bíblia por referência, palavra-chave ou tema em linguagem natural.\n• Salve versículos favoritos e mantenha notas privadas.\n• Crie ou entre em grupos por código de convite com pessoas de confiança.\n• Compartilhe oração, testemunho, Bíblia e encorajamento no Faith Feed.\n• Se quiser, defina um lembrete diário privado no seu horário local, com Bíblia e oração ou encorajamento tranquilo sem versículo.\n\nAs notificações ficam desativadas até você ativá-las e podem ser alteradas ou desligadas quando quiser. O Faith Feed possui verificações automáticas de segurança e controles para denunciar, seguir, bloquear e desbloquear. Posts, comentários, dados públicos do perfil e imagens selecionadas ficam visíveis para outras pessoas na Vella.\n\nA IA pode expandir a intenção da busca, rascunhar perguntas de reflexão e apoiar verificações de segurança da comunidade. Todo texto bíblico exibido vem de uma edição aprovada e armazenada; ele nunca é escrito nem traduzido por IA. Comentários rascunhados por IA podem errar e não são autoridade espiritual nem aconselhamento profissional.\n\nAntes da criação da conta, cada novo usuário recebe exatamente um primeiro momento Vella anônimo e personalizado. A criação da conta vem depois desse momento. Após o login, o conteúdo e os recursos do app ficam bloqueados até a confirmação de uma assinatura Vella Premium ativa ou de um teste introdutório elegível ativo; não há plano gratuito permanente.\n\nO plano mensal é cobrado imediatamente e não tem teste grátis. Novos assinantes anuais elegíveis podem receber exatamente 14 dias da Apple ou do Google; a loja determina a elegibilidade e exibe o preço anual completo de renovação e os termos localizados antes da confirmação. A assinatura anual é renovada automaticamente. Gerencie ou cancele nos ajustes de assinaturas da Apple ou do Google. Cancele antes do fim do teste e o preço anual não será cobrado. Se você não for elegível para a oferta anual ou escolher o plano mensal, não haverá teste grátis.\n\nA Vella não é um serviço de emergência nem substitui apoio pastoral, médico, psicológico, jurídico ou de outro profissional qualificado.\n\nTermos de Uso: https://vella.one/terms\nPolítica de Privacidade: https://vella.one/privacy"
+    },
+    "es": {
+      "appStoreLocale": "es-ES",
+      "playLocale": "es-ES",
+      "name": "Vella",
+      "playTitle": "Vella: Biblia y Oración",
+      "subtitle": "Biblia, oración y caminos",
+      "promotionalText": "Crea un ritmo de fe más constante con Biblia diaria, caminos guiados de siete días, búsqueda bíblica, notas privadas, avisos opcionales y Faith Feed.",
+      "shortDescription": "Biblia diaria, caminos guiados, notas privadas y comunidad cristiana segura.",
+      "keywords": "biblia,oracion,devocional,fe,versiculo,reflexion,camino,cristiano",
+      "releaseNotes": "Te damos la bienvenida a Vella. Crea un ritmo de fe constante con Biblia diaria, caminos personalizados, búsqueda bíblica, notas privadas, grupos y Faith Feed.",
+      "description": "Reserva cada día un espacio para la Biblia, la oración y la reflexión.\n\nVella te ayuda a crear un ritmo de fe cristiana sereno y constante, adaptado al tiempo disponible y a la etapa que estás viviendo.\n\n• Empieza con un versículo diario y una pregunta de reflexión.\n• Sigue un camino guiado y personalizado de siete días.\n• Busca en la Biblia por referencia, palabra clave o tema expresado con lenguaje cotidiano.\n• Guarda versículos favoritos y notas privadas.\n• Crea o únete a grupos mediante código de invitación con personas de confianza.\n• Comparte oración, testimonio, Biblia y ánimo en Faith Feed.\n• Decide si quieres activar las notificaciones disponibles.\n\nFaith Feed incluye controles automáticos de seguridad y opciones para denunciar, seguir, bloquear y desbloquear. Las publicaciones, comentarios, datos públicos del perfil e imágenes seleccionadas son visibles para otras personas en Vella.\n\nLa IA puede ampliar la intención de búsqueda, redactar preguntas de reflexión y apoyar los controles de seguridad de la comunidad. Todo texto bíblico mostrado procede de una edición aprobada y almacenada; nunca lo escribe ni lo traduce la IA. Los comentarios redactados por IA pueden ser erróneos y no son autoridad espiritual ni asesoramiento profesional.\n\nAntes de crear la cuenta, cada nuevo usuario recibe exactamente un primer momento Vella anónimo y personalizado. La creación de la cuenta viene después de ese momento. Tras iniciar sesión, el contenido y las funciones de la app permanecen bloqueados hasta que se confirme una suscripción activa a Vella Premium o una prueba introductoria elegible activa; no hay un nivel gratuito permanente.\n\nEl plan mensual se cobra de inmediato y no incluye prueba gratuita. Los nuevos suscriptores anuales elegibles pueden recibir exactamente 14 días de Apple o Google; la tienda determina la elegibilidad y muestra el precio anual completo de renovación y los términos localizados antes de la confirmación. La suscripción anual se renueva automáticamente. Adminístrala o cancélala en los ajustes de suscripciones de Apple o Google. Cancela antes de que termine la prueba y no se te cobrará el precio anual. Si no cumples los requisitos para la oferta anual o eliges el plan mensual, no se ofrece ninguna prueba gratuita.\n\nVella no es un servicio de emergencias ni sustituye el apoyo pastoral, médico, psicológico, jurídico o de otro profesional cualificado.\n\nCondiciones de uso: https://vella.one/terms\nPolítica de privacidad: https://vella.one/privacy"
+    },
+    "fr": {
+      "appStoreLocale": "fr-FR",
+      "playLocale": "fr-FR",
+      "name": "Vella",
+      "playTitle": "Vella : Bible et Prière",
+      "subtitle": "Bible, prière et parcours",
+      "promotionalText": "Créez un rythme de foi plus régulier avec verset du jour, parcours guidé de sept jours, recherche biblique, notes privées, rappels facultatifs et Faith Feed.",
+      "shortDescription": "Bible du jour, parcours guidés, notes privées et communauté chrétienne sûre.",
+      "keywords": "bible,priere,devotion,foi,verset,meditation,parcours,chretien",
+      "releaseNotes": "Bienvenue sur Vella. Créez un rythme de foi régulier avec Bible quotidienne, parcours personnalisés, recherche biblique, notes privées, groupes et Faith Feed.",
+      "description": "Accordez chaque jour une place à la Bible, à la prière et à la réflexion.\n\nVella vous aide à construire un rythme de foi chrétienne calme et régulier, adapté au temps dont vous disposez et à la période que vous traversez.\n\n• Commencez par un verset du jour et une question de réflexion.\n• Suivez un parcours guidé et personnalisé de sept jours.\n• Recherchez dans la Bible par référence, mot-clé ou thème formulé avec vos propres mots.\n• Enregistrez vos versets favoris et gardez des notes privées.\n• Créez ou rejoignez des groupes par code d'invitation avec des proches de confiance.\n• Partagez prières, témoignages, Écriture et encouragements dans Faith Feed.\n• Choisissez d'activer ou non les notifications disponibles.\n\nFaith Feed associe des contrôles de sécurité automatisés aux fonctions de signalement, de suivi, de blocage et de déblocage. Les publications, commentaires, éléments publics du profil et images sélectionnées sont visibles par d'autres utilisateurs de Vella.\n\nL'IA peut élargir l'intention de recherche, rédiger des questions de réflexion et soutenir les contrôles de sécurité de la communauté. Tout texte biblique affiché provient d'une édition approuvée et stockée ; il n'est jamais rédigé ni traduit par l'IA. Les commentaires rédigés par l'IA peuvent être erronés et ne constituent ni une autorité spirituelle ni un conseil professionnel.\n\nAvant la création du compte, chaque nouvel utilisateur reçoit exactement un premier moment Vella anonyme et personnalisé. La création du compte suit ce moment. Après la connexion, les contenus et fonctions de l'app restent verrouillés jusqu'à la confirmation d'un abonnement Vella Premium actif ou d'un essai promotionnel éligible actif ; il n'existe aucune offre gratuite permanente.\n\nLe forfait mensuel est facturé immédiatement et ne comprend aucun essai gratuit. Les nouveaux abonnés annuels éligibles peuvent recevoir exactement 14 jours de la part d'Apple ou de Google ; la boutique détermine l'éligibilité et affiche le prix annuel complet du renouvellement et les conditions localisées avant confirmation. L'abonnement annuel se renouvelle automatiquement. Gérez-le ou annulez-le dans les réglages d'abonnement Apple ou Google. Annulez avant la fin de l'essai et le prix annuel ne vous sera pas facturé. Si vous n'êtes pas éligible à l'offre annuelle ou choisissez le forfait mensuel, aucun essai gratuit n'est proposé.\n\nVella n'est pas un service d'urgence et ne remplace aucun accompagnement pastoral, médical, psychologique, juridique ou professionnel qualifié.\n\nConditions d'utilisation : https://vella.one/terms\nPolitique de confidentialité : https://vella.one/privacy"
+    },
+    "de": {
+      "appStoreLocale": "de-DE",
+      "playLocale": "de-DE",
+      "name": "Vella",
+      "playTitle": "Vella: Bibel & Gebet",
+      "subtitle": "Bibel, Gebet und Glaubenswege",
+      "promotionalText": "Finde einen beständigen Glaubensrhythmus mit täglicher Bibel, geführtem Sieben-Tage-Weg, Bibelsuche, privaten Notizen, optionalen Hinweisen und Faith Feed.",
+      "shortDescription": "Tägliche Bibel, Glaubenswege, private Notizen und eine sichere Community.",
+      "keywords": "bibel,gebet,andacht,glaube,vers,reflexion,weg,christlich",
+      "releaseNotes": "Willkommen bei Vella. Baue einen beständigen Glaubensrhythmus mit täglicher Bibel, persönlichen Wegen, Bibelsuche, privaten Notizen, Gruppen und Faith Feed auf.",
+      "description": "Schaffe jeden Tag Raum für Bibel, Gebet und Reflexion.\n\nVella hilft dir, einen ruhigen und beständigen christlichen Glaubensrhythmus zu entwickeln – passend zu deiner verfügbaren Zeit und deiner aktuellen Lebensphase.\n\n• Beginne mit einem täglichen Bibelvers und einem Reflexionsimpuls.\n• Folge einem personalisierten, geführten Sieben-Tage-Weg.\n• Durchsuche die Bibel nach Referenz, Stichwort oder einem Thema in Alltagssprache.\n• Speichere Lieblingsverse und private Notizen.\n• Erstelle Gruppen per Einladungscode oder tritt ihnen mit vertrauten Menschen bei.\n• Teile Gebet, Zeugnis, Bibel und Ermutigung im Faith Feed.\n• Entscheide selbst, ob du verfügbare Mitteilungen aktivierst.\n\nFaith Feed verbindet automatisierte Sicherheitsprüfungen mit Melden, Folgen, Blockieren und Entsperren. Öffentliche Beiträge, Kommentare, Profildaten und ausgewählte Bilder sind für andere Vella-Nutzer sichtbar.\n\nKI kann Suchabsichten erweitern, Reflexionsfragen entwerfen und die Sicherheitsprüfung der Community unterstützen. Angezeigter Bibeltext stammt aus einer genehmigten, gespeicherten Ausgabe und wird niemals von KI verfasst oder übersetzt. KI-verfasste Kommentare können falsch sein und sind weder geistliche Autorität noch professionelle Beratung.\n\nVor der Kontoerstellung erhält jeder neue Nutzer genau einen anonymen, personalisierten ersten Vella-Moment. Danach wird das Konto erstellt. Nach der Anmeldung bleiben App-Inhalte und Funktionen gesperrt, bis ein aktives Vella-Premium-Abonnement oder ein aktiver berechtigter Einführungszeitraum bestätigt ist; es gibt keine dauerhaft kostenlose Stufe.\n\nDer Monatsplan wird sofort berechnet und hat keinen kostenlosen Testzeitraum. Berechtigte neue Jahresabonnenten können genau 14 Tage erhalten; Apple oder Google stellt sie bereit, und der Store bestimmt die Berechtigung und zeigt vor der Bestätigung den vollständigen lokalisierten Jahresverlängerungspreis und die Bedingungen. Das Jahresabonnement verlängert sich automatisch. Verwalte oder kündige es in den Abonnementeinstellungen von Apple oder Google. Kündige vor Ende des Testzeitraums; dann wird der Jahrespreis nicht berechnet. Wenn du für das Jahresangebot nicht berechtigt bist oder den Monatsplan wählst, gibt es keinen kostenlosen Testzeitraum.\n\nVella ist kein Notfalldienst und ersetzt keine pastorale, medizinische, psychologische, rechtliche oder andere qualifizierte Hilfe.\n\nNutzungsbedingungen: https://vella.one/terms\nDatenschutzrichtlinie: https://vella.one/privacy"
+    },
+    "it": {
+      "appStoreLocale": "it-IT",
+      "playLocale": "it-IT",
+      "name": "Vella",
+      "playTitle": "Vella: Bibbia e Preghiera",
+      "subtitle": "Bibbia, preghiera e percorsi",
+      "promotionalText": "Crea un ritmo di fede più costante con Bibbia quotidiana, percorso guidato di sette giorni, ricerca biblica, note private, avvisi facoltativi e Faith Feed.",
+      "shortDescription": "Bibbia quotidiana, percorsi guidati, note private e comunità cristiana sicura.",
+      "keywords": "bibbia,preghiera,devozionale,fede,versetto,riflessione,percorso",
+      "releaseNotes": "Benvenuti in Vella. Crea un ritmo di fede costante con Bibbia quotidiana, percorsi personalizzati, ricerca biblica, note private, gruppi e Faith Feed.",
+      "description": "Dedica ogni giorno uno spazio alla Bibbia, alla preghiera e alla riflessione.\n\nVella ti aiuta a creare un ritmo di fede cristiana calmo e costante, adatto al tempo disponibile e alla stagione che stai vivendo.\n\n• Inizia con un versetto del giorno e uno spunto di riflessione.\n• Segui un percorso guidato e personalizzato di sette giorni.\n• Cerca nella Bibbia per riferimento, parola chiave o tema espresso con parole comuni.\n• Salva i versetti preferiti e conserva note private.\n• Crea o unisciti a gruppi tramite codice di invito con persone fidate.\n• Condividi preghiera, testimonianza, Bibbia e incoraggiamento nel Faith Feed.\n• Scegli se attivare le notifiche disponibili.\n\nFaith Feed combina controlli di sicurezza automatizzati con funzioni per segnalare, seguire, bloccare e sbloccare. Post, commenti, dati pubblici del profilo e immagini selezionate sono visibili agli altri utenti Vella.\n\nL'IA può ampliare l'intento di ricerca, preparare domande di riflessione e sostenere i controlli di sicurezza della comunità. Ogni testo biblico mostrato proviene da un'edizione approvata e archiviata; non è mai scritto né tradotto dall'IA. I commenti preparati dall'IA possono essere errati e non sono un'autorità spirituale né una consulenza professionale.\n\nPrima della creazione dell'account, ogni nuovo utente riceve esattamente un primo momento Vella anonimo e personalizzato. La creazione dell'account avviene dopo quel momento. Dopo l'accesso, i contenuti e le funzioni dell'app restano bloccati finché non viene confermato un abbonamento Vella Premium attivo o una prova introduttiva idonea attiva; non esiste un livello gratuito permanente.\n\nIl piano mensile viene addebitato subito e non include una prova gratuita. I nuovi abbonati annuali idonei possono ricevere esattamente 14 giorni da Apple o Google; lo store determina l'idoneità e mostra il prezzo annuale completo di rinnovo e i termini localizzati prima della conferma. L'abbonamento annuale si rinnova automaticamente. Gestiscilo o annullalo nelle impostazioni degli abbonamenti Apple o Google. Annulla prima della fine della prova e il prezzo annuale non ti verrà addebitato. Se non hai diritto all'offerta annuale o scegli il piano mensile, non viene offerta alcuna prova gratuita.\n\nVella non è un servizio di emergenza e non sostituisce assistenza pastorale, medica, psicologica, legale o di altro professionista qualificato.\n\nTermini di utilizzo: https://vella.one/terms\nInformativa sulla privacy: https://vella.one/privacy"
+    },
+    "ru": {
+      "appStoreLocale": "ru",
+      "playLocale": "ru-RU",
+      "name": "Vella",
+      "playTitle": "Vella: Библия и молитва",
+      "subtitle": "Библия, молитва и вера",
+      "promotionalText": "Укрепляйте духовный ритм с ежедневным стихом, семидневным маршрутом, поиском по Библии, личными заметками, уведомлениями и Лентой веры.",
+      "shortDescription": "Библия на каждый день, маршруты, личные заметки и бережное сообщество.",
+      "keywords": "библия,молитва,вера,стих,размышление,духовность",
+      "releaseNotes": "Добро пожаловать в Vella. Укрепляйте веру с ежедневным Писанием, личными маршрутами, поиском по Библии, заметками, группами и Лентой веры.",
+      "description": "Каждый день находите время для Библии, молитвы и размышления.\n\nVella помогает создать спокойный и постоянный ритм христианской веры с учётом доступного времени и вашего нынешнего жизненного периода.\n\n• Начинайте с ежедневного библейского стиха и вопроса для размышления.\n• Проходите персональный семидневный духовный маршрут.\n• Ищите в Библии по ссылке, ключевому слову или теме, описанной обычными словами.\n• Сохраняйте любимые стихи и личные заметки.\n• Создавайте группы по коду приглашения или присоединяйтесь к близким людям.\n• Делитесь молитвой, свидетельством, Писанием и поддержкой в Ленте веры.\n• Самостоятельно решайте, включать ли доступные уведомления.\n\nВ Ленте веры действуют автоматические проверки безопасности, жалобы, подписки, блокировка и разблокировка. Публичные публикации, комментарии, данные профиля и выбранные изображения видны другим пользователям Vella.\n\nИИ может расширять смысл поиска, создавать вопросы для размышления и поддерживать проверки безопасности сообщества. Любой отображаемый текст Писания берётся из утверждённого сохранённого издания; ИИ никогда не пишет и не переводит его. Созданные ИИ комментарии могут быть ошибочными и не являются духовным авторитетом или профессиональной консультацией.\n\nДо создания учётной записи каждый новый пользователь получает ровно один анонимный персонализированный первый момент Vella. Затем создаётся учётная запись. После входа контент и функции приложения остаются заблокированными, пока не будет подтверждена активная подписка Vella Premium или активный доступный вводный пробный период; постоянного бесплатного уровня нет.\n\nМесячный план оплачивается сразу и не включает бесплатный пробный период. Отвечающие условиям новые годовые подписчики могут получить ровно 14 дней от Apple или Google; магазин определяет право и показывает полную локализованную годовую цену продления и условия до подтверждения. Годовая подписка продлевается автоматически. Управляйте ею или отмените её в настройках подписок Apple или Google. Отмените подписку до окончания пробного периода, и годовая цена не будет списана. Если вы не соответствуете условиям годового предложения или выбираете месячный план, бесплатный пробный период не предоставляется.\n\nVella не является экстренной службой и не заменяет пасторскую, медицинскую, психологическую, юридическую или иную квалифицированную помощь.\n\nУсловия использования: https://vella.one/terms\nПолитика конфиденциальности: https://vella.one/privacy"
+    },
+    "pl": {
+      "appStoreLocale": "pl",
+      "playLocale": "pl-PL",
+      "name": "Vella",
+      "playTitle": "Vella: Biblia i Modlitwa",
+      "subtitle": "Biblia, modlitwa i droga",
+      "promotionalText": "Buduj stały rytm wiary z codziennym wersetem, siedmiodniową ścieżką, wyszukiwaniem Biblii, prywatnymi notatkami, opcjonalnymi powiadomieniami i Faith Feedem.",
+      "shortDescription": "Biblia na każdy dzień, ścieżki, prywatne notatki i bezpieczna wspólnota.",
+      "keywords": "biblia,modlitwa,wiara,werset,refleksja,sciezka,chrzescijanska",
+      "releaseNotes": "Witamy w Vella. Buduj stały rytm wiary z codziennym Pismem, osobistymi ścieżkami, wyszukiwaniem Biblii, notatkami, grupami i Faith Feedem.",
+      "description": "Każdego dnia znajdź miejsce na Biblię, modlitwę i refleksję.\n\nVella pomaga budować spokojny i regularny rytm chrześcijańskiej wiary, dopasowany do dostępnego czasu i obecnej sytuacji życiowej.\n\n• Zacznij od codziennego wersetu i pytania do refleksji.\n• Przejdź spersonalizowaną siedmiodniową ścieżkę.\n• Wyszukuj w Biblii według odnośnika, słowa kluczowego lub tematu opisanego zwykłymi słowami.\n• Zapisuj ulubione wersety i prywatne notatki.\n• Twórz grupy na kod zaproszenia lub dołączaj do zaufanych osób.\n• Dziel się modlitwą, świadectwem, Pismem i wsparciem w Faith Feedzie.\n• Samodzielnie zdecyduj, czy włączyć dostępne powiadomienia.\n\nFaith Feed łączy automatyczne kontrole bezpieczeństwa ze zgłaszaniem, obserwowaniem, blokowaniem i odblokowywaniem. Publiczne posty, komentarze, dane profilu i wybrane obrazy są widoczne dla innych użytkowników Vella.\n\nAI może rozszerzać intencję wyszukiwania, tworzyć pytania do refleksji i wspierać kontrole bezpieczeństwa społeczności. Każdy wyświetlany tekst Pisma pochodzi z zatwierdzonego, przechowywanego wydania; AI nigdy go nie pisze ani nie tłumaczy. Komentarze utworzone przez AI mogą być błędne i nie są duchowym autorytetem ani profesjonalną poradą.\n\nPrzed utworzeniem konta każdy nowy użytkownik otrzymuje dokładnie jeden anonimowy, spersonalizowany pierwszy moment Vella. Utworzenie konta następuje po tym momencie. Po zalogowaniu treści i funkcje aplikacji pozostają zablokowane do czasu potwierdzenia aktywnej subskrypcji Vella Premium lub aktywnego kwalifikującego się okresu próbnego; nie ma stałego bezpłatnego poziomu.\n\nPlan miesięczny jest płatny od razu i nie obejmuje bezpłatnego okresu próbnego. Uprawnieni nowi subskrybenci planu rocznego mogą otrzymać dokładnie 14 dni od Apple lub Google; sklep określa uprawnienie i pokazuje przed potwierdzeniem pełną zlokalizowaną roczną cenę odnowienia i warunki. Subskrypcja roczna odnawia się automatycznie. Zarządzaj nią lub anuluj ją w ustawieniach subskrypcji Apple lub Google. Anuluj przed końcem okresu próbnego, a roczna cena nie zostanie pobrana. Jeśli nie kwalifikujesz się do oferty rocznej lub wybierzesz plan miesięczny, bezpłatny okres próbny nie jest dostępny.\n\nVella nie jest serwisem ratunkowym i nie zastępuje wsparcia duszpasterskiego, medycznego, psychologicznego, prawnego ani innej wykwalifikowanej pomocy.\n\nWarunki korzystania: https://vella.one/terms\nPolityka prywatności: https://vella.one/privacy"
+    }
+  },
+  "subscriptions": {
+    "subscriptionGroupReferenceName": "Vella Premium",
+    "subscriptionGroupDisplayName": "Vella Premium",
+    "monthlyProductId": "vella.premium.monthly",
+    "annualProductId": "vella.premium.yearly",
+    "monthlyTerms": "Auto-renewing monthly subscription. Charged immediately. No introductory trial.",
+    "annualTerms": "Auto-renewing annual subscription. Eligible new subscribers may receive 14 days free, then the localized annual price shown by the store.",
+    "appleAnnualIntroductoryOffer": "Free trial; duration 14 days; eligibility determined by Apple for new subscribers in the Vella Premium subscription group.",
+    "googleAnnualOffer": "Offer ID: one-month-trial (immutable identifier); acquisition eligibility for new customers; one 14-day free-trial phase followed by the annual base-plan price.",
+    "localizations": {
+      "en": {
+        "monthlyDisplayName": "Vella Premium Monthly",
+        "monthlyDescription": "Full Vella access, billed monthly.",
+        "annualDisplayName": "Vella Premium Annual",
+        "annualDescription": "Full Vella access, billed yearly."
+      },
+      "pt": {
+        "monthlyDisplayName": "Vella Premium Mensal",
+        "monthlyDescription": "Acesso completo à Vella, cobrança mensal.",
+        "annualDisplayName": "Vella Premium Anual",
+        "annualDescription": "Acesso completo à Vella, cobrança anual."
+      },
+      "es": {
+        "monthlyDisplayName": "Vella Premium Mensual",
+        "monthlyDescription": "Acceso completo a Vella, cobro mensual.",
+        "annualDisplayName": "Vella Premium Anual",
+        "annualDescription": "Acceso completo a Vella, cobro anual."
+      },
+      "fr": {
+        "monthlyDisplayName": "Vella Premium Mensuel",
+        "monthlyDescription": "Accès complet à Vella, facturé chaque mois.",
+        "annualDisplayName": "Vella Premium Annuel",
+        "annualDescription": "Accès complet à Vella, facturé chaque année."
+      },
+      "de": {
+        "monthlyDisplayName": "Vella Premium Monatlich",
+        "monthlyDescription": "Voller Vella-Zugang, monatlich abgerechnet.",
+        "annualDisplayName": "Vella Premium Jährlich",
+        "annualDescription": "Voller Vella-Zugang, jährlich abgerechnet."
+      },
+      "it": {
+        "monthlyDisplayName": "Vella Premium Mensile",
+        "monthlyDescription": "Accesso completo a Vella, addebito mensile.",
+        "annualDisplayName": "Vella Premium Annuale",
+        "annualDescription": "Accesso completo a Vella, addebito annuale."
+      },
+      "ru": {
+        "monthlyDisplayName": "Vella Premium на месяц",
+        "monthlyDescription": "Полный доступ к Vella, оплата ежемесячно.",
+        "annualDisplayName": "Vella Premium на год",
+        "annualDescription": "Полный доступ к Vella, оплата ежегодно."
+      },
+      "pl": {
+        "monthlyDisplayName": "Vella Premium Miesięczny",
+        "monthlyDescription": "Pełny dostęp do Vella, płatność co miesiąc.",
+        "annualDisplayName": "Vella Premium Roczny",
+        "annualDescription": "Pełny dostęp do Vella, płatność co rok."
+      }
+    }
+  }
+}

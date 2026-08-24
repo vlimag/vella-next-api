@@ -1,5 +1,5 @@
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-5.2';
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-5.6';
 
 const LANGUAGE_LABELS: Record<string, string> = {
   en: 'English',
@@ -18,6 +18,7 @@ type BlockSource = {
   body: string;
   scripture_ref: string | null;
   cta_text: string | null;
+  is_scripture?: boolean;
 };
 
 type LocalizedBlock = BlockSource;
@@ -64,7 +65,6 @@ async function runJsonCompletion(requestId: string, messages: Array<{ role: 'sys
     },
     body: JSON.stringify({
       model: OPENAI_MODEL,
-      temperature: 0.2,
       response_format: { type: 'json_object' },
       messages,
     }),
@@ -141,6 +141,22 @@ export async function localizeJourneyBlocksWithAI(input: {
     return [];
   }
 
+  const modelSources = input.blocks.map((block) =>
+    block.is_scripture
+      ? {
+          block_id: block.block_id,
+          title: block.title,
+          cta_text: block.cta_text,
+          scripture_body_omitted: true,
+        }
+      : {
+          block_id: block.block_id,
+          title: block.title,
+          body: block.body,
+          cta_text: block.cta_text,
+        },
+  );
+
   const parsed = await runJsonCompletion(input.requestId, [
     {
       role: 'system',
@@ -152,10 +168,11 @@ export async function localizeJourneyBlocksWithAI(input: {
       content: [
         `Translate from ${languageLabel(input.sourceLanguage)} to ${languageLabel(input.targetLanguage)}.`,
         'Do not change theology or intent. Keep meaning faithful.',
-        'If scripture_ref is present, localize naturally for the target language.',
+        'Scripture wording and references are immutable source data and are deliberately omitted. Never create, translate, correct, or return them.',
+        'For an item with scripture_body_omitted, translate only its title and cta_text; omit body.',
         'Return EXACT JSON shape:',
-        '{"items":[{"block_id":"...","title":"...","body":"...","scripture_ref":"... or null","cta_text":"... or null"}]}',
-        `Source items JSON: ${JSON.stringify(input.blocks)}`,
+        '{"items":[{"block_id":"...","title":"...","body":"... or null","cta_text":"... or null"}]}',
+        `Source items JSON: ${JSON.stringify(modelSources)}`,
       ].join('\n'),
     },
   ]);
@@ -166,17 +183,23 @@ export async function localizeJourneyBlocksWithAI(input: {
 
   const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
   const byId = new Map<string, LocalizedBlock>();
+  const sourceById = new Map(input.blocks.map((block) => [block.block_id, block]));
 
   for (const raw of rawItems) {
     if (!raw || typeof raw !== 'object') continue;
     const item = raw as Record<string, unknown>;
     const block_id = typeof item.block_id === 'string' ? item.block_id : '';
+    const source = sourceById.get(block_id);
     const title = typeof item.title === 'string' ? item.title.trim() : '';
-    const body = typeof item.body === 'string' ? item.body.trim() : '';
-    const scripture_ref = item.scripture_ref === null ? null : typeof item.scripture_ref === 'string' ? item.scripture_ref.trim() : null;
+    const body = source?.is_scripture
+      ? source.body
+      : typeof item.body === 'string'
+        ? item.body.trim()
+        : '';
+    const scripture_ref = source?.scripture_ref ?? null;
     const cta_text = item.cta_text === null ? null : typeof item.cta_text === 'string' ? item.cta_text.trim() : null;
 
-    if (!block_id || title.length < 2 || body.length < 6) continue;
+    if (!source || title.length < 2 || body.length < 6) continue;
     byId.set(block_id, { block_id, title, body, scripture_ref, cta_text });
   }
 

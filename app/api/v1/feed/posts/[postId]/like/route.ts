@@ -1,7 +1,7 @@
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { getUserIdFromAuthHeader } from '@/lib/auth';
-import { isBlockedPair, refreshPostCounts } from '@/lib/social';
+import { isBlockedPair, isSocialUserSuspended, refreshPostCounts } from '@/lib/social';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 type RouteParams = {
   params: Promise<{ postId: string }>;
@@ -9,10 +9,14 @@ type RouteParams = {
 
 export async function POST(_req: Request, { params }: RouteParams) {
   const { postId } = await params;
-  const auth = await getUserIdFromAuthHeader();
-  if (!('userId' in auth)) return fail(auth.error, 401);
+  const auth = await requireActiveSubscription();
+  if ('response' in auth) return auth.response;
 
   const supabase = createServiceClient();
+
+  if (await isSocialUserSuspended(supabase, auth.userId)) {
+    return fail('Community interactions are unavailable for this account.', 403, { code: 'social_suspended' });
+  }
 
   const { data: post, error: postError } = await supabase
     .from('social_posts')

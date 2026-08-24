@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { getUserIdFromAuthHeader } from '@/lib/auth';
 import { parseQuery } from '@/lib/validation';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const bodySchema = z.object({
   user_id: z.string().uuid(),
@@ -10,8 +10,8 @@ const bodySchema = z.object({
 });
 
 export async function POST(req: Request) {
-  const auth = await getUserIdFromAuthHeader();
-  if (!('userId' in auth)) return fail(auth.error, 401);
+  const auth = await requireActiveSubscription();
+  if ('response' in auth) return auth.response;
 
   const body = await req.json().catch(() => null);
   const parsed = parseQuery(bodySchema, body);
@@ -35,6 +35,21 @@ export async function POST(req: Request) {
     );
 
   if (error) return fail('Could not block this user', 500, error.message);
+
+  const { error: followCleanupError } = await supabase
+    .from('social_follows')
+    .delete()
+    .or(
+      `and(follower_user_id.eq.${auth.userId},followed_user_id.eq.${parsed.data.user_id}),` +
+      `and(follower_user_id.eq.${parsed.data.user_id},followed_user_id.eq.${auth.userId})`,
+    );
+  if (followCleanupError) {
+    console.error('[social-block] follow_cleanup_failed', {
+      blockerUserId: auth.userId,
+      blockedUserId: parsed.data.user_id,
+      error: followCleanupError.message,
+    });
+  }
 
   return ok({ blocked: true });
 }

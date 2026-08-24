@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { getUserIdFromAuthHeader } from '@/lib/auth';
 import { localeSchema, parseQuery } from '@/lib/validation';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const bodySchema = z.object({
   name: z.string().trim().min(3).max(80),
@@ -15,14 +15,15 @@ function newInviteCode() {
 }
 
 export async function GET() {
-  const auth = await getUserIdFromAuthHeader();
-  if (!('userId' in auth)) return fail(auth.error, 401);
+  const auth = await requireActiveSubscription();
+  if ('response' in auth) return auth.response;
 
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('group_members')
     .select('role, joined_at, groups!inner(id, name, description, language_code, invite_code)')
-    .eq('user_id', auth.userId);
+    .eq('user_id', auth.userId)
+    .order('joined_at', { ascending: false });
 
   if (error) return fail('Could not load groups', 500, error.message);
 
@@ -30,8 +31,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const auth = await getUserIdFromAuthHeader();
-  if (!('userId' in auth)) return fail(auth.error, 401);
+  const auth = await requireActiveSubscription();
+  if ('response' in auth) return auth.response;
 
   const body = await req.json().catch(() => null);
   const parsed = parseQuery(bodySchema, body);

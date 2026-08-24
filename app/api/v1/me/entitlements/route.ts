@@ -7,12 +7,15 @@ export async function GET() {
   if (!('userId' in auth)) return fail(auth.error, 401);
 
   const supabase = createServiceClient();
+  const nowIso = new Date().toISOString();
 
   const { data: ownEntitlements, error: ownError } = await supabase
     .from('entitlements')
     .select('id, entitlement_code, source, starts_at, ends_at, active, group_id')
     .eq('user_id', auth.userId)
-    .eq('active', true);
+    .eq('active', true)
+    .lte('starts_at', nowIso)
+    .or(`ends_at.is.null,ends_at.gt.${nowIso}`);
 
   if (ownError) return fail('Failed loading user entitlements', 500, ownError.message);
 
@@ -31,7 +34,9 @@ export async function GET() {
       .from('entitlements')
       .select('id, entitlement_code, source, starts_at, ends_at, active, group_id')
       .in('group_id', groupIds)
-      .eq('active', true);
+      .eq('active', true)
+      .lte('starts_at', nowIso)
+      .or(`ends_at.is.null,ends_at.gt.${nowIso}`);
 
     if (groupError) return fail('Failed loading group entitlements', 500, groupError.message);
     groupEntitlements = groupData ?? [];

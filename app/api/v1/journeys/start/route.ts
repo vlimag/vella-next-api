@@ -1,13 +1,17 @@
 import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { localeSchema, parseQuery } from '@/lib/validation';
-import { resolveJourneyActor, ownerFilter } from '@/lib/actor';
+import { authenticatedJourneyActor, ownerFilter } from '@/lib/actor';
 import { createServiceClient } from '@/lib/supabase';
 import { getOrCreateDayAssignment } from '@/lib/journeys';
+import { userHasActivePremium } from '@/lib/entitlements';
+import { isMissingJourneyThemePreference } from '@/lib/journeyCompatibility';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const bodySchema = z.object({
   template_slug: z.string().trim().min(3).max(120),
   language_code: localeSchema.optional(),
+  theme_preference: z.enum(['hope', 'peace', 'gratitude', 'family', 'trust']).optional(),
 });
 
 type TemplateRow = {
@@ -23,11 +27,10 @@ type TemplateRow = {
 };
 
 export async function POST(req: Request) {
-  const actorResult = await resolveJourneyActor(true);
-  if (!('actor' in actorResult)) {
-    return fail(actorResult.error, actorResult.status);
-  }
-  const actor = actorResult.actor;
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
+
+  const actor = authenticatedJourneyActor(access.userId);
 
   const body = await req.json().catch(() => null);
   const parsed = parseQuery(bodySchema, body);
@@ -55,7 +58,7 @@ export async function POST(req: Request) {
     return fail('You already have an active journey. Complete or abandon it first.', 409);
   }
 
-  let templateQuery = supabase
+  const templateQuery = supabase
     .from('journey_templates')
     .select('id, slug, language_code, title, subtitle, description, duration_days, is_premium, theme_tags')
     .eq('slug', parsed.data.template_slug)
@@ -85,17 +88,45 @@ export async function POST(req: Request) {
 
   if (templateError || !template) return fail('Journey template not found', 404);
 
-  const { data: insertedJourney, error: insertError } = await supabase
-    .from('user_journeys')
-    .insert({
-      ...ownerFilter(actor),
-      template_id: template.id,
-      status: 'active',
-      start_date: new Date().toISOString().slice(0, 10),
-      current_day: 1,
-    })
-    .select('id, status, current_day, streak_count, best_streak, total_completed_days, consistency_score, last_completed_on, start_date')
-    .single();
+  // Paywall gate: premium journeys require an active premium entitlement.
+  // Anonymous (guest) actors can never start a premium journey.
+  if ((template as TemplateRow).is_premium) {
+    let isPremium = false;
+    if (actor.kind === 'user') {
+      try {
+        isPremium = await userHasActivePremium(actor.userId);
+      } catch (error) {
+        return fail('Could not verify premium access', 500, String(error));
+      }
+    }
+    if (!isPremium) {
+      return fail('This journey is available to premium members.', 402, { code: 'premium_required' });
+    }
+  }
+
+  const journeyValues = {
+    ...ownerFilter(actor),
+    template_id: template.id,
+    status: 'active',
+    start_date: new Date().toISOString().slice(0, 10),
+    current_day: 1,
+  };
+  const insertJourney = (includeThemePreference: boolean) =>
+    supabase
+      .from('user_journeys')
+      .insert(
+        includeThemePreference
+          ? { ...journeyValues, theme_preference: parsed.data.theme_preference ?? null }
+          : journeyValues,
+      )
+      .select('id, status, current_day, streak_count, best_streak, total_completed_days, consistency_score, last_completed_on, start_date')
+      .single();
+
+  let { data: insertedJourney, error: insertError } = await insertJourney(true);
+  if (isMissingJourneyThemePreference(insertError)) {
+    console.warn('[journeys] theme_preference_missing_using_default', { route: 'start' });
+    ({ data: insertedJourney, error: insertError } = await insertJourney(false));
+  }
 
   if (insertError || !insertedJourney) {
     return fail('Could not start journey', 500, insertError?.message);
@@ -107,7 +138,8 @@ export async function POST(req: Request) {
     insertedJourney.id,
     typedTemplate.id,
     insertedJourney.current_day,
-    typedTemplate.language_code,
+    language,
+    parsed.data.theme_preference,
   );
 
   return ok({

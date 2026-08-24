@@ -5,6 +5,10 @@ export type JourneyActor =
   | { kind: 'user'; userId: string }
   | { kind: 'anonymous'; deviceId: string; anonymousProfileId: string };
 
+export function authenticatedJourneyActor(userId: string): JourneyActor {
+  return { kind: 'user', userId };
+}
+
 type ActorResult =
   | { actor: JourneyActor }
   | { error: string; status: number };

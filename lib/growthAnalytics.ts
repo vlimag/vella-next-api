@@ -1,0 +1,464 @@
+import { z } from 'zod';
+import { fail } from '@/lib/http';
+import { createServiceClient } from '@/lib/supabase';
+
+export const MAX_GROWTH_EVENT_BATCH = 20;
+export const MAX_GROWTH_REQUEST_BYTES = 32 * 1024;
+export const GROWTH_RAW_RETENTION_DAYS = 90;
+
+const uuidSchema = z.string().uuid();
+const platformSchema = z.enum(['ios', 'android', 'web']);
+const localeSchema = z.enum(['en', 'pt', 'es', 'fr', 'de', 'it', 'ru', 'pl']);
+const safeVersionSchema = z.string().trim().min(1).max(32).regex(/^[A-Za-z0-9._+~-]+$/);
+const safeBuildSchema = z.string().trim().min(1).max(24).regex(/^[A-Za-z0-9._+~-]+$/);
+const shortCodeSchema = z.string().trim().min(1).max(32)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._~-]*$/)
+  .transform((value) => value.toLowerCase());
+const campaignCodeSchema = z.string().trim().min(1).max(64)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._~-]*$/)
+  .transform((value) => value.toLowerCase());
+const ctaIdSchema = z.string().trim().min(1).max(48)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._~-]*$/)
+  .transform((value) => value.toLowerCase());
+
+const attributionShape = {
+  source: shortCodeSchema.optional(),
+  medium: shortCodeSchema.optional(),
+  campaign: campaignCodeSchema.optional(),
+  content: campaignCodeSchema.optional(),
+};
+
+function properties<T extends z.ZodRawShape>(shape: T) {
+  return z.object({ ...attributionShape, ...shape }).strict();
+}
+
+const billingPeriodSchema = z.enum(['monthly', 'yearly']);
+const onboardingStepKeySchema = z.enum([
+  'language',
+  'goal',
+  'focus',
+  'minutes',
+  'rhythm',
+  'reminder_style',
+  'preview',
+  'reminders',
+]);
+const onboardingDurationBucketSchema = z.enum(['under_5s', '5_14s', '15_29s', '30_59s', '60s_plus']);
+const launchDurationBucketSchema = z.enum(['under_500ms', '500_1499ms', '1500_2999ms', '3000ms_plus']);
+const authModeSchema = z.enum(['sign_in', 'sign_up']);
+const authMethodSchema = z.enum(['email', 'google', 'apple']);
+const authStageSchema = z.enum(['credentials', 'provider', 'verification']);
+const authOutcomeSchema = z.enum(['started', 'verification_required', 'succeeded', 'failed', 'cancelled']);
+
+const onboardingStepPropertiesSchema = properties({
+  step_number: z.number().int().min(1).max(20),
+  total_steps: z.number().int().min(1).max(20),
+  step_key: onboardingStepKeySchema,
+}).refine((value) => value.step_number <= value.total_steps, {
+  message: 'step_number cannot exceed total_steps',
+  path: ['step_number'],
+});
+
+const onboardingStepResultPropertiesSchema = properties({
+  step_number: z.number().int().min(1).max(20),
+  total_steps: z.number().int().min(1).max(20),
+  step_key: onboardingStepKeySchema,
+  result: z.enum(['continued', 'skipped', 'back', 'backgrounded', 'abandoned', 'error']),
+  selection_count: z.number().int().min(0).max(6).optional(),
+  duration_bucket: onboardingDurationBucketSchema.optional(),
+}).refine((value) => value.step_number <= value.total_steps, {
+  message: 'step_number cannot exceed total_steps',
+  path: ['step_number'],
+});
+
+const eventBase = z.object({
+  event_id: uuidSchema,
+  install_id: uuidSchema,
+  occurred_at: z.string().datetime({ offset: true }),
+  platform: platformSchema,
+  app_version: safeVersionSchema,
+  build_number: safeBuildSchema.optional(),
+  runtime_version: safeVersionSchema.optional(),
+  locale: localeSchema.optional(),
+  session_id: uuidSchema.optional(),
+}).strict();
+
+export const growthEventSchema = z.union([
+  eventBase.extend({
+    event_name: z.literal('landing_viewed'),
+    properties: properties({}),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('store_cta_clicked'),
+    properties: properties({
+      cta_id: ctaIdSchema,
+      store: z.enum(['android', 'ios']),
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('first_open'),
+    properties: properties({}),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('app_session_started'),
+    properties: properties({}),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('route_resolved'),
+    properties: properties({
+      destination: z.enum(['onboarding', 'first-experience', 'authentication', 'subscription-verification', 'paywall', 'app']),
+      onboarding_state: z.enum(['incomplete', 'complete']),
+      auth_state: z.enum(['anonymous', 'authenticated']),
+      subscription_state: z.enum(['unknown', 'inactive', 'active']),
+      load_time_bucket: launchDurationBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('first_experience_viewed'),
+    properties: z.object({
+      variant: z.literal('v1'),
+      content_source: z.enum(['remote', 'fallback']),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('first_experience_step'),
+    properties: z.object({
+      step_number: z.number().int().min(1).max(4),
+      total_steps: z.literal(4),
+      step_key: z.enum(['arrival', 'scripture', 'reflection', 'completion']),
+      result: z.enum(['viewed', 'continued', 'completed', 'backgrounded', 'error']),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('first_experience_completed'),
+    properties: z.object({
+      duration_bucket: onboardingDurationBucketSchema,
+      content_source: z.enum(['remote', 'fallback']),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('first_experience_error'),
+    properties: z.object({
+      stage: z.enum(['content_load', 'state_save', 'navigation']),
+      error_code: z.enum([
+        'network_unavailable',
+        'content_unavailable',
+        'persistence_failed',
+        'navigation_failed',
+        'unknown',
+      ]),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('onboarding_started'),
+    properties: properties({}),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('onboarding_step'),
+    properties: onboardingStepPropertiesSchema,
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('onboarding_step_result'),
+    properties: onboardingStepResultPropertiesSchema,
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('onboarding_completed'),
+    properties: z.union([
+      properties({}),
+      properties({
+        duration_bucket: onboardingDurationBucketSchema,
+        goal_count: z.number().int().min(1).max(5),
+        focus_count: z.number().int().min(0).max(6),
+      }),
+    ]),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('onboarding_interaction'),
+    properties: properties({
+      step_key: onboardingStepKeySchema,
+      action: z.enum([
+        'selected',
+        'deselected',
+        'continue_tapped',
+        'skip_tapped',
+        'retry_tapped',
+        'cta_visible',
+        'scroll_25',
+        'scroll_50',
+        'scroll_75',
+        'scroll_100',
+        'exit',
+      ]),
+      selection_count: z.number().int().min(0).max(6),
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('onboarding_error'),
+    properties: properties({
+      step_key: onboardingStepKeySchema,
+      stage: z.enum(['load_state', 'save_profile', 'save_language', 'change_language', 'navigation']),
+      error_code: z.enum(['storage_unavailable', 'persistence_failed', 'language_failed', 'navigation_failed', 'unknown']),
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('auth_started'),
+    properties: properties({
+      entry_point: z.enum(['post_onboarding', 'post_first_experience', 'premium', 'tabs', 'direct']).optional(),
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('auth_attempt'),
+    properties: properties({
+      mode: authModeSchema,
+      method: authMethodSchema,
+      stage: authStageSchema,
+      outcome: authOutcomeSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('account_created'),
+    properties: properties({
+      method: z.enum(['email', 'apple', 'google']),
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('paywall_viewed'),
+    properties: properties({}),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('trial_terms_viewed'),
+    properties: z.object({
+      plan: z.literal('yearly'),
+      trial_days_bucket: z.enum(['14_days', 'other']),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('subscription_management_opened'),
+    properties: z.object({
+      source: z.enum(['paywall', 'settings']),
+      result: z.enum(['opened', 'failed']),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('plan_selected'),
+    properties: properties({
+      plan: billingPeriodSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('checkout_started'),
+    properties: properties({
+      plan: billingPeriodSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('purchase_validation_result'),
+    properties: properties({
+      result: z.enum(['verified_active', 'rejected']),
+      plan: billingPeriodSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('trial_started'),
+    properties: properties({ plan: billingPeriodSchema }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('subscription_paid_started'),
+    properties: properties({ plan: billingPeriodSchema }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('meaningful_session_completed'),
+    properties: properties({}),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('notification_permission_result'),
+    properties: properties({
+      result: z.enum(['granted', 'denied', 'unavailable', 'error']),
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('notification_opened'),
+    properties: properties({}),
+  }).strict(),
+]);
+
+export type GrowthEvent = z.infer<typeof growthEventSchema>;
+
+export const growthEventBatchSchema = z.object({
+  events: z.array(growthEventSchema).min(1).max(MAX_GROWTH_EVENT_BATCH),
+}).strict();
+
+export const ANONYMOUS_GROWTH_EVENTS = new Set<GrowthEvent['event_name']>([
+  'landing_viewed',
+  'store_cta_clicked',
+  'first_open',
+  'app_session_started',
+  'route_resolved',
+  'first_experience_viewed',
+  'first_experience_step',
+  'first_experience_completed',
+  'first_experience_error',
+  'onboarding_started',
+  'onboarding_step',
+  'onboarding_step_result',
+  'onboarding_interaction',
+  'onboarding_error',
+  'onboarding_completed',
+  'auth_started',
+  'auth_attempt',
+]);
+
+type AnalyticsFailure = { response: ReturnType<typeof fail> };
+
+function inputFailure(details: unknown): AnalyticsFailure {
+  return { response: fail('Invalid analytics event input', 400, details) };
+}
+
+export async function parseGrowthEventRequest(request: Request): Promise<
+  | { events: GrowthEvent[] }
+  | AnalyticsFailure
+> {
+  if (!request.headers.get('content-type')?.toLowerCase().includes('application/json')) {
+    return { response: fail('Content-Type must be application/json', 415, { code: 'content_type_required' }) };
+  }
+
+  const declaredLength = Number(request.headers.get('content-length') ?? 0);
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_GROWTH_REQUEST_BYTES) {
+    return { response: fail('Analytics request is too large', 413, { code: 'request_too_large' }) };
+  }
+
+  const text = await request.text().catch(() => '');
+  if (Buffer.byteLength(text, 'utf8') > MAX_GROWTH_REQUEST_BYTES) {
+    return { response: fail('Analytics request is too large', 413, { code: 'request_too_large' }) };
+  }
+
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return inputFailure({ code: 'invalid_json' });
+  }
+
+  const parsed = growthEventBatchSchema.safeParse(body);
+  if (!parsed.success) return inputFailure(parsed.error.flatten());
+
+  const events = parsed.data.events;
+  const installationId = events[0]!.install_id;
+  if (events.some((event) => event.install_id !== installationId)) {
+    return inputFailure({ code: 'mixed_installations' });
+  }
+
+  const now = Date.now();
+  const oldest = now - 7 * 24 * 60 * 60 * 1000;
+  const newest = now + 5 * 60 * 1000;
+  if (events.some((event) => {
+    const occurredAt = Date.parse(event.occurred_at);
+    return !Number.isFinite(occurredAt) || occurredAt < oldest || occurredAt > newest;
+  })) {
+    return inputFailure({ code: 'event_time_out_of_range' });
+  }
+
+  if (events.some((event) => {
+    const webEvent = event.event_name === 'landing_viewed' || event.event_name === 'store_cta_clicked';
+    return webEvent ? event.platform !== 'web' || event.app_version !== 'site' : event.platform === 'web';
+  })) {
+    return inputFailure({ code: 'platform_event_mismatch' });
+  }
+
+  return { events };
+}
+
+async function resolveAnalyticsAuthentication(
+  request: Request,
+  supabase: ReturnType<typeof createServiceClient>,
+): Promise<{ authenticated: boolean } | AnalyticsFailure> {
+  const authorization = request.headers.get('authorization');
+  if (!authorization) return { authenticated: false };
+  if (authorization.length > 8192) {
+    return { response: fail('Invalid bearer token', 401, { code: 'authentication_invalid' }) };
+  }
+
+  const match = /^Bearer\s+([^\s]+)$/i.exec(authorization);
+  if (!match) return { response: fail('Invalid bearer token', 401, { code: 'authentication_invalid' }) };
+
+  const { data, error } = await supabase.auth.getUser(match[1]);
+  if (error || !data.user) {
+    return { response: fail('Invalid bearer token', 401, { code: 'authentication_invalid' }) };
+  }
+  // Authentication gates post-auth event names, but the account identifier is
+  // intentionally not persisted or passed to the analytics RPC.
+  return { authenticated: true };
+}
+
+type IngestionResult = {
+  accepted: number;
+  inserted: number;
+  duplicates: number;
+  retention_policy: 'raw_90_days';
+};
+
+export async function ingestGrowthEvents(request: Request): Promise<
+  | { data: IngestionResult }
+  | AnalyticsFailure
+> {
+  const parsed = await parseGrowthEventRequest(request);
+  if ('response' in parsed) return parsed;
+
+  const supabase = createServiceClient();
+  const identity = await resolveAnalyticsAuthentication(request, supabase);
+  if ('response' in identity) return identity;
+
+  if (
+    !identity.authenticated &&
+    parsed.events.some((event) => !ANONYMOUS_GROWTH_EVENTS.has(event.event_name))
+  ) {
+    return { response: fail('Authentication is required for this analytics event', 401, {
+      code: 'analytics_authentication_required',
+    }) };
+  }
+
+  const { data, error } = await supabase.rpc('ingest_growth_analytics_events', {
+    p_events: parsed.events,
+    p_authenticated: identity.authenticated,
+  });
+
+  if (error) {
+    const errorCode = typeof error.code === 'string' ? error.code : 'unknown';
+    console.error('[growth-analytics] ingest_failed', {
+      errorCode,
+      eventCount: parsed.events.length,
+    });
+    if (error.message === 'growth_rate_limit_exceeded') {
+      return { response: fail('Too many analytics events', 429, { code: 'analytics_rate_limited' }) };
+    }
+    if (error.message === 'growth_global_circuit_breaker_open') {
+      return { response: fail('Analytics ingestion is temporarily at capacity', 503, {
+        code: 'analytics_capacity_limited',
+      }) };
+    }
+    return { response: fail('Could not record analytics events', 503, {
+      code: 'analytics_ingestion_unavailable',
+    }) };
+  }
+
+  const result = data as Partial<IngestionResult> | null;
+  if (
+    !result ||
+    typeof result.accepted !== 'number' ||
+    typeof result.inserted !== 'number' ||
+    typeof result.duplicates !== 'number'
+  ) {
+    return { response: fail('Could not record analytics events', 503, {
+      code: 'analytics_ingestion_unavailable',
+    }) };
+  }
+
+  return {
+    data: {
+      accepted: result.accepted,
+      inserted: result.inserted,
+      duplicates: result.duplicates,
+      retention_policy: 'raw_90_days',
+    },
+  };
+}

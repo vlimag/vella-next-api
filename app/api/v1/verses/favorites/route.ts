@@ -2,19 +2,18 @@ import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
 import { parseQuery } from '@/lib/validation';
-import { resolveJourneyActor } from '@/lib/actor';
+import { authenticatedJourneyActor } from '@/lib/actor';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const bodySchema = z.object({
   verse_id: z.string().uuid(),
 });
 
 export async function GET() {
-  const actorResult = await resolveJourneyActor(true);
-  if (!('actor' in actorResult)) {
-    return fail(actorResult.error, actorResult.status);
-  }
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
 
-  const actor = actorResult.actor;
+  const actor = authenticatedJourneyActor(access.userId);
   const supabase = createServiceClient();
 
   let query = supabase
@@ -36,16 +35,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const actorResult = await resolveJourneyActor(true);
-  if (!('actor' in actorResult)) {
-    return fail(actorResult.error, actorResult.status);
-  }
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
 
   const body = await req.json().catch(() => null);
   const parsed = parseQuery(bodySchema, body);
   if ('error' in parsed) return parsed.error;
 
-  const actor = actorResult.actor;
+  const actor = authenticatedJourneyActor(access.userId);
   const supabase = createServiceClient();
 
   let existingQuery = supabase

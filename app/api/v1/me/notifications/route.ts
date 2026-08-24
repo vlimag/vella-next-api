@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { getUserIdFromAuthHeader } from '@/lib/auth';
 import { parseQuery } from '@/lib/validation';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
 export async function GET(req: Request) {
-  const auth = await getUserIdFromAuthHeader();
-  if (!('userId' in auth)) return fail(auth.error, 401);
+  const auth = await requireActiveSubscription();
+  if ('response' in auth) return auth.response;
 
   const { searchParams } = new URL(req.url);
   const parsed = parseQuery(querySchema, {

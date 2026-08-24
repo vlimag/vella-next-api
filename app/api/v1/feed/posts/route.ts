@@ -1,13 +1,23 @@
 import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { getOptionalUserIdFromAuthHeader, getUserIdFromAuthHeader } from '@/lib/auth';
 import { localeSchema, parseQuery } from '@/lib/validation';
-import { ensureSocialProfile, processMentions } from '@/lib/social';
+import {
+  CURRENT_SOCIAL_EULA_VERSION,
+  ensureSocialProfile,
+  getBlockedUserIdsForViewer,
+  hasAcceptedSocialEula,
+  isSocialUserSuspended,
+  processMentions,
+  safeSocialAvatarUrl,
+} from '@/lib/social';
 import { moderateFaithPostContent } from '@/lib/socialModeration';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
-const FEED_MEDIA_BUCKET = 'feed-media';
+const FEED_MEDIA_BUCKET = process.env.SUPABASE_FEED_MEDIA_BUCKET ?? 'faith-harbor-feed-media';
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+const FEED_PAGE_SIZE_DEFAULT = 15;
+const FEED_SCOPES = ['general', 'following'] as const;
 const SUPPORTED_IMAGE_MIME_TYPES = [
   'image/jpeg',
   'image/png',
@@ -18,6 +28,9 @@ const SUPPORTED_IMAGE_MIME_TYPES = [
 
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).optional(),
+  scope: z.enum(FEED_SCOPES).optional(),
+  cursor_created_at: z.string().trim().min(10).max(64).optional(),
+  cursor_id: z.string().uuid().optional(),
 });
 
 const bodySchema = z
@@ -82,52 +95,107 @@ function decodeBase64Image(base64: string) {
 }
 
 export async function GET(req: Request) {
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
+
   const { searchParams } = new URL(req.url);
   const parsed = parseQuery(querySchema, {
     limit: searchParams.get('limit') ?? undefined,
+    scope: searchParams.get('scope') ?? undefined,
+    cursor_created_at: searchParams.get('cursor_created_at') ?? undefined,
+    cursor_id: searchParams.get('cursor_id') ?? undefined,
   });
   if ('error' in parsed) return parsed.error;
 
-  const limit = parsed.data.limit ?? 20;
-  const viewerUserId = await getOptionalUserIdFromAuthHeader();
+  if (
+    (parsed.data.cursor_created_at && !parsed.data.cursor_id) ||
+    (!parsed.data.cursor_created_at && parsed.data.cursor_id)
+  ) {
+    return fail('Invalid cursor: cursor_created_at and cursor_id must be provided together', 400);
+  }
+
+  const limit = parsed.data.limit ?? FEED_PAGE_SIZE_DEFAULT;
+  const scope = parsed.data.scope ?? 'general';
+  const cursorCreatedAt = parsed.data.cursor_created_at ?? null;
+  const cursorId = parsed.data.cursor_id ?? null;
+  const viewerUserId = access.userId;
   const supabase = createServiceClient();
 
-  const { data: posts, error } = await supabase
+  if (scope === 'following' && !viewerUserId) {
+    return ok({
+      scope,
+      has_more: false,
+      next_cursor_created_at: null,
+      next_cursor_id: null,
+      items: [],
+    });
+  }
+
+  let authorFilter: string[] | null = null;
+  if (scope === 'following' && viewerUserId) {
+    const { data: followingRows, error: followingError } = await supabase
+      .from('social_follows')
+      .select('followed_user_id')
+      .eq('follower_user_id', viewerUserId);
+
+    if (followingError) return fail('Could not load following feed', 500, followingError.message);
+
+    const followedUserIds = new Set<string>((followingRows ?? []).map((row) => String(row.followed_user_id)));
+    followedUserIds.add(viewerUserId);
+    authorFilter = [...followedUserIds];
+  }
+
+  if (authorFilter && authorFilter.length === 0) {
+    return ok({
+      scope,
+      has_more: false,
+      next_cursor_created_at: null,
+      next_cursor_id: null,
+      items: [],
+    });
+  }
+
+  const blockedUserIds = viewerUserId
+    ? await getBlockedUserIdsForViewer(supabase, viewerUserId)
+    : new Set<string>();
+
+  let postsQuery = supabase
     .from('social_posts')
     .select('id, author_user_id, body, language_code, like_count, comment_count, share_count, created_at')
     .eq('status', 'active')
     .order('created_at', { ascending: false })
-    .limit(limit);
+    .order('id', { ascending: false })
+    .limit(limit + 1);
 
-  if (error) return fail('Could not load feed posts', 500, error.message);
-
-  let filteredPosts = (posts ?? []) as FeedPostRow[];
-
-  if (viewerUserId && filteredPosts.length > 0) {
-    const { data: blockRows } = await supabase
-      .from('social_blocks')
-      .select('blocker_user_id, blocked_user_id')
-      .or(`blocker_user_id.eq.${viewerUserId},blocked_user_id.eq.${viewerUserId}`);
-
-    const blockedUserIds = new Set<string>();
-    for (const row of blockRows ?? []) {
-      const blocker = String(row.blocker_user_id ?? '');
-      const blocked = String(row.blocked_user_id ?? '');
-      if (blocker === viewerUserId && blocked) {
-        blockedUserIds.add(blocked);
-      }
-      if (blocked === viewerUserId && blocker) {
-        blockedUserIds.add(blocker);
-      }
-    }
-
-    filteredPosts = filteredPosts.filter((post) => !blockedUserIds.has(post.author_user_id));
+  if (authorFilter && authorFilter.length > 0) {
+    postsQuery = postsQuery.in('author_user_id', authorFilter);
   }
 
-  const authorIds = [...new Set(filteredPosts.map((post) => post.author_user_id))];
-  const postIds = filteredPosts.map((post) => post.id);
+  if (cursorCreatedAt) {
+    postsQuery = postsQuery.lte('created_at', cursorCreatedAt);
+  }
 
-  const [{ data: profiles }, { data: likedRows }, { data: mediaRows }] = await Promise.all([
+  const { data: rawPosts, error } = await postsQuery;
+  if (error) return fail('Could not load feed posts', 500, error.message);
+
+  let filteredPosts = (rawPosts ?? []) as FeedPostRow[];
+  if (blockedUserIds.size > 0) {
+    filteredPosts = filteredPosts.filter((post) => !blockedUserIds.has(post.author_user_id));
+  }
+  if (cursorCreatedAt && cursorId) {
+    filteredPosts = filteredPosts.filter((post) => (
+      post.created_at < cursorCreatedAt ||
+      (post.created_at === cursorCreatedAt && post.id < cursorId)
+    ));
+  }
+
+  const hasMore = filteredPosts.length > limit;
+  const pagePosts = hasMore ? filteredPosts.slice(0, limit) : filteredPosts;
+
+  const authorIds = [...new Set(pagePosts.map((post) => post.author_user_id))];
+  const postIds = pagePosts.map((post) => post.id);
+
+  const [{ data: profiles }, { data: likedRows }, { data: mediaRows }, { data: followRows }] = await Promise.all([
     authorIds.length > 0
       ? supabase
           .from('social_profiles')
@@ -149,6 +217,13 @@ export async function GET(req: Request) {
           .eq('moderation_state', 'approved')
           .order('sort_order', { ascending: true })
       : Promise.resolve({ data: [], error: null }),
+    viewerUserId && authorIds.length > 0
+      ? supabase
+          .from('social_follows')
+          .select('followed_user_id')
+          .eq('follower_user_id', viewerUserId)
+          .in('followed_user_id', authorIds)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
   const profileById = new Map<string, { handle: string; display_name: string; avatar_url: string | null }>();
@@ -156,11 +231,12 @@ export async function GET(req: Request) {
     profileById.set(String(profile.user_id), {
       handle: String(profile.handle ?? 'faith_user'),
       display_name: String(profile.display_name ?? 'Faith user'),
-      avatar_url: profile.avatar_url ? String(profile.avatar_url) : null,
+      avatar_url: safeSocialAvatarUrl(String(profile.user_id), profile.avatar_url),
     });
   }
 
   const likedSet = new Set((likedRows ?? []).map((row) => String(row.post_id)));
+  const followingSet = new Set((followRows ?? []).map((row) => String(row.followed_user_id)));
 
   const mediaByPostId = new Map<
     string,
@@ -191,8 +267,14 @@ export async function GET(req: Request) {
     mediaByPostId.set(row.post_id, current);
   }
 
+  const nextCursorPost = hasMore ? pagePosts[pagePosts.length - 1] : null;
+
   return ok({
-    items: filteredPosts.map((post) => {
+    scope,
+    has_more: hasMore,
+    next_cursor_created_at: nextCursorPost?.created_at ?? null,
+    next_cursor_id: nextCursorPost?.id ?? null,
+    items: pagePosts.map((post) => {
       const author = profileById.get(post.author_user_id);
       return {
         id: post.id,
@@ -203,6 +285,9 @@ export async function GET(req: Request) {
         share_count: post.share_count,
         created_at: post.created_at,
         liked_by_me: likedSet.has(post.id),
+        is_following_author: viewerUserId
+          ? post.author_user_id === viewerUserId || followingSet.has(post.author_user_id)
+          : false,
         media: mediaByPostId.get(post.id) ?? [],
         author: {
           user_id: post.author_user_id,
@@ -216,8 +301,25 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const auth = await getUserIdFromAuthHeader();
-  if (!('userId' in auth)) return fail(auth.error, 401);
+  const auth = await requireActiveSubscription();
+  if ('response' in auth) return auth.response;
+  const supabase = createServiceClient();
+
+  if (await isSocialUserSuspended(supabase, auth.userId)) {
+    return fail('Community posting is unavailable for this account.', 403, { code: 'social_suspended' });
+  }
+
+  const acceptedEula = await hasAcceptedSocialEula(
+    supabase,
+    auth.userId,
+    CURRENT_SOCIAL_EULA_VERSION,
+  );
+  if (!acceptedEula) {
+    return fail('You must accept the community terms before posting.', 403, {
+      code: 'social_eula_required',
+      required_version: CURRENT_SOCIAL_EULA_VERSION,
+    });
+  }
 
   const body = await req.json().catch(() => null);
   const parsed = parseQuery(bodySchema, body);
@@ -261,7 +363,6 @@ export async function POST(req: Request) {
     return fail('Image moderation is temporarily unavailable. Try again in a moment.', 503);
   }
 
-  const supabase = createServiceClient();
   const profile = await ensureSocialProfile(supabase, auth.userId);
 
   const { data: post, error } = await supabase
@@ -359,12 +460,13 @@ export async function POST(req: Request) {
     share_count: post.share_count,
     created_at: post.created_at,
     liked_by_me: false,
+    is_following_author: true,
     media: mediaPayload,
     author: {
       user_id: post.author_user_id,
       handle: profile.handle,
       display_name: profile.display_name,
-      avatar_url: null,
+      avatar_url: profile.avatar_url ?? null,
     },
   }, { status: 201 });
 }

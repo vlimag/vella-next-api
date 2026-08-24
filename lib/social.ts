@@ -1,4 +1,26 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { sendTrackedPushMessages } from '@/lib/generalPushDeliveries';
+import {
+  avatarStoragePathBelongsToUser,
+  avatarStoragePathFromPublicUrl,
+} from '@/lib/profileAvatar';
+
+export const CURRENT_SOCIAL_EULA_VERSION = '1.1';
+
+export function safeSocialAvatarUrl(userId: string, avatarUrl: unknown) {
+  if (typeof avatarUrl !== 'string' || !avatarUrl) return null;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
+  const ownerSecret = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
+  if (!supabaseUrl || !ownerSecret) return null;
+  const bucket = process.env.SUPABASE_PROFILE_AVATARS_BUCKET?.trim()
+    || 'faith-harbor-profile-avatars';
+  const storagePath = avatarStoragePathFromPublicUrl(avatarUrl, supabaseUrl, bucket);
+  return storagePath && avatarStoragePathBelongsToUser(storagePath, userId, ownerSecret)
+    ? avatarUrl
+    : null;
+}
+
+type AppSupabaseClient = SupabaseClient<any, any, any, any, any>;
 
 type MentionTarget = {
   user_id: string;
@@ -22,7 +44,7 @@ function extractMentionHandles(body: string) {
 }
 
 async function loadMentionTargets(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   handles: string[],
 ) {
   if (handles.length === 0) return [];
@@ -40,7 +62,7 @@ async function loadMentionTargets(
 }
 
 async function sendPushNotifications(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   targets: Array<{ userId: string; title: string; body: string; data: Record<string, unknown> }>,
 ) {
   if (targets.length === 0) return;
@@ -48,22 +70,27 @@ async function sendPushNotifications(
   const userIds = [...new Set(targets.map((t) => t.userId))];
   const { data: tokens, error: tokensError } = await supabase
     .from('user_push_tokens')
-    .select('user_id, expo_push_token')
+    .select('id, user_id, expo_push_token')
     .eq('is_active', true)
     .in('user_id', userIds);
 
   if (tokensError || !tokens || tokens.length === 0) return;
 
-  const messages: Array<Record<string, unknown>> = [];
+  const messages = [];
   for (const target of targets) {
     const userTokens = tokens.filter((item) => item.user_id === target.userId);
     for (const item of userTokens) {
       messages.push({
-        to: item.expo_push_token,
-        sound: 'default',
-        title: target.title,
-        body: target.body,
-        data: target.data,
+        tokenId: item.id,
+        userId: target.userId,
+        category: 'social' as const,
+        message: {
+          to: item.expo_push_token,
+          sound: 'default' as const,
+          title: target.title,
+          body: target.body,
+          data: target.data,
+        },
       });
     }
   }
@@ -71,13 +98,7 @@ async function sendPushNotifications(
   if (messages.length === 0) return;
 
   try {
-    await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(messages),
-    });
+    await sendTrackedPushMessages(supabase, messages);
   } catch (error) {
     console.error('[social-notifications] push_send_failed', {
       error: error instanceof Error ? error.message : String(error),
@@ -86,33 +107,22 @@ async function sendPushNotifications(
   }
 }
 
-export async function ensureSocialProfile(supabase: SupabaseClient, userId: string) {
+export async function ensureSocialProfile(supabase: AppSupabaseClient, userId: string) {
   const { data: existing } = await supabase
     .from('social_profiles')
-    .select('user_id, handle, display_name')
+    .select('user_id, handle, display_name, avatar_url')
     .eq('user_id', userId)
     .maybeSingle();
 
   if (existing) {
-    return existing;
+    return {
+      ...existing,
+      avatar_url: safeSocialAvatarUrl(userId, existing.avatar_url),
+    };
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('display_name, email')
-    .eq('id', userId)
-    .maybeSingle();
-
-  const baseHandle = String(
-    profile?.email?.split?.('@')?.[0] ??
-      profile?.display_name ??
-      'faith_user',
-  )
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '')
-    .slice(0, 16) || 'faithuser';
-  const handle = `${baseHandle}_${userId.replace(/-/g, '').slice(0, 6)}`;
-  const displayName = (profile?.display_name || profile?.email?.split?.('@')?.[0] || 'Faith user').slice(0, 80);
+  const handle = `vella_${userId.replace(/-/g, '').slice(0, 8)}`;
+  const displayName = 'Vella member';
 
   const { data: inserted, error } = await supabase
     .from('social_profiles')
@@ -124,18 +134,21 @@ export async function ensureSocialProfile(supabase: SupabaseClient, userId: stri
       },
       { onConflict: 'user_id' },
     )
-    .select('user_id, handle, display_name')
+    .select('user_id, handle, display_name, avatar_url')
     .single();
 
   if (error || !inserted) {
     throw new Error(`Could not ensure social profile: ${error?.message}`);
   }
 
-  return inserted;
+  return {
+    ...inserted,
+    avatar_url: safeSocialAvatarUrl(userId, inserted.avatar_url),
+  };
 }
 
 export async function processMentions(args: {
-  supabase: SupabaseClient;
+  supabase: AppSupabaseClient;
   sourceType: 'post' | 'comment';
   sourcePostId?: string;
   sourceCommentId?: string;
@@ -148,7 +161,12 @@ export async function processMentions(args: {
   const targets = await loadMentionTargets(args.supabase, handles);
   if (targets.length === 0) return { count: 0 };
 
-  const mentionRows = targets
+  const blockedStates = await Promise.all(
+    targets.map((target) => isBlockedPair(args.supabase, args.authorUserId, target.user_id)),
+  );
+  const reachableTargets = targets.filter((_, index) => !blockedStates[index]);
+
+  const mentionRows = reachableTargets
     .filter((target) => target.user_id !== args.authorUserId && target.allow_mentions)
     .map((target) => ({
       source_type: args.sourceType,
@@ -172,7 +190,7 @@ export async function processMentions(args: {
     user_id: row.mentioned_user_id,
     kind: args.sourceType === 'post' ? 'mention_post' : 'mention_comment',
     title: args.sourceType === 'post' ? 'You were mentioned in a post' : 'You were mentioned in a comment',
-    body: 'Open FaithHarbor to see the conversation.',
+    body: 'Open Vella to see the conversation.',
     data: {
       source_type: args.sourceType,
       source_post_id: row.source_post_id,
@@ -202,7 +220,7 @@ export async function processMentions(args: {
   return { count: mentionRows.length };
 }
 
-export async function refreshPostCounts(supabase: SupabaseClient, postId: string) {
+export async function refreshPostCounts(supabase: AppSupabaseClient, postId: string) {
   const [{ count: likeCount }, { count: commentCount }, { count: shareCount }] = await Promise.all([
     supabase
       .from('social_post_likes')
@@ -234,7 +252,7 @@ export async function refreshPostCounts(supabase: SupabaseClient, postId: string
 }
 
 export async function isBlockedPair(
-  supabase: SupabaseClient,
+  supabase: AppSupabaseClient,
   userId: string,
   otherUserId: string,
 ) {
@@ -246,4 +264,61 @@ export async function isBlockedPair(
 
   if (error) return false;
   return Boolean(data && data.length > 0);
+}
+
+export async function getBlockedUserIdsForViewer(
+  supabase: AppSupabaseClient,
+  viewerUserId: string,
+) {
+  const { data, error } = await supabase
+    .from('social_blocks')
+    .select('blocker_user_id, blocked_user_id')
+    .or(`blocker_user_id.eq.${viewerUserId},blocked_user_id.eq.${viewerUserId}`);
+
+  const blockedUserIds = new Set<string>();
+  if (error) return blockedUserIds;
+
+  for (const row of data ?? []) {
+    const blocker = String(row.blocker_user_id ?? '');
+    const blocked = String(row.blocked_user_id ?? '');
+    if (blocker === viewerUserId && blocked) blockedUserIds.add(blocked);
+    if (blocked === viewerUserId && blocker) blockedUserIds.add(blocker);
+  }
+  return blockedUserIds;
+}
+
+export async function hasAcceptedSocialEula(
+  supabase: AppSupabaseClient,
+  userId: string,
+  version = CURRENT_SOCIAL_EULA_VERSION,
+) {
+  const { data, error } = await supabase
+    .from('social_eula_acceptances')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('eula_version', version)
+    .maybeSingle();
+
+  if (error) return false;
+  return Boolean(data?.id);
+}
+
+export async function isSocialUserSuspended(
+  supabase: AppSupabaseClient,
+  userId: string,
+) {
+  const { data, error } = await supabase
+    .from('social_profiles')
+    .select('is_suspended')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[social-suspension] status_check_failed', {
+      userId,
+      error: error.message,
+    });
+    return false;
+  }
+  return Boolean(data?.is_suspended);
 }

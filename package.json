@@ -4,17 +4,23 @@
   "version": "0.1.0",
   "scripts": {
     "dev": "next dev -p 4000",
+    "prebuild": "yarn validate:site",
     "build": "next build",
     "start": "next start -p 4000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "validate:site": "vitest run tests/site.test.ts",
+    "corpus:import:webp": "node --env-file=.env scripts/import-approved-webp-corpus.mjs",
+    "stripe:setup": "node --env-file=.env scripts/setup-stripe.mjs"
   },
   "dependencies": {
+    "@apple/app-store-server-library": "3.1.0",
     "@supabase/supabase-js": "^2.49.1",
     "next": "^15.2.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "sharp": "0.34.5",
     "stripe": "^17.7.0",
     "typescript": "^5.7.3",
     "zod": "^3.24.2"

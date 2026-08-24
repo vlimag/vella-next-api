@@ -2,12 +2,16 @@ import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
 import { localeSchema, parseQuery } from '@/lib/validation';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const querySchema = z.object({
   lang: localeSchema.optional(),
 });
 
 export async function GET(req: Request) {
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
+
   const { searchParams } = new URL(req.url);
   const parsed = parseQuery(querySchema, {
     lang: searchParams.get('lang') ?? undefined,

@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { getOptionalUserIdFromAuthHeader } from '@/lib/auth';
 import { parseQuery } from '@/lib/validation';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import { safeSocialAvatarUrl } from '@/lib/social';
 
 const querySchema = z.object({
   q: z.string().trim().min(1).max(24),
@@ -10,6 +11,9 @@ const querySchema = z.object({
 });
 
 export async function GET(req: Request) {
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
+
   const { searchParams } = new URL(req.url);
   const parsed = parseQuery(querySchema, {
     q: searchParams.get('q') ?? undefined,
@@ -18,7 +22,7 @@ export async function GET(req: Request) {
   if ('error' in parsed) return parsed.error;
 
   const supabase = createServiceClient();
-  const viewerUserId = await getOptionalUserIdFromAuthHeader();
+  const viewerUserId = access.userId;
 
   const { data, error } = await supabase
     .from('social_profiles')
@@ -50,7 +54,7 @@ export async function GET(req: Request) {
         user_id: item.user_id,
         handle: item.handle,
         display_name: item.display_name,
-        avatar_url: item.avatar_url,
+        avatar_url: safeSocialAvatarUrl(String(item.user_id), item.avatar_url),
       })),
   });
 }

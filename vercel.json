@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-verses",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/growth-retention",
+      "schedule": "17 3 * * *"
+    }
+  ]
+}

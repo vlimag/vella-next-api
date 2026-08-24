@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
 import { parseQuery } from '@/lib/validation';
-import { resolveJourneyActor } from '@/lib/actor';
+import { authenticatedJourneyActor } from '@/lib/actor';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
 
 const querySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
@@ -15,10 +16,8 @@ const bodySchema = z.object({
 });
 
 export async function GET(req: Request) {
-  const actorResult = await resolveJourneyActor(true);
-  if (!('actor' in actorResult)) {
-    return fail(actorResult.error, actorResult.status);
-  }
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
 
   const { searchParams } = new URL(req.url);
   const parsed = parseQuery(querySchema, {
@@ -26,7 +25,7 @@ export async function GET(req: Request) {
   });
   if ('error' in parsed) return parsed.error;
 
-  const actor = actorResult.actor;
+  const actor = authenticatedJourneyActor(access.userId);
   const supabase = createServiceClient();
 
   let query = supabase
@@ -49,16 +48,14 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const actorResult = await resolveJourneyActor(true);
-  if (!('actor' in actorResult)) {
-    return fail(actorResult.error, actorResult.status);
-  }
+  const access = await requireActiveSubscription();
+  if ('response' in access) return access.response;
 
   const body = await req.json().catch(() => null);
   const parsed = parseQuery(bodySchema, body);
   if ('error' in parsed) return parsed.error;
 
-  const actor = actorResult.actor;
+  const actor = authenticatedJourneyActor(access.userId);
   const supabase = createServiceClient();
 
   const payload =

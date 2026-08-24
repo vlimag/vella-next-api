@@ -1,49 +1,22 @@
-const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
-const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-5.2';
+const OPENAI_CLASSIFIER_URL = 'https://api.openai.com/v1/chat/completions';
+const OPENAI_MODERATION_URL = 'https://api.openai.com/v1/moderations';
+const OPENAI_MODEL = process.env.OPENAI_MODEL ?? 'gpt-5.6';
 
-const FAITH_KEYWORDS = [
-  'god',
-  'jesus',
-  'christ',
-  'bible',
-  'scripture',
-  'prayer',
-  'faith',
-  'church',
-  'gospel',
-  'deus',
-  'cristo',
-  'biblia',
-  'oracao',
-  'oración',
-  'dios',
-  'dieu',
-  'gott',
-  'gesu',
-  'бог',
-  'молит',
-  'wiara',
-  'modlit',
-];
-
-const SPAM_SELL_KEYWORDS = [
-  'buy now',
-  'discount',
-  'promo',
-  'coupon',
-  'subscribe my channel',
-  'dm for price',
-  'cashapp',
-  'bitcoin giveaway',
-  'onlyfans',
-  'click here',
+const CLEAR_SPAM_PATTERNS = [
+  /\bbuy now\b/i,
+  /\bdm (?:me )?for (?:the )?price\b/i,
+  /\bsubscribe (?:to )?my channel\b/i,
+  /\b(?:bitcoin|crypto) giveaway\b/i,
+  /\b(?:promo|coupon) code\b/i,
+  /\bcashapp\b/i,
+  /\bonlyfans\b/i,
 ];
 
 type ModerationVerdict = {
   allowed: boolean;
   reason: string;
   tags: string[];
-  source: 'heuristic' | 'openai';
+  source: 'heuristic' | 'openai' | 'openai_moderation' | 'unavailable';
 };
 
 type OpenAiModerationInput = {
@@ -69,37 +42,21 @@ function parseJsonObject(text: string) {
   }
 }
 
-function heuristics(input: string, options?: { hasImage?: boolean }): ModerationVerdict {
-  const normalized = input.toLowerCase();
+function heuristics(input: string): ModerationVerdict {
   const tags: string[] = [];
 
-  if (/https?:\/\//.test(normalized) || /www\./.test(normalized)) {
+  if (/https?:\/\//i.test(input) || /www\./i.test(input)) {
     tags.push('external_link');
   }
 
-  if (SPAM_SELL_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+  if (CLEAR_SPAM_PATTERNS.some((pattern) => pattern.test(input))) {
     tags.push('selling_or_spam');
-  }
-
-  const hasFaithSignal = FAITH_KEYWORDS.some((keyword) => normalized.includes(keyword));
-  const shouldRequireFaithKeyword = !options?.hasImage;
-  if (!hasFaithSignal) {
-    tags.push('off_topic_not_faith_related');
   }
 
   if (tags.includes('selling_or_spam')) {
     return {
       allowed: false,
       reason: 'This content looks like selling, spam, or solicitation.',
-      tags,
-      source: 'heuristic',
-    };
-  }
-
-  if (shouldRequireFaithKeyword && tags.includes('off_topic_not_faith_related')) {
-    return {
-      allowed: false,
-      reason: 'Feed posts must be related to faith, scripture, prayer, or Christian life.',
       tags,
       source: 'heuristic',
     };
@@ -113,7 +70,71 @@ function heuristics(input: string, options?: { hasImage?: boolean }): Moderation
   };
 }
 
-async function openAiModerate(input: OpenAiModerationInput): Promise<ModerationVerdict | null> {
+async function openAiSafetyModerate(input: OpenAiModerationInput): Promise<ModerationVerdict | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  const moderationInput: Array<Record<string, unknown>> = [
+    {
+      type: 'text',
+      text: input.text.trim().length > 0 ? input.text : '[image-only community post]',
+    },
+  ];
+  if (input.imageDataUrl) {
+    moderationInput.push({
+      type: 'image_url',
+      image_url: { url: input.imageDataUrl },
+    });
+  }
+
+  try {
+    const response = await fetch(OPENAI_MODERATION_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'omni-moderation-latest',
+        input: moderationInput,
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('[social-moderation] safety_provider_failed', { status: response.status });
+      return null;
+    }
+
+    const payload = (await response.json()) as {
+      results?: Array<{
+        flagged?: boolean;
+        categories?: Record<string, boolean>;
+      }>;
+    };
+    const result = payload.results?.[0];
+    if (!result || typeof result.flagged !== 'boolean') return null;
+
+    const tags = Object.entries(result.categories ?? {})
+      .filter(([, flagged]) => flagged)
+      .map(([category]) => category);
+
+    return {
+      allowed: !result.flagged,
+      reason: result.flagged
+        ? 'This content may be harmful or abusive and cannot be shared.'
+        : 'Accepted by safety moderation.',
+      tags,
+      source: 'openai_moderation',
+    };
+  } catch (error) {
+    console.error('[social-moderation] safety_provider_error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+async function openAiFaithClassify(input: OpenAiModerationInput): Promise<ModerationVerdict | null> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return null;
 
@@ -127,6 +148,8 @@ async function openAiModerate(input: OpenAiModerationInput): Promise<ModerationV
         '- Not related to Christianity, faith practice, prayer, scripture, testimony, church life, or spiritual reflection.',
         '- Selling products/services, scam signals, spam, or solicitation.',
         '- Image contains nudity, violence, hateful symbols, illegal activity, or explicit advertising.',
+        'Evaluate meaning across languages and Christian traditions, including Catholic, Orthodox, Protestant, and liturgical expressions.',
+        'Do not reject content merely because it is unfamiliar or lacks common English faith keywords. Mark it unrelated only when it is clearly off-topic.',
         'Return strict JSON:',
         '{"allowed":true|false,"reason":"short reason","tags":["..."]}',
         `Text: """${input.text}"""`,
@@ -145,28 +168,35 @@ async function openAiModerate(input: OpenAiModerationInput): Promise<ModerationV
     });
   }
 
-  const response = await fetch(OPENAI_URL, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      temperature: 0.1,
-      response_format: { type: 'json_object' },
-      messages: [
-        {
-          role: 'system',
-          content: 'You are a strict social feed moderator for a Christian app. Return JSON only.',
-        },
-        {
-          role: 'user',
-          content: userContent,
-        },
-      ],
-    }),
-  });
+  let response: Response;
+  try {
+    response = await fetch(OPENAI_CLASSIFIER_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: OPENAI_MODEL,
+        response_format: { type: 'json_object' },
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a strict social feed moderator for a Christian app. Return JSON only.',
+          },
+          {
+            role: 'user',
+            content: userContent,
+          },
+        ],
+      }),
+    });
+  } catch (error) {
+    console.error('[social-moderation] classifier_provider_error', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 
   if (!response.ok) {
     console.error('[social-moderation] openai_failed', { status: response.status });
@@ -213,17 +243,38 @@ export async function moderateFaithPostContent(input: {
     };
   }
 
-  const heuristicVerdict = heuristics(trimmedText, { hasImage });
+  const heuristicVerdict = heuristics(trimmedText);
   if (!heuristicVerdict.allowed) {
     return heuristicVerdict;
   }
 
-  const aiVerdict = await openAiModerate({
+  const safetyVerdict = await openAiSafetyModerate({
+    text: trimmedText.length > 0 ? trimmedText : '[empty]',
+    imageDataUrl: input.imageDataUrl,
+  });
+  if (!safetyVerdict) {
+    return {
+      allowed: false,
+      reason: 'Safety checks are temporarily unavailable. Please try again shortly.',
+      tags: ['moderation_unavailable'],
+      source: 'unavailable',
+    };
+  }
+  if (!safetyVerdict.allowed) {
+    return safetyVerdict;
+  }
+
+  const aiVerdict = await openAiFaithClassify({
     text: trimmedText.length > 0 ? trimmedText : '[empty]',
     imageDataUrl: input.imageDataUrl,
   });
   if (!aiVerdict) {
-    return heuristicVerdict;
+    return {
+      allowed: false,
+      reason: 'Safety checks are temporarily unavailable. Please try again shortly.',
+      tags: ['moderation_unavailable'],
+      source: 'unavailable',
+    };
   }
 
   return aiVerdict;
@@ -231,4 +282,46 @@ export async function moderateFaithPostContent(input: {
 
 export async function moderateFaithContent(input: string): Promise<ModerationVerdict> {
   return moderateFaithPostContent({ text: input });
+}
+
+export async function moderateSocialProfileContent(input: string): Promise<ModerationVerdict> {
+  const trimmedText = input.trim();
+  if (trimmedText.length === 0) {
+    return {
+      allowed: true,
+      reason: 'No public profile text to moderate.',
+      tags: [],
+      source: 'heuristic',
+    };
+  }
+
+  const heuristicVerdict = heuristics(trimmedText);
+  if (!heuristicVerdict.allowed) return heuristicVerdict;
+
+  const safetyVerdict = await openAiSafetyModerate({ text: trimmedText });
+  if (!safetyVerdict) {
+    return {
+      allowed: false,
+      reason: 'Safety checks are temporarily unavailable. Please try again shortly.',
+      tags: ['moderation_unavailable'],
+      source: 'unavailable',
+    };
+  }
+  return safetyVerdict;
+}
+
+export async function moderateSocialAvatarContent(imageDataUrl: string): Promise<ModerationVerdict> {
+  const safetyVerdict = await openAiSafetyModerate({
+    text: 'Public community profile avatar.',
+    imageDataUrl,
+  });
+  if (!safetyVerdict) {
+    return {
+      allowed: false,
+      reason: 'Safety checks are temporarily unavailable. Please try again shortly.',
+      tags: ['moderation_unavailable'],
+      source: 'unavailable',
+    };
+  }
+  return safetyVerdict;
 }
