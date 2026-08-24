@@ -501,6 +501,50 @@ describe('growth analytics ingestion', () => {
     expect(profileMigration).not.toMatch(/validate constraint growth_analytics_(?:properties|events_event_name)_check/);
   });
 
+  it('keeps the shipped runtime-1.2 onboarding contract accepted by the database', () => {
+    const migrationsPath = path.resolve(process.cwd(), '../supabase/migrations');
+    const migrationName = fs.readdirSync(migrationsPath)
+      .find((name) => name.endsWith('_restore_runtime_1_2_onboarding_analytics.sql'));
+    expect(migrationName).toBeDefined();
+
+    const migration = fs.readFileSync(path.join(migrationsPath, migrationName!), 'utf8');
+    expect(migration).toContain('growth_event_properties_are_safe_v5');
+    expect(migration).toContain('growth_event_properties_are_safe_v4');
+    for (const stepKey of [
+      'language',
+      'goal',
+      'focus',
+      'minutes',
+      'rhythm',
+      'reminder_style',
+      'preview',
+      'reminders',
+    ]) {
+      expect(migration).toContain(`'${stepKey}'`);
+    }
+    for (const action of [
+      'selected',
+      'deselected',
+      'continue_tapped',
+      'skip_tapped',
+      'retry_tapped',
+      'cta_visible',
+      'scroll_25',
+      'scroll_50',
+      'scroll_75',
+      'scroll_100',
+      'exit',
+    ]) {
+      expect(migration).toContain(`'${action}'`);
+    }
+    expect(migration).toMatch(
+      /growth_analytics_properties_check check \(\s*faith_harbor\.growth_event_properties_are_safe_v5\(event_name, properties\)\s*\) not valid;/,
+    );
+    expect(migration).toContain("set search_path = ''");
+    expect(migration).not.toMatch(/validate constraint growth_analytics_properties_check/);
+    expect(migration).not.toMatch(/prayer_text|email_address|user_id|receipt|purchase_token/i);
+  });
+
   it('keeps authoritative subscription transitions private, coarse, and atomically idempotent', () => {
     const migrationsPath = path.resolve(process.cwd(), '../supabase/migrations');
     const migrationName = fs.readdirSync(migrationsPath)
