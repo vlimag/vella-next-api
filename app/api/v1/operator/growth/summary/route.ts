@@ -146,8 +146,38 @@ const CAMPAIGN_CODES = new Set([
   'br_android_202608_prayer_words',
 ]);
 const STORE_PROVIDERS = new Set(['apple', 'google']);
+const SUBSCRIPTION_PLANS = new Set(['monthly', 'yearly']);
 const REPORT_CURRENCIES = new Set(['BRL']);
 const SUBSCRIPTION_TRUTH_SOURCES = new Set(['verified_store_subscriptions']);
+const TRANSITION_TRUTH_SOURCES = new Set(['subscription_marketing_transitions']);
+const DIAGNOSTIC_TRUTH_SOURCES = new Set(['independent_client_events']);
+const FUNNEL_VARIANTS = new Set(['legacy_v1', 'compact_v2']);
+const ORDERED_STAGE_ORDERS: Record<string, ReadonlyMap<string, number>> = {
+  legacy_v1: new Map([
+    ['first_open', 1],
+    ['onboarding_started', 2],
+    ['onboarding_completed', 3],
+    ['first_experience_viewed', 4],
+    ['first_experience_completed', 5],
+    ['auth_started', 6],
+    ['paywall_viewed', 7],
+    ['plan_selected', 8],
+    ['checkout_started', 9],
+    ['authenticated_active_subscription_bypass', 10],
+  ]),
+  compact_v2: new Map([
+    ['first_open', 1],
+    ['onboarding_started', 2],
+    ['onboarding_completed', 3],
+    ['first_experience_viewed', 4],
+    ['first_experience_completed', 5],
+    ['paywall_viewed', 6],
+    ['plan_selected', 7],
+    ['auth_started', 8],
+    ['checkout_started', 9],
+    ['authenticated_active_subscription_bypass', 10],
+  ]),
+};
 const ONBOARDING_STEP_KEYS = new Set([
   'language',
   'goal',
@@ -273,7 +303,7 @@ function safePropertyDimension(properties: DiagnosticRow | null, dimension: Prop
   return PRIVACY_SAFE_UNKNOWN;
 }
 
-function projectGrowthSummary(
+function projectDiagnosticSummary(
   raw: unknown,
   requestedWindow: { from: string; to: string; cohort_days: number },
 ) {
@@ -315,23 +345,42 @@ function projectGrowthSummary(
       activated_24h: safeNonnegativeInteger(row.activated_24h),
       d1_retained: safeNonnegativeInteger(row.d1_retained),
       d7_retained: safeNonnegativeInteger(row.d7_retained),
-    })),
-    campaigns: diagnosticRows(report.campaigns).map((row) => ({
-      source: safeDimension(row.source, CAMPAIGN_SOURCES),
-      campaign: safeDimension(row.campaign, CAMPAIGN_CODES),
-      spend_cents: safeNonnegativeInteger(row.spend_cents),
-      currency: safeDimension(row.currency, REPORT_CURRENCIES),
-      attributed_installs: safeNullableNonnegativeInteger(row.attributed_installs),
-      attribution_suppressed: row.attribution_suppressed === true,
-      landing_views: safeNullableNonnegativeInteger(row.landing_views),
-      store_cta_clicks: safeNullableNonnegativeInteger(row.store_cta_clicks),
-      first_opens: safeNullableNonnegativeInteger(row.first_opens),
-      trial_starts: safeNullableNonnegativeInteger(row.trial_starts),
-      paid_starts: safeNullableNonnegativeInteger(row.paid_starts),
-      cost_per_first_open_cents: safeNullableNonnegativeInteger(row.cost_per_first_open_cents),
-      cost_per_trial_cents: safeNullableNonnegativeInteger(row.cost_per_trial_cents),
-      cost_per_paid_start_cents: safeNullableNonnegativeInteger(row.cost_per_paid_start_cents),
-    })),
+    })).filter((row) => row.installs >= MINIMUM_BREAKDOWN_INSTALLS),
+    campaigns: diagnosticRows(report.campaigns).map((row) => {
+      const attributedInstalls = safeNullableNonnegativeInteger(row.attributed_installs);
+      const hasNoAttributedInstalls = attributedInstalls === 0;
+      const eventMetricsReportable = attributedInstalls !== null &&
+        attributedInstalls >= MINIMUM_BREAKDOWN_INSTALLS;
+      const eventMetric = (value: unknown) => {
+        if (hasNoAttributedInstalls) return 0;
+        return eventMetricsReportable ? safeNullableNonnegativeInteger(value) : null;
+      };
+      return {
+        source: safeDimension(row.source, CAMPAIGN_SOURCES),
+        campaign: safeDimension(row.campaign, CAMPAIGN_CODES),
+        spend_cents: safeNonnegativeInteger(row.spend_cents),
+        currency: safeDimension(row.currency, REPORT_CURRENCIES),
+        attributed_installs: hasNoAttributedInstalls || eventMetricsReportable ? attributedInstalls : null,
+        attribution_suppressed: row.attribution_suppressed === true ||
+          (attributedInstalls !== null &&
+            attributedInstalls > 0 &&
+            attributedInstalls < MINIMUM_BREAKDOWN_INSTALLS),
+        landing_views: eventMetric(row.landing_views),
+        store_cta_clicks: eventMetric(row.store_cta_clicks),
+        first_opens: eventMetric(row.first_opens),
+        trial_starts: eventMetric(row.trial_starts),
+        paid_starts: eventMetric(row.paid_starts),
+        cost_per_first_open_cents: eventMetricsReportable
+          ? safeNullableNonnegativeInteger(row.cost_per_first_open_cents)
+          : null,
+        cost_per_trial_cents: eventMetricsReportable
+          ? safeNullableNonnegativeInteger(row.cost_per_trial_cents)
+          : null,
+        cost_per_paid_start_cents: eventMetricsReportable
+          ? safeNullableNonnegativeInteger(row.cost_per_paid_start_cents)
+          : null,
+      };
+    }),
     authoritative_subscriptions: {
       verified_starts: safeNonnegativeInteger(subscriptions.verified_starts),
       active_now: safeNonnegativeInteger(subscriptions.active_now),
@@ -342,7 +391,7 @@ function projectGrowthSummary(
         product_id: safeDimension(row.product_id, VELLA_SUBSCRIPTION_PRODUCT_IDS),
         subscriptions: safeNonnegativeInteger(row.subscriptions),
         active_now: safeNonnegativeInteger(row.active_now),
-      })),
+      })).filter((row) => row.subscriptions >= MINIMUM_BREAKDOWN_INSTALLS),
       source_of_truth: safeDimension(subscriptions.source_of_truth, SUBSCRIPTION_TRUTH_SOURCES),
     },
     webhook_health: {
@@ -358,13 +407,115 @@ function projectGrowthSummary(
     },
     privacy: {
       raw_retention_days: safeNonnegativeInteger(privacy.raw_retention_days, 3650),
-      minimum_breakdown_installs: safeNonnegativeInteger(privacy.minimum_breakdown_installs, 1_000_000),
+      minimum_breakdown_installs: MINIMUM_BREAKDOWN_INSTALLS,
       small_cohorts_omitted: privacy.small_cohorts_omitted === true,
       small_campaign_metrics_suppressed: privacy.small_campaign_metrics_suppressed === true,
       small_subscription_product_groups_omitted: privacy.small_subscription_product_groups_omitted === true,
       contains_ip_or_raw_content: privacy.contains_ip_or_raw_content === false ? false : true,
       contains_account_identifier: privacy.contains_account_identifier === false ? false : true,
       client_subscription_events_are_authoritative: privacy.client_subscription_events_are_authoritative === true,
+    },
+  };
+}
+
+function hasOrderedSummaryBlocks(raw: unknown) {
+  const report = diagnosticRow(raw);
+  if (report === null) return false;
+  const diagnostics = diagnosticRow(report.diagnostic_totals);
+  const transitions = diagnosticRow(report.authoritative_transitions);
+  return Array.isArray(report.ordered_funnel) &&
+    diagnostics !== null &&
+    diagnostics.source_of_truth === 'independent_client_events' &&
+    Array.isArray(diagnostics.funnel) &&
+    Array.isArray(diagnostics.daily) &&
+    Array.isArray(diagnostics.cohorts) &&
+    Array.isArray(diagnostics.campaigns) &&
+    diagnosticRow(diagnostics.authoritative_subscriptions) !== null &&
+    diagnosticRow(diagnostics.webhook_health) !== null &&
+    Array.isArray(report.release_cohorts) &&
+    transitions !== null &&
+    Number.isSafeInteger(transitions.trial_started) &&
+    Number(transitions.trial_started) >= 0 &&
+    Number.isSafeInteger(transitions.paid_started) &&
+    Number(transitions.paid_started) >= 0 &&
+    Array.isArray(transitions.by_day) &&
+    Array.isArray(transitions.by_provider_plan) &&
+    transitions.source_of_truth === 'subscription_marketing_transitions';
+}
+
+function projectOrderedRows(value: unknown) {
+  return diagnosticRows(value).flatMap((row) => {
+    const funnelVariant = safeDimension(row.funnel_variant, FUNNEL_VARIANTS);
+    if (funnelVariant === PRIVACY_SAFE_UNKNOWN || typeof row.event_name !== 'string') return [];
+    const expectedOrder = ORDERED_STAGE_ORDERS[funnelVariant]?.get(row.event_name);
+    if (expectedOrder === undefined || row.stage_order !== expectedOrder) return [];
+    return [{
+      funnel_variant: funnelVariant,
+      event_name: row.event_name,
+      stage_order: expectedOrder,
+      unique_installs: safeNonnegativeInteger(row.unique_installs),
+    }];
+  });
+}
+
+function projectGrowthSummary(
+  raw: unknown,
+  requestedWindow: { from: string; to: string; cohort_days: number },
+) {
+  const report = diagnosticRow(raw) ?? {};
+  const legacy = projectDiagnosticSummary(report, requestedWindow);
+  const diagnosticTotalsRaw = diagnosticRow(report.diagnostic_totals) ?? {};
+  const diagnosticTotals = projectDiagnosticSummary(diagnosticTotalsRaw, requestedWindow);
+  const transitions = diagnosticRow(report.authoritative_transitions) ?? {};
+
+  return {
+    ...legacy,
+    ordered_funnel: projectOrderedRows(report.ordered_funnel),
+    diagnostic_totals: {
+      source_of_truth: safeDimension(
+        diagnosticTotalsRaw.source_of_truth,
+        DIAGNOSTIC_TRUTH_SOURCES,
+      ),
+      funnel: diagnosticTotals.funnel,
+      daily: diagnosticTotals.daily,
+      cohorts: diagnosticTotals.cohorts,
+      campaigns: diagnosticTotals.campaigns,
+      authoritative_subscriptions: diagnosticTotals.authoritative_subscriptions,
+      webhook_health: diagnosticTotals.webhook_health,
+    },
+    release_cohorts: diagnosticRows(report.release_cohorts).flatMap((row) => {
+      const cohortInstallations = safeNonnegativeInteger(row.cohort_installations);
+      if (cohortInstallations < MINIMUM_BREAKDOWN_INSTALLS) return [];
+      const ordered = projectOrderedRows([row]);
+      if (ordered.length !== 1) return [];
+      return [{
+        app_version: safeReleaseDimension(row.app_version, 32),
+        build_number: safeReleaseDimension(row.build_number, 24),
+        runtime_version: safeReleaseDimension(row.runtime_version, 32),
+        ...ordered[0],
+        cohort_installations: cohortInstallations,
+      }];
+    }),
+    authoritative_transitions: {
+      trial_started: safeNonnegativeInteger(transitions.trial_started),
+      paid_started: safeNonnegativeInteger(transitions.paid_started),
+      by_day: diagnosticRows(transitions.by_day).map((row) => ({
+        day: safeDateDimension(row.day),
+        phase: safeDimension(row.phase, IAP_BILLING_PHASES),
+        transitions: safeNonnegativeInteger(row.transitions),
+        distinct_subscriptions: safeNonnegativeInteger(row.distinct_subscriptions),
+      })).filter((row) => row.distinct_subscriptions >= MINIMUM_BREAKDOWN_INSTALLS),
+      by_provider_plan: diagnosticRows(transitions.by_provider_plan).map((row) => ({
+        provider: safeDimension(row.provider, STORE_PROVIDERS),
+        plan: safeDimension(row.plan, SUBSCRIPTION_PLANS),
+        phase: safeDimension(row.phase, IAP_BILLING_PHASES),
+        transitions: safeNonnegativeInteger(row.transitions),
+        distinct_subscriptions: safeNonnegativeInteger(row.distinct_subscriptions),
+      })).filter((row) => row.distinct_subscriptions >= MINIMUM_BREAKDOWN_INSTALLS),
+      source_of_truth: safeDimension(
+        transitions.source_of_truth,
+        TRANSITION_TRUTH_SOURCES,
+      ),
     },
   };
 }
@@ -491,7 +642,9 @@ function releaseFunnel(groups: Array<{ eventName: string; rows: DiagnosticRow[] 
     first_open: release.events.get('first_open')?.size ?? 0,
     onboarding_started: release.events.get('onboarding_started')?.size ?? 0,
     onboarding_completed: release.events.get('onboarding_completed')?.size ?? 0,
-  })).sort((a, b) => b.first_open - a.first_open || b.onboarding_started - a.onboarding_started);
+  }))
+    .filter((release) => release.first_open >= MINIMUM_BREAKDOWN_INSTALLS)
+    .sort((a, b) => b.first_open - a.first_open || b.onboarding_started - a.onboarding_started);
 }
 
 function firstExperienceDiagnostics(groups: {
@@ -599,6 +752,9 @@ export async function GET(req: Request) {
   });
 
   if (error || !data) {
+    return fail('Could not load growth summary', 503, { code: 'growth_report_unavailable' });
+  }
+  if (!hasOrderedSummaryBlocks(data)) {
     return fail('Could not load growth summary', 503, { code: 'growth_report_unavailable' });
   }
 

@@ -8,6 +8,28 @@ type FunnelRow = {
   event_count: number;
 };
 
+type OrderedFunnelRow = {
+  funnel_variant: 'legacy_v1' | 'compact_v2';
+  event_name: string;
+  stage_order: number;
+  unique_installs: number;
+};
+
+type ReleaseCohortRow = OrderedFunnelRow & {
+  app_version: string;
+  build_number: string;
+  runtime_version: string;
+  cohort_installations: number;
+};
+
+type TransitionSegment = {
+  provider: string;
+  plan: string;
+  phase: string;
+  transitions: number;
+  distinct_subscriptions: number;
+};
+
 type DailyRow = {
   day: string;
   unique_installs: number;
@@ -70,6 +92,27 @@ type ReleaseFunnelRow = {
 
 type GrowthSummary = {
   window: { from: string; to: string; cohort_days: number };
+  ordered_funnel: OrderedFunnelRow[];
+  diagnostic_totals: {
+    source_of_truth: string;
+    funnel: FunnelRow[];
+    daily: DailyRow[];
+    cohorts: CohortRow[];
+    campaigns: CampaignRow[];
+  };
+  release_cohorts: ReleaseCohortRow[];
+  authoritative_transitions: {
+    trial_started: number;
+    paid_started: number;
+    by_day: Array<{
+      day: string;
+      phase: string;
+      transitions: number;
+      distinct_subscriptions: number;
+    }>;
+    by_provider_plan: TransitionSegment[];
+    source_of_truth: string;
+  };
   funnel: FunnelRow[];
   daily: DailyRow[];
   cohorts: CohortRow[];
@@ -144,6 +187,11 @@ const FUNNEL_LABELS: Record<string, string> = {
   trial_started: 'Client-observed trials',
   subscription_paid_started: 'Client-observed paid starts',
   meaningful_session_completed: 'Meaningful sessions',
+  first_experience_viewed: 'First experience viewed',
+  first_experience_completed: 'First experience completed',
+  auth_started: 'Authentication started',
+  plan_selected: 'Plan selected',
+  authenticated_active_subscription_bypass: 'Active subscriber bypass',
 };
 
 const ONBOARDING_STEP_LABELS: Record<string, string> = {
@@ -257,11 +305,14 @@ export function GrowthDashboard() {
   }, []);
 
   const totalSpend = summary?.campaigns.reduce((sum, item) => sum + number(item.spend_cents), 0) ?? 0;
-  const paidStarts = summary?.authoritative_subscriptions.verified_starts ?? 0;
-  const firstOpens = summary?.funnel.find((item) => item.event_name === 'first_open')?.unique_installs ?? 0;
-  const onboardingStarts = summary?.funnel.find((item) => item.event_name === 'onboarding_started')?.unique_installs ?? 0;
-  const meaningful = summary?.funnel.find((item) => item.event_name === 'meaningful_session_completed')?.unique_installs ?? 0;
-  const maxFunnel = Math.max(1, ...(summary?.funnel.map((item) => item.unique_installs) ?? [1]));
+  const paidStarts = summary?.authoritative_transitions.paid_started ?? 0;
+  const orderedTotal = (eventName: string) => summary?.ordered_funnel
+    .filter((item) => item.event_name === eventName)
+    .reduce((sum, item) => sum + item.unique_installs, 0) ?? 0;
+  const firstOpens = orderedTotal('first_open');
+  const onboardingStarts = orderedTotal('onboarding_started');
+  const meaningful = orderedTotal('first_experience_completed');
+  const maxFunnel = Math.max(1, ...(summary?.ordered_funnel.map((item) => item.unique_installs) ?? [1]));
   const maxDaily = Math.max(1, ...(summary?.daily.map((item) => item.first_open) ?? [1]));
   const authSucceeded = summary?.auth_diagnostics?.by_attempt
     .filter((row) => row.key.endsWith(':succeeded'))
@@ -357,28 +408,31 @@ export function GrowthDashboard() {
           <section className="growth-stat-grid" aria-label="Key metrics">
             <article><span>Spend</span><strong>{money(totalSpend)}</strong><small>{summary.window.from} → {summary.window.to}</small></article>
             <article><span>First opens</span><strong>{firstOpens.toLocaleString()}</strong><small>Unique anonymous installs</small></article>
-            <article><span>First value</span><strong>{meaningful.toLocaleString()}</strong><small>{percentage(meaningful, firstOpens)} of first opens</small></article>
-            <article><span>Verified starts</span><strong>{paidStarts.toLocaleString()}</strong><small>Authoritative store/server state</small></article>
-            <article><span>Blended CAC</span><strong>{paidStarts ? money(Math.round(totalSpend / paidStarts)) : '—'}</strong><small>Spend / verified starts</small></article>
+            <article><span>First value</span><strong>{meaningful.toLocaleString()}</strong><small>Ordered first-experience completions · {percentage(meaningful, firstOpens)}</small></article>
+            <article><span>Paid transitions</span><strong>{paidStarts.toLocaleString()}</strong><small>Authoritative production subscription truth</small></article>
+            <article><span>Blended authoritative CAC</span><strong>{paidStarts ? money(Math.round(totalSpend / paidStarts)) : '—'}</strong><small>All spend / paid transitions</small></article>
             <article><span>Active now</span><strong>{summary.authoritative_subscriptions.active_now.toLocaleString()}</strong><small>{summary.authoritative_subscriptions.auto_renew_off_now.toLocaleString()} with auto-renew off</small></article>
           </section>
 
           <div className="growth-two-column">
             <section className="growth-panel">
-              <div className="growth-panel-heading"><div><p className="growth-kicker">Product funnel</p><h2>Where qualified users move—or stop</h2></div></div>
+              <div className="growth-panel-heading">
+                <div><p className="growth-kicker">Ordered product funnel</p><h2>Closed paths by native variant</h2></div>
+                <p>Each stage requires every earlier stage in that variant by occurrence time. Active subscribers appear as a closed bypass outcome.</p>
+              </div>
               <div className="growth-funnel">
-                {summary.funnel.map((row) => (
-                  <div className="growth-funnel-row" key={row.event_name}>
+                {summary.ordered_funnel.map((row) => (
+                  <div className="growth-funnel-row" key={`${row.funnel_variant}:${row.event_name}`}>
                     <div><span>{FUNNEL_LABELS[row.event_name] ?? humanize(row.event_name)}</span><strong>{row.unique_installs.toLocaleString()}</strong></div>
                     <div className="growth-track"><i style={{ width: `${Math.max(2, (row.unique_installs / maxFunnel) * 100)}%` }} /></div>
-                    <small>{row.event_count.toLocaleString()} total events</small>
+                    <small>{humanize(row.funnel_variant)} · stage {row.stage_order}</small>
                   </div>
                 ))}
               </div>
             </section>
 
             <section className="growth-panel">
-              <div className="growth-panel-heading"><div><p className="growth-kicker">Daily signal</p><h2>First opens</h2></div></div>
+              <div className="growth-panel-heading"><div><p className="growth-kicker">Daily diagnostic signal</p><h2>Independent first-open totals</h2></div><p>Raw totals are diagnostics, not ordered conversion.</p></div>
               <div className="growth-daily-chart" aria-label="Daily first opens chart">
                 {summary.daily.map((row) => (
                   <div key={row.day} title={`${row.day}: ${row.first_open} first opens`}>
@@ -395,6 +449,32 @@ export function GrowthDashboard() {
               </div>
             </section>
           </div>
+
+          <section className="growth-panel">
+            <div className="growth-panel-heading">
+              <div><p className="growth-kicker">Authoritative conversion truth</p><h2>Production subscription transitions</h2></div>
+              <p>Overall totals remain visible. Day and provider/plan segments appear only after 20 distinct subscriptions.</p>
+            </div>
+            <div className="growth-health-grid">
+              <div><span>Trial starts</span><strong>{summary.authoritative_transitions.trial_started.toLocaleString()}</strong></div>
+              <div><span>Paid starts</span><strong>{summary.authoritative_transitions.paid_started.toLocaleString()}</strong></div>
+            </div>
+            {summary.authoritative_transitions.by_provider_plan.length ? (
+              <div className="growth-table-wrap">
+                <table className="growth-table">
+                  <thead><tr><th>Provider / plan</th><th>Phase</th><th>Transitions</th><th>Distinct subscriptions</th></tr></thead>
+                  <tbody>{summary.authoritative_transitions.by_provider_plan.map((row) => (
+                    <tr key={`${row.provider}:${row.plan}:${row.phase}`}>
+                      <td><strong>{humanize(row.provider)}</strong><small>{humanize(row.plan)}</small></td>
+                      <td>{humanize(row.phase)}</td>
+                      <td>{row.transitions.toLocaleString()}</td>
+                      <td>{row.distinct_subscriptions.toLocaleString()}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            ) : <p className="growth-table-empty">No provider/plan segment has reached the 20-subscription reporting threshold.</p>}
+          </section>
 
           <section className="growth-panel">
             <div className="growth-panel-heading">
@@ -518,16 +598,16 @@ export function GrowthDashboard() {
                 </table>
               </div>
             ) : null}
-            {summary.release_funnel?.length ? (
+            {summary.release_cohorts.length ? (
               <div className="growth-table-wrap">
                 <table className="growth-table">
-                  <thead><tr><th>App / build / runtime</th><th>First opens</th><th>Started</th><th>Completed</th></tr></thead>
-                  <tbody>{summary.release_funnel.map((row) => (
-                    <tr key={`${row.app_version}:${row.build_number}:${row.runtime_version}`}>
-                      <td><strong>{row.app_version} · {row.build_number}</strong><small>runtime {row.runtime_version}</small></td>
-                      <td>{row.first_open}</td>
-                      <td>{row.onboarding_started} <small>{percentage(row.onboarding_started, row.first_open)}</small></td>
-                      <td>{row.onboarding_completed} <small>{percentage(row.onboarding_completed, row.first_open)}</small></td>
+                  <thead><tr><th>App / build / runtime / variant</th><th>Ordered stage</th><th>Cohort installs</th><th>Qualified installs</th></tr></thead>
+                  <tbody>{summary.release_cohorts.map((row) => (
+                    <tr key={`${row.app_version}:${row.build_number}:${row.runtime_version}:${row.funnel_variant}:${row.event_name}`}>
+                      <td><strong>{row.app_version} · {row.build_number}</strong><small>runtime {row.runtime_version} · {humanize(row.funnel_variant)}</small></td>
+                      <td>{FUNNEL_LABELS[row.event_name] ?? humanize(row.event_name)} <small>stage {row.stage_order}</small></td>
+                      <td>{row.cohort_installations}</td>
+                      <td>{row.unique_installs} <small>{percentage(row.unique_installs, row.cohort_installations)}</small></td>
                     </tr>
                   ))}</tbody>
                 </table>
@@ -537,12 +617,12 @@ export function GrowthDashboard() {
 
           <section className="growth-panel">
             <div className="growth-panel-heading">
-              <div><p className="growth-kicker">Campaign economics</p><h2>Spend follows retained value</h2></div>
-              <p>Client trial events are directional and store-verified subscription state remains authoritative. Website sessions cannot yet be joined to a Play install without native Install Referrer attribution; use Google Ads and Play Console for that bridge.</p>
+              <div><p className="growth-kicker">Source-qualified directional economics</p><h2>Campaign signal, separate from blended CAC</h2></div>
+              <p>Campaign costs use client-observed source events and are not authoritative CAC. Subscription transitions are intentionally not joined through shared Auth; use the blended authoritative CAC above and Google Ads/Play Console for source reconciliation.</p>
             </div>
             <div className="growth-table-wrap">
               <table className="growth-table">
-                <thead><tr><th>Source / campaign</th><th>Spend</th><th>Landing</th><th>Store CTA</th><th>First opens</th><th>Trials</th><th>Paid</th><th>Cost / trial</th><th>Cost / paid</th></tr></thead>
+                <thead><tr><th>Source / campaign</th><th>Spend</th><th>Landing</th><th>Store CTA</th><th>First opens</th><th>Client trials</th><th>Client paid</th><th>Directional cost / trial</th><th>Directional cost / paid</th></tr></thead>
                 <tbody>
                   {summary.campaigns.length ? summary.campaigns.map((row) => (
                     <tr key={`${row.source}:${row.campaign}`}>
@@ -563,7 +643,7 @@ export function GrowthDashboard() {
           </section>
 
           <section className="growth-panel">
-            <div className="growth-panel-heading"><div><p className="growth-kicker">Mature cohorts</p><h2>Activation and retention by install day</h2></div><p>Small cohorts are suppressed by the API. Wait for the 14-day trial plus processing time before judging paid conversion.</p></div>
+            <div className="growth-panel-heading"><div><p className="growth-kicker">Diagnostic mature cohorts</p><h2>Independent activation and retention totals</h2></div><p>These raw totals are not ordered conversions. Cohorts below 20 installs are suppressed by both SQL and the API.</p></div>
             <div className="growth-table-wrap">
               <table className="growth-table">
                 <thead><tr><th>Cohort</th><th>Installs</th><th>Onboarded</th><th>Accounts</th><th>Trials</th><th>Paid</th><th>Activated 24h</th><th>D1</th><th>D7</th></tr></thead>

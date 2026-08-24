@@ -137,11 +137,29 @@ product codes require an allowlist update. Aggregate numbers survive only as
 finite, nonnegative safe integers within the field's range. Invalid required
 counts become zero and invalid nullable campaign metrics become `null`.
 
-- `funnel`: aggregate unique installations and event counts by stage;
-- `daily`: aggregate daily acquisition, conversion and activation counts;
-- `cohorts`: first-open cohorts and activation/retention within the requested
-  window;
-- `campaigns`: normalized campaign performance, spend and calculated costs;
+- `ordered_funnel`: qualified unique installations for the closed
+  `legacy_v1` and `compact_v2` graphs. The report uses each installation's
+  first occurrence of a stage and counts it only when every required preceding
+  stage occurred at or before it. Ordering uses `occurred_at`, never receipt
+  order. `legacy_v1` authenticates before paywall/plan; `compact_v2` shows
+  paywall/plan before authentication. Variants never borrow predecessor events
+  from each other. An upgraded installation that legitimately emits a first
+  open in both variants appears once in each variant cohort;
+- `diagnostic_totals`: independent raw `funnel`, `daily`, `cohorts`,
+  `campaigns`, subscription-state, and webhook aggregates. These are useful
+  for telemetry health and directional diagnosis but are not ordered
+  conversion truth;
+- `release_cohorts`: the ordered graph split by app version, build, runtime,
+  and closed funnel variant, anchored to first open. A release appears only at
+  20 distinct installations;
+- `authoritative_transitions`: overall production `trial_started` and
+  `paid_started` totals from `subscription_marketing_transitions` only.
+  Daily and provider/plan/phase segments require at least 20 distinct
+  subscriptions. Client `trial_started` or `subscription_paid_started`
+  events never contribute to these totals;
+- `funnel`, `daily`, `cohorts`, `campaigns`,
+  `authoritative_subscriptions`, and `webhook_health`: legacy top-level
+  diagnostic keys retained unchanged for migration-first API compatibility;
 - `onboarding_steps`, `onboarding_step_results`, and `onboarding_diagnostics`:
   privacy-safe reach, outcomes, time buckets, selection counts, and allowlisted
   failure stages for each onboarding screen;
@@ -152,9 +170,8 @@ counts become zero and invalid nullable campaign metrics become `null`.
   Android/iOS build/runtime rows. Step and release breakdown rows below 20
   installs are suppressed, while permitted overall totals remain available. It
   contains no event properties or installation identifiers;
-- `release_funnel`: first-open, onboarding-start, and completion counts grouped
-  by app/build/runtime to isolate release regressions. App/build/runtime labels
-  must match the bounded release-value pattern or are returned as `unknown`;
+- `release_funnel`: legacy route-derived release diagnostics retained for
+  compatibility. Rows below 20 first opens are removed again by the API;
 - `auth_diagnostics`: aggregate auth-screen reach and coarse method/outcome
   counts, with no account identifier or provider error text;
 - `iap_diagnostics`: privacy-safe client, server, verified-receipt, and
@@ -181,10 +198,24 @@ webhook, IAP, campaign, and release dimensions follow this allowlist boundary.
 Stored labels are never trimmed, lowercased, or string-coerced into acceptance.
 
 Cohort rows below 20 installations are omitted. Campaign event metrics below
-20 attributed installations are suppressed. Spend-only campaign rows still
-appear so accounting input is never silently hidden. Aggregate funnel/daily
-totals remain available. Subscription provider/product groups below 20 are
-also omitted; overall verified subscription totals remain available.
+20 attributed installations are suppressed by SQL and independently by the
+API. Spend-only campaign rows still appear so accounting input is never
+silently hidden. Subscription provider/product groups below 20 are also
+omitted. Overall authoritative transition totals remain visible, while every
+transition day/provider/plan segment requires 20 distinct subscriptions.
+
+An active-subscriber bypass is a closed outcome only for an exact
+`route_resolved` event whose stored `actor_type` is `authenticated` and
+whose allowlisted properties say `destination=app`,
+`auth_state=authenticated`, and `subscription_state=active`. A bearer token
+or anonymous event cannot create this outcome. Reporting never joins analytics
+installations or subscription transitions to shared Auth users.
+
+The dashboard labels all-spend divided by authoritative paid transitions as
+**blended authoritative CAC**. Campaign-level source-qualified costs remain
+directional client-event metrics and are labeled separately; without a
+privacy-approved install-referrer bridge, they must not be presented as
+authoritative source-qualified CAC.
 
 ## Campaign spend input
 

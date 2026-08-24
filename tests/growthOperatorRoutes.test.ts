@@ -27,6 +27,48 @@ function adversarialPrivacySentinels() {
   ];
 }
 
+function orderedReportBlocks() {
+  return {
+    ordered_funnel: [],
+    diagnostic_totals: {
+      source_of_truth: 'independent_client_events',
+      funnel: [],
+      daily: [],
+      cohorts: [],
+      campaigns: [],
+      authoritative_subscriptions: {
+        verified_starts: 0,
+        active_now: 0,
+        auto_renew_off_now: 0,
+        ended_updates: 0,
+        by_provider_product: [],
+        source_of_truth: 'verified_store_subscriptions',
+      },
+      webhook_health: { received: 0, processed: 0, pending: 0, by_provider: [] },
+    },
+    release_cohorts: [],
+    authoritative_transitions: {
+      trial_started: 0,
+      paid_started: 0,
+      by_day: [],
+      by_provider_plan: [],
+      source_of_truth: 'subscription_marketing_transitions',
+    },
+  };
+}
+
+function mockSummaryClient(report: Record<string, unknown>) {
+  const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+  const limit = vi.fn().mockResolvedValue({ data: [], error: null });
+  const lt = vi.fn(() => ({ limit }));
+  const gte = vi.fn(() => ({ lt }));
+  const eq = vi.fn(() => ({ gte }));
+  const select = vi.fn(() => ({ gte, eq }));
+  const from = vi.fn(() => ({ select }));
+  mocks.createServiceClient.mockReturnValue({ rpc, from });
+  return { rpc, from };
+}
+
 describe('growth operator routes', () => {
   beforeEach(() => {
     vi.stubEnv('VELLA_OPERATOR_API_KEY', OPERATOR_KEY);
@@ -39,6 +81,7 @@ describe('growth operator routes', () => {
 
   it('returns the aggregate report through the service-only RPC', async () => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [],
       daily: [],
@@ -141,11 +184,229 @@ describe('growth operator routes', () => {
     expect(from).toHaveBeenCalledTimes(17);
   });
 
+  it('projects ordered truth and independently enforces every 20-unit privacy threshold', async () => {
+    const privacySentinels = adversarialPrivacySentinels();
+    const adversarialDimension = privacySentinels.join('|');
+    const report = {
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [{ event_name: 'first_open', unique_installs: 21, event_count: 22 }],
+      daily: [],
+      cohorts: [
+        { cohort_day: '2026-07-01', installs: 19 },
+        { cohort_day: '2026-07-02', installs: 20 },
+      ],
+      campaigns: [
+        {
+          source: 'google', campaign: 'android_first_launch', spend_cents: 1900, currency: 'BRL',
+          attributed_installs: 19, attribution_suppressed: false,
+          landing_views: 19, store_cta_clicks: 19, first_opens: 19,
+          trial_starts: 4, paid_starts: 1, cost_per_first_open_cents: 100,
+          cost_per_trial_cents: 475, cost_per_paid_start_cents: 1900,
+        },
+        {
+          source: 'google', campaign: 'android_launch_br', spend_cents: 2000, currency: 'BRL',
+          attributed_installs: 20, attribution_suppressed: false,
+          landing_views: 20, store_cta_clicks: 20, first_opens: 20,
+          trial_starts: 4, paid_starts: 1, cost_per_first_open_cents: 100,
+          cost_per_trial_cents: 500, cost_per_paid_start_cents: 2000,
+        },
+        {
+          source: 'google', campaign: 'br_android_202608_prayer_words', spend_cents: 2100, currency: 'BRL',
+          attributed_installs: 0, attribution_suppressed: false,
+          landing_views: 19, store_cta_clicks: 19, first_opens: 19,
+          trial_starts: 4, paid_starts: 1, cost_per_first_open_cents: 100,
+          cost_per_trial_cents: 525, cost_per_paid_start_cents: 2100,
+        },
+      ],
+      authoritative_subscriptions: {
+        verified_starts: 1,
+        active_now: 1,
+        auto_renew_off_now: 0,
+        ended_updates: 0,
+        by_provider_product: [
+          { provider: 'apple', product_id: 'vella.premium.yearly', subscriptions: 19, active_now: 19 },
+          { provider: 'google', product_id: 'vella.premium.yearly', subscriptions: 20, active_now: 20 },
+        ],
+        source_of_truth: 'verified_store_subscriptions',
+      },
+      webhook_health: { received: 0, processed: 0, pending: 0, by_provider: [] },
+      privacy: {
+        raw_retention_days: 90,
+        minimum_breakdown_installs: 19,
+        small_cohorts_omitted: true,
+        small_campaign_metrics_suppressed: true,
+        small_subscription_product_groups_omitted: true,
+        contains_ip_or_raw_content: false,
+        contains_account_identifier: false,
+        client_subscription_events_are_authoritative: false,
+      },
+      ordered_funnel: [
+        { funnel_variant: 'legacy_v1', event_name: 'first_open', stage_order: 1, unique_installs: 21 },
+        { funnel_variant: 'legacy_v1', event_name: 'checkout_started', stage_order: 9, unique_installs: 1 },
+        { funnel_variant: 'compact_v2', event_name: 'paywall_viewed', stage_order: 6, unique_installs: 2 },
+        {
+          funnel_variant: adversarialDimension,
+          event_name: adversarialDimension,
+          stage_order: 99,
+          unique_installs: 99,
+        },
+      ],
+      diagnostic_totals: {
+        source_of_truth: 'independent_client_events',
+        funnel: [{ event_name: 'first_open', unique_installs: 21, event_count: 22 }],
+        daily: [], cohorts: [], campaigns: [],
+        authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+        webhook_health: {},
+      },
+      release_cohorts: [
+        {
+          app_version: '1.2.0', build_number: '20', runtime_version: '1.2',
+          funnel_variant: 'legacy_v1', event_name: 'checkout_started', stage_order: 9,
+          cohort_installations: 20, unique_installs: 1,
+        },
+        {
+          app_version: '1.2.0', build_number: '19', runtime_version: '1.2',
+          funnel_variant: 'legacy_v1', event_name: 'first_open', stage_order: 1,
+          cohort_installations: 19, unique_installs: 19,
+        },
+      ],
+      authoritative_transitions: {
+        trial_started: 0,
+        paid_started: 1,
+        by_day: [
+          { day: '2026-07-01', phase: 'trial', transitions: 19, distinct_subscriptions: 19 },
+          { day: '2026-07-02', phase: 'paid', transitions: 20, distinct_subscriptions: 20 },
+        ],
+        by_provider_plan: [
+          { provider: 'apple', plan: 'yearly', phase: 'paid', transitions: 19, distinct_subscriptions: 19 },
+          { provider: 'google', plan: 'yearly', phase: 'paid', transitions: 20, distinct_subscriptions: 20 },
+          {
+            provider: adversarialDimension, plan: adversarialDimension, phase: adversarialDimension,
+            transitions: 20, distinct_subscriptions: 20,
+          },
+        ],
+        source_of_truth: 'subscription_marketing_transitions',
+      },
+    };
+    mockSummaryClient(report);
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.ordered_funnel).toEqual([
+      { funnel_variant: 'legacy_v1', event_name: 'first_open', stage_order: 1, unique_installs: 21 },
+      { funnel_variant: 'legacy_v1', event_name: 'checkout_started', stage_order: 9, unique_installs: 1 },
+      { funnel_variant: 'compact_v2', event_name: 'paywall_viewed', stage_order: 6, unique_installs: 2 },
+    ]);
+    expect(body.data.diagnostic_totals.source_of_truth).toBe('independent_client_events');
+    expect(body.data.privacy.minimum_breakdown_installs).toBe(20);
+    expect(body.data.release_cohorts).toEqual([expect.objectContaining({
+      build_number: '20', cohort_installations: 20, unique_installs: 1,
+    })]);
+    expect(body.data.authoritative_transitions).toEqual({
+      trial_started: 0,
+      paid_started: 1,
+      by_day: [{
+        day: '2026-07-02', phase: 'paid', transitions: 20, distinct_subscriptions: 20,
+      }],
+      by_provider_plan: [
+        {
+          provider: 'google', plan: 'yearly', phase: 'paid',
+          transitions: 20, distinct_subscriptions: 20,
+        },
+        {
+          provider: 'unknown', plan: 'unknown', phase: 'unknown',
+          transitions: 20, distinct_subscriptions: 20,
+        },
+      ],
+      source_of_truth: 'subscription_marketing_transitions',
+    });
+    expect(body.data.cohorts).toEqual([expect.objectContaining({ cohort_day: '2026-07-02', installs: 20 })]);
+    expect(body.data.campaigns[0]).toMatchObject({
+      campaign: 'android_first_launch', attributed_installs: null, attribution_suppressed: true,
+      landing_views: null, paid_starts: null, cost_per_paid_start_cents: null,
+    });
+    expect(body.data.campaigns[1]).toMatchObject({ campaign: 'android_launch_br', attributed_installs: 20 });
+    expect(body.data.campaigns[2]).toMatchObject({
+      campaign: 'br_android_202608_prayer_words',
+      attributed_installs: 0,
+      attribution_suppressed: false,
+      landing_views: 0,
+      store_cta_clicks: 0,
+      first_opens: 0,
+      trial_starts: 0,
+      paid_starts: 0,
+      cost_per_first_open_cents: null,
+      cost_per_trial_cents: null,
+      cost_per_paid_start_cents: null,
+    });
+    expect(body.data.authoritative_subscriptions.by_provider_product).toEqual([
+      { provider: 'google', product_id: 'vella.premium.yearly', subscriptions: 20, active_now: 20 },
+    ]);
+    for (const sentinel of privacySentinels) {
+      expect(JSON.stringify(body)).not.toContain(sentinel);
+    }
+  });
+
+  it('fails closed when the required ordered summary blocks are unavailable', async () => {
+    const report = {
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const { from } = mockSummaryClient(report);
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(503);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('fails closed instead of zero-filling a malformed authoritative transition block', async () => {
+    const blocks = orderedReportBlocks() as Record<string, any>;
+    blocks.authoritative_transitions.by_provider_plan = 'malformed';
+    const report = {
+      ...blocks,
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const { from } = mockSummaryClient(report);
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(503);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('does not treat a regular authenticated bearer as an operator bypass', async () => {
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: { authorization: 'Bearer shared-auth-session' } },
+    ));
+
+    expect(response.status).toBe(401);
+    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+  });
+
   it('strictly projects the documented RPC shape and drops every adversarial nested value', async () => {
     const privacySentinels = adversarialPrivacySentinels();
     const adversarialValue = privacySentinels.join('|');
     const adversarialKey = privacySentinels[0];
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14, [adversarialKey]: adversarialValue },
       funnel: [
         { event_name: 'first_open', unique_installs: 3, event_count: 4 },
@@ -317,8 +578,9 @@ describe('growth operator routes', () => {
       subscription_paid_started: 0,
       meaningful_session_completed: 0,
     });
-    expect(body.data.cohorts[0]).toMatchObject({ cohort_day: '2026-07-01', installs: 20, d7_retained: 3 });
-    expect(body.data.cohorts[1]).toMatchObject({ cohort_day: 'unknown', installs: 0, d7_retained: 0 });
+    expect(body.data.cohorts).toEqual([
+      expect.objectContaining({ cohort_day: '2026-07-01', installs: 20, d7_retained: 3 }),
+    ]);
     expect(body.data.campaigns[0]).toMatchObject({
       source: 'google',
       campaign: 'android_launch_br',
@@ -346,10 +608,7 @@ describe('growth operator routes', () => {
       active_now: 3,
       auto_renew_off_now: 1,
       ended_updates: 2,
-      by_provider_product: [
-        { provider: 'apple', product_id: 'unknown', subscriptions: 2, active_now: 1 },
-        { provider: 'unknown', product_id: 'unknown', subscriptions: 0, active_now: 0 },
-      ],
+      by_provider_product: [],
       source_of_truth: 'verified_store_subscriptions',
     });
     expect(body.data.webhook_health).toEqual({
@@ -383,6 +642,7 @@ describe('growth operator routes', () => {
 
   it('counts only normalized lowercase 64-character hexadecimal fingerprints as distinct conflicts', async () => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [], daily: [], cohorts: [], campaigns: [],
       authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
@@ -522,6 +782,7 @@ describe('growth operator routes', () => {
 
   it('marks IAP audit values unavailable when a diagnostics query fails without leaking proof data', async () => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [], daily: [], cohorts: [], campaigns: [],
       authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
@@ -590,6 +851,7 @@ describe('growth operator routes', () => {
 
   it('maps every IAP breakdown dimension through closed privacy-safe buckets', async () => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [], daily: [], cohorts: [], campaigns: [],
       authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
@@ -687,6 +949,7 @@ describe('growth operator routes', () => {
 
   it('marks IAP aggregate counts as lower bounds at the 5,000-row query cap', async () => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [], daily: [], cohorts: [], campaigns: [],
       authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
@@ -738,6 +1001,7 @@ describe('growth operator routes', () => {
 
   it('maps every funnel and release dimension through closed privacy-safe buckets', async () => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [], daily: [], cohorts: [], campaigns: [],
       authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
@@ -950,24 +1214,7 @@ describe('growth operator routes', () => {
       { key: 'credentials:sign_up:email:succeeded', unique_installs: 1, event_count: 1 },
       { key: 'unknown:unknown:unknown:unknown', unique_installs: 1, event_count: 1 },
     ]));
-    expect(body.data.release_funnel).toEqual(expect.arrayContaining([
-      {
-        app_version: '1.2.0',
-        build_number: '23',
-        runtime_version: '1.2',
-        first_open: 1,
-        onboarding_started: 1,
-        onboarding_completed: 1,
-      },
-      {
-        app_version: 'unknown',
-        build_number: 'unknown',
-        runtime_version: 'unknown',
-        first_open: 1,
-        onboarding_started: 1,
-        onboarding_completed: 1,
-      },
-    ]));
+    expect(body.data.release_funnel).toEqual([]);
     expect(body.data.first_experience_diagnostics.releases).toEqual([{
       platform: 'android',
       build_number: 'unknown',
@@ -988,6 +1235,7 @@ describe('growth operator routes', () => {
 
   it('suppresses first-experience breakdowns below 20 installs and limits completions to the viewed cohort', async () => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [], daily: [], cohorts: [], campaigns: [],
       authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
@@ -1069,6 +1317,7 @@ describe('growth operator routes', () => {
 
   it('reports a null first-experience completion rate when no viewed cohort exists', async () => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [], daily: [], cohorts: [], campaigns: [],
       authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
@@ -1121,6 +1370,7 @@ describe('growth operator routes', () => {
 
   it('returns a coarse failure when a first-experience query is unavailable', async () => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [], daily: [], cohorts: [], campaigns: [],
       authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
@@ -1209,6 +1459,7 @@ describe('growth operator routes', () => {
     expectedFlags,
   }) => {
     const report = {
+      ...orderedReportBlocks(),
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
       funnel: [], daily: [], cohorts: [], campaigns: [],
       authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
