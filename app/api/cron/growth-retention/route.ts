@@ -19,6 +19,12 @@ function transitionPurgeRpcIsNotInstalled(error: { code?: string; message?: stri
     message.includes('schema cache');
 }
 
+function transitionTableIsNotInstalled(error: { code?: string; message?: string } | null) {
+  return error?.code === 'PGRST205' &&
+    error.message ===
+      "Could not find the table 'faith_harbor.subscription_marketing_transitions' in the schema cache";
+}
+
 export async function GET(req: Request) {
   if (!authorized(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -45,7 +51,15 @@ export async function GET(req: Request) {
         'purge_expired_subscription_marketing_transitions',
         { p_limit: 50_000 },
       );
-      if (transitionPurgeRpcIsNotInstalled(error)) break;
+      if (transitionPurgeRpcIsNotInstalled(error)) {
+        const { error: tableProbeError } = await supabase
+          .from('subscription_marketing_transitions')
+          .select('transition_id')
+          .limit(1);
+        if (transitionTableIsNotInstalled(tableProbeError)) break;
+        if (tableProbeError) throw new Error(tableProbeError.message);
+        throw new Error(error?.message ?? 'transition purge RPC unavailable');
+      }
       if (error) throw new Error(error.message);
       const batchDeleted = typeof data === 'number' ? data : Number(data ?? 0);
       if (!Number.isFinite(batchDeleted) || batchDeleted < 0) throw new Error('invalid purge result');

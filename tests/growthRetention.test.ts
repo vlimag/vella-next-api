@@ -16,6 +16,13 @@ function request(authorized = true) {
   });
 }
 
+function transitionTableProbe(error: { code: string; message: string } | null) {
+  const limit = vi.fn().mockResolvedValue({ data: error ? null : [], error });
+  const select = vi.fn(() => ({ limit }));
+  const from = vi.fn(() => ({ select }));
+  return { from, select, limit };
+}
+
 describe('growth retention cron', () => {
   beforeEach(() => {
     vi.stubEnv('CRON_SECRET', 'cron-test-secret');
@@ -84,7 +91,11 @@ describe('growth retention cron', () => {
             },
           }
     ));
-    mocks.createServiceClient.mockReturnValue({ rpc });
+    const probe = transitionTableProbe({
+      code: 'PGRST205',
+      message: "Could not find the table 'faith_harbor.subscription_marketing_transitions' in the schema cache",
+    });
+    mocks.createServiceClient.mockReturnValue({ rpc, from: probe.from });
 
     const response = await GET(request());
 
@@ -93,6 +104,58 @@ describe('growth retention cron', () => {
       deleted: 4,
       subscription_transitions_deleted: 0,
     });
+    expect(probe.from).toHaveBeenCalledWith('subscription_marketing_transitions');
+  });
+
+  it('fails when the transition table exists but its purge RPC is missing', async () => {
+    const rpc = vi.fn(async (name: string) => (
+      name === 'purge_expired_growth_analytics'
+        ? { data: 0, error: null }
+        : {
+            data: null,
+            error: {
+              code: 'PGRST202',
+              message: 'Could not find the function faith_harbor.purge_expired_subscription_marketing_transitions(p_limit) in the schema cache',
+            },
+          }
+    ));
+    const probe = transitionTableProbe(null);
+    mocks.createServiceClient.mockReturnValue({ rpc, from: probe.from });
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(500);
+    expect(probe.from).toHaveBeenCalledWith('subscription_marketing_transitions');
+  });
+
+  it.each([
+    [
+      'another missing table',
+      {
+        code: 'PGRST205',
+        message: "Could not find the table 'faith_harbor.another_table' in the schema cache",
+      },
+    ],
+    ['a permission failure', { code: '42501', message: 'permission denied' }],
+  ])('fails when the transition-table probe reports %s', async (_label, probeError) => {
+    const rpc = vi.fn(async (name: string) => (
+      name === 'purge_expired_growth_analytics'
+        ? { data: 0, error: null }
+        : {
+            data: null,
+            error: {
+              code: 'PGRST202',
+              message: 'Could not find the function faith_harbor.purge_expired_subscription_marketing_transitions(p_limit) in the schema cache',
+            },
+          }
+    ));
+    const probe = transitionTableProbe(probeError);
+    mocks.createServiceClient.mockReturnValue({ rpc, from: probe.from });
+
+    const response = await GET(request());
+
+    expect(response.status).toBe(500);
+    expect(probe.from).toHaveBeenCalledWith('subscription_marketing_transitions');
   });
 
   it('never hides a transition-purge permission failure', async () => {

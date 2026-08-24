@@ -1,3 +1,4 @@
+import { OfferDiscountType, OfferType } from '@apple/app-store-server-library';
 import type { VerifiedPurchase } from '@/lib/iap';
 import { verifyAppleTransactionJws } from '@/lib/appleNotifications';
 
@@ -118,7 +119,11 @@ export async function verifyAppleSignedTransaction(
     expiresAt: expiresMs ? new Date(expiresMs) : null,
     // Renewal state arrives authoritatively through App Store server notifications.
     autoRenew: !transaction.revocationDate,
-    billingPhase: Number(transaction.offerType) === 1 ? 'trial' : 'paid',
+    billingPhase:
+      transaction.offerType === OfferType.INTRODUCTORY_OFFER &&
+      transaction.offerDiscountType === OfferDiscountType.FREE_TRIAL
+        ? 'trial'
+        : 'paid',
     environment,
     raw: transaction,
   };

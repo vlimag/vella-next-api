@@ -1,9 +1,19 @@
 import { X509Certificate } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { OfferDiscountType, OfferType, Status } from '@apple/app-store-server-library';
+
+const appleVerificationMocks = vi.hoisted(() => ({
+  verifyAppleTransactionJws: vi.fn(),
+}));
+
+vi.mock('@/lib/appleNotifications', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/appleNotifications')>()),
+  verifyAppleTransactionJws: appleVerificationMocks.verifyAppleTransactionJws,
+}));
+
 import { APPLE_ROOT_CERTIFICATES } from '../lib/appleRootCertificates';
 import { deriveAppleSubscriptionUpdate } from '../lib/appleNotifications';
-import { verifyAppleReceipt } from '../lib/appStore';
+import { verifyAppleReceipt, verifyAppleSignedTransaction } from '../lib/appStore';
 import {
   subscriptionStateFromPlaySubscription,
   verifiedPurchaseFromPlaySubscription,
@@ -104,6 +114,42 @@ describe('store validation normalization', () => {
 
     expect(trial?.billingPhase).toBe('trial');
     expect(paidIntroductoryOffer?.billingPhase).toBe('paid');
+  });
+
+  it('derives a direct signed Apple trial only from an introductory free-trial discount', async () => {
+    appleVerificationMocks.verifyAppleTransactionJws
+      .mockResolvedValueOnce({
+        transaction: {
+          originalTransactionId: 'apple-direct-free-trial',
+          productId: 'vella.premium.yearly',
+          expiresDate: 2_000,
+          offerType: OfferType.INTRODUCTORY_OFFER,
+          offerDiscountType: OfferDiscountType.FREE_TRIAL,
+        },
+        environment: 'Sandbox',
+      })
+      .mockResolvedValueOnce({
+        transaction: {
+          originalTransactionId: 'apple-direct-paid-intro',
+          productId: 'vella.premium.yearly',
+          expiresDate: 2_000,
+          offerType: OfferType.INTRODUCTORY_OFFER,
+          offerDiscountType: OfferDiscountType.PAY_UP_FRONT,
+        },
+        environment: 'Sandbox',
+      });
+
+    const freeTrial = await verifyAppleSignedTransaction(
+      'signed-free-trial',
+      'vella.premium.yearly',
+    );
+    const paidIntro = await verifyAppleSignedTransaction(
+      'signed-paid-intro',
+      'vella.premium.yearly',
+    );
+
+    expect(freeTrial?.billingPhase).toBe('trial');
+    expect(paidIntro?.billingPhase).toBe('paid');
   });
 
   it('keeps Apple access updates phase-unknown when no verified transaction is present', () => {
