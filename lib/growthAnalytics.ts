@@ -49,6 +49,7 @@ const authModeSchema = z.enum(['sign_in', 'sign_up']);
 const authMethodSchema = z.enum(['email', 'google', 'apple']);
 const authStageSchema = z.enum(['credentials', 'provider', 'verification']);
 const authOutcomeSchema = z.enum(['started', 'verification_required', 'succeeded', 'failed', 'cancelled']);
+const funnelVariantSchema = z.enum(['legacy_v1', 'compact_v2']);
 
 const onboardingStepPropertiesSchema = properties({
   step_number: z.number().int().min(1).max(20),
@@ -79,6 +80,7 @@ const eventBase = z.object({
   app_version: safeVersionSchema,
   build_number: safeBuildSchema.optional(),
   runtime_version: safeVersionSchema.optional(),
+  funnel_variant: funnelVariantSchema.optional(),
   locale: localeSchema.optional(),
   session_id: uuidSchema.optional(),
 }).strict();
@@ -220,6 +222,12 @@ export const growthEventSchema = z.union([
     properties: properties({
       method: z.enum(['email', 'apple', 'google']),
     }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('vella_profile_initialized'),
+    properties: z.object({
+      provider_class: z.enum(['email', 'apple', 'google']),
+    }).strict(),
   }).strict(),
   eventBase.extend({
     event_name: z.literal('paywall_viewed'),

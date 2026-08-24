@@ -504,7 +504,7 @@ const firebaseCustomMarketingEvents = [
   'onboarding_complete',
   'first_experience_begin',
   'first_experience_complete',
-  'sign_up',
+  'vella_profile_initialized',
   'paywall_view',
   'plan_select',
   'begin_checkout',

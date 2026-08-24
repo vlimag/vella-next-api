@@ -74,6 +74,10 @@ describe('growth analytics ingestion', () => {
   });
 
   it('accepts the canonical mobile and website contracts', () => {
+    expect(growthEventSchema.safeParse(event({
+      funnel_variant: 'compact_v2',
+    })).success).toBe(true);
+    expect(growthEventSchema.safeParse(event()).success).toBe(true);
     for (const stepKey of ['language', 'goal', 'focus', 'minutes', 'rhythm', 'reminder_style', 'preview']) {
       expect(growthEventSchema.safeParse(event({
         event_name: 'onboarding_step',
@@ -178,6 +182,11 @@ describe('growth analytics ingestion', () => {
       properties: { method: 'apple' },
     })).success).toBe(true);
     expect(growthEventSchema.safeParse(event({
+      event_name: 'vella_profile_initialized',
+      funnel_variant: 'compact_v2',
+      properties: { provider_class: 'apple' },
+    })).success).toBe(true);
+    expect(growthEventSchema.safeParse(event({
       event_name: 'purchase_validation_result',
       properties: { result: 'verified_active', plan: 'yearly' },
     })).success).toBe(true);
@@ -204,6 +213,11 @@ describe('growth analytics ingestion', () => {
   });
 
   it('rejects arbitrary, nested, content-bearing, and invalid canonical properties', () => {
+    expect(growthEventSchema.safeParse(event({ funnel_variant: 'unknown_v3' })).success).toBe(false);
+    expect(growthEventSchema.safeParse(event({
+      event_name: 'vella_profile_initialized',
+      properties: { provider_class: 'google', user_id: USER_ID },
+    })).success).toBe(false);
     expect(growthEventSchema.safeParse(event({ properties: { prayer_text: 'private' } })).success).toBe(false);
     expect(growthEventSchema.safeParse(event({ properties: { content: { nested: true } } })).success).toBe(false);
     expect(growthEventSchema.safeParse(event({ properties: { referrer: 'https://example.com/private' } })).success).toBe(false);
@@ -454,11 +468,15 @@ describe('growth analytics ingestion', () => {
     expect(uiTelemetryMigration).not.toContain('validate constraint growth_analytics_properties_check');
     expect(uiTelemetryMigration).not.toMatch(/prayer_text|email_address|user_id|receipt|purchase_token/i);
 
-    const firstExperienceMigration = fs.readFileSync(path.resolve(
+    const profileMigrationName = fs.readdirSync(path.resolve(process.cwd(), '../supabase/migrations'))
+      .find((name) => name.endsWith('_vella_profile_initialization_v2.sql'));
+    expect(profileMigrationName).toBeDefined();
+    const profileMigration = fs.readFileSync(path.resolve(
       process.cwd(),
-      '../supabase/migrations/20260821005332_first_experience_growth_analytics_constraints.sql',
+      '../supabase/migrations',
+      profileMigrationName!,
     ), 'utf8');
-    const eventConstraint = firstExperienceMigration.match(
+    const eventConstraint = profileMigration.match(
       /growth_analytics_events_event_name_check check \(event_name in \(([\s\S]*?)\n  \)\) not valid;/,
     )?.[1] ?? '';
     const databaseEventNames = [...eventConstraint.matchAll(/'([^']+)'/g)]
@@ -469,20 +487,17 @@ describe('growth analytics ingestion', () => {
 
     expect([...databaseEventNames].sort()).toEqual([...apiEventNames].sort());
     expect(new Set(databaseEventNames).size).toBe(databaseEventNames.length);
-    expect(firstExperienceMigration).toContain('growth_event_properties_are_safe_v3');
-    expect(firstExperienceMigration).toMatch(
-      /growth_analytics_properties_check check \(\s*faith_harbor\.growth_event_properties_are_safe_v3\(event_name, properties\)\s*\) not valid;/,
+    expect(profileMigration).toContain('growth_event_properties_are_safe_v4');
+    expect(profileMigration).toMatch(
+      /growth_analytics_properties_check check \(\s*faith_harbor\.growth_event_properties_are_safe_v4\(event_name, properties\)\s*\) not valid;/,
     );
-    expect(firstExperienceMigration).toContain('from jsonb_object_keys(p_properties) property_key');
-    expect(firstExperienceMigration).toContain("'first-experience'");
-    expect(firstExperienceMigration).toContain("'subscription-verification'");
-    expect(firstExperienceMigration).toContain("'post_first_experience'");
-    expect(firstExperienceMigration).toContain("'14_days'");
-    expect(firstExperienceMigration).toContain("'other'");
-    expect(firstExperienceMigration).toContain("'settings'");
-    expect(firstExperienceMigration).toContain("'failed'");
-    expect(firstExperienceMigration).toContain(') not valid;');
-    expect(firstExperienceMigration).not.toMatch(/validate constraint growth_analytics_(?:properties|events_event_name)_check/);
-    expect(firstExperienceMigration).not.toMatch(/prayer_text|email_address|user_id|receipt|purchase_token/i);
+    expect(profileMigration).toContain('ensure_current_user_profile_v2()');
+    expect(profileMigration).toContain('returning profile.id');
+    expect(profileMigration).toContain('funnel_variant');
+    expect(profileMigration).toContain("'vella_profile_initialized'");
+    expect(profileMigration).toContain("'account_created'");
+    expect(profileMigration).toContain("incoming ->> 'funnel_variant'");
+    expect(profileMigration).toContain(') not valid;');
+    expect(profileMigration).not.toMatch(/validate constraint growth_analytics_(?:properties|events_event_name)_check/);
   });
 });
