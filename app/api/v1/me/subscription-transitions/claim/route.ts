@@ -7,7 +7,8 @@ function noStore(response: Response) {
   return response;
 }
 
-export async function POST(_request: Request) {
+export async function POST(request: Request) {
+  void request;
   const auth = await getUserIdFromAuthHeader();
   if (!('userId' in auth)) return noStore(fail(auth.error, 401));
 
