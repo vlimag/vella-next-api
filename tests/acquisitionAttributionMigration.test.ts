@@ -11,6 +11,15 @@ function loadMigration() {
   return fs.readFileSync(path.join(migrationsPath, names[0]!), 'utf8');
 }
 
+function loadAclCorrectionMigration() {
+  const migrationsPath = path.resolve(process.cwd(), '../supabase/migrations');
+  const names = fs.readdirSync(migrationsPath)
+    .filter((name) => name.endsWith('_growth_install_attribution_acl_correction.sql'));
+  expect(names).toHaveLength(1);
+  if (names.length !== 1) return '';
+  return fs.readFileSync(path.join(migrationsPath, names[0]!), 'utf8');
+}
+
 describe('growth install attribution migration', () => {
   it('creates only closed service-role tables without secret or raw payload columns', () => {
     const sql = loadMigration();
@@ -128,5 +137,29 @@ describe('growth install attribution migration', () => {
     expect(sql).toMatch(
       /revoke all on function faith_harbor\.seal_growth_install_profile_link_deletion\(\)\s+from public, anon, authenticated, service_role/i,
     );
+  });
+});
+
+describe('hosted attribution ACL correction migration', () => {
+  it('removes hosted default DML and restores only the service operations the API uses', () => {
+    const sql = loadAclCorrectionMigration();
+    const normalized = sql.toLowerCase().replace(/\s+/g, ' ');
+
+    for (const relation of [
+      'growth_install_attribution',
+      'growth_install_profile_links',
+      'growth_attribution_ingest_limits',
+      'growth_attribution_global_state',
+      'growth_profile_attribution_truth',
+    ]) {
+      expect(normalized).toContain(`faith_harbor.${relation}`);
+    }
+    expect(normalized).toMatch(/revoke all on table [^;]+ from service_role;/);
+    expect(normalized).toMatch(/grant select on table [^;]+ to service_role;/);
+    expect(normalized).toContain(
+      'grant delete on table faith_harbor.growth_install_profile_links to service_role;',
+    );
+    expect(normalized).not.toMatch(/grant (?:insert|update|truncate|references|trigger|all)\b/);
+    expect(normalized).not.toMatch(/(?:revoke|grant)[^;]+on function\b/);
   });
 });

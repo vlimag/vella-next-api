@@ -3,14 +3,24 @@ set -euo pipefail
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 WORKSPACE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
+shopt -s nullglob
 ATTRIBUTION_MIGRATIONS=("$WORKSPACE_ROOT"/supabase/migrations/*_growth_install_attribution.sql)
+ACL_CORRECTION_MIGRATIONS=(
+  "$WORKSPACE_ROOT"/supabase/migrations/*_growth_install_attribution_acl_correction.sql
+)
+shopt -u nullglob
 
 if [[ ${#ATTRIBUTION_MIGRATIONS[@]} -ne 1 || ! -f "${ATTRIBUTION_MIGRATIONS[0]}" ]]; then
   echo "expected exactly one growth install attribution migration" >&2
   exit 2
 fi
+if [[ ${#ACL_CORRECTION_MIGRATIONS[@]} -gt 1 ]]; then
+  echo "expected at most one growth install attribution ACL correction migration" >&2
+  exit 2
+fi
 
 MIGRATION_PATH=${ATTRIBUTION_MIGRATIONS[0]}
+ACL_CORRECTION_PATH=${ACL_CORRECTION_MIGRATIONS[0]:-}
 ATTRIBUTION_PG_ROOT=$(mktemp -d)
 ATTRIBUTION_PG_DATA="$ATTRIBUTION_PG_ROOT/data"
 ATTRIBUTION_PG_PORT=${ATTRIBUTION_PG_PORT:-$((55500 + $$ % 400))}
@@ -55,9 +65,18 @@ create table faith_harbor.subscription_marketing_transitions (
   environment text not null,
   occurred_at timestamptz not null
 );
+
+-- Hosted Supabase grants service_role full table privileges through default
+-- privileges. Reproduce that production behavior so a plain GRANT SELECT in
+-- the feature migration cannot make the least-privilege test pass by accident.
+alter default privileges in schema faith_harbor
+grant all on tables to service_role;
 SQL
 
 attribution_psql -1 -f "$MIGRATION_PATH" >/dev/null
+if [[ -n "$ACL_CORRECTION_PATH" ]]; then
+  attribution_psql -1 -f "$ACL_CORRECTION_PATH" >/dev/null
+fi
 
 attribution_psql >/dev/null <<'SQL'
 create function faith_harbor.test_record_android(
@@ -949,7 +968,10 @@ begin
   if has_table_privilege('anon', 'faith_harbor.growth_profile_attribution_truth', 'select')
      or has_table_privilege('authenticated', 'faith_harbor.growth_profile_attribution_truth', 'select')
      or has_table_privilege('public', 'faith_harbor.growth_profile_attribution_truth', 'select')
-     or not has_table_privilege('service_role', 'faith_harbor.growth_profile_attribution_truth', 'select') then
+     or not has_table_privilege('service_role', 'faith_harbor.growth_profile_attribution_truth', 'select')
+     or has_table_privilege(
+       'service_role', 'faith_harbor.growth_profile_attribution_truth', 'insert,update,delete'
+     ) then
     raise exception 'view ACL is not service-only';
   end if;
 
