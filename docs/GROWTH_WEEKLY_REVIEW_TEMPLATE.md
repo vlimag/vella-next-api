@@ -7,15 +7,31 @@ Review week: `YYYY-MM-DD` to `YYYY-MM-DD`
 - Decision: `hold | continue | scale | fix funnel | stop test`
 - One-sentence reason:
 - Owner and next review date:
+- Campaign state confirmed: `paused | ended` (never activate from this review alone)
 
 ## Spend and acquisition
 
-| Source | Campaign / creator | Spend (BRL) | Store visits | Installs | CPI | Verified trials | Trial CPA |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| | | | | | | | |
+| Attribution label | Source | Campaign / creator | Spend (BRL) | Diagnostic installs | Production transitions | Mature paid | Mature source-qualified CAC |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| `source-qualified | platform-blended | not attributable` | | | | | | | |
 
-Do not compare an immature 14-day trial cohort with a mature cohort without
-labeling the difference.
+Use the labels exactly. `source-qualified` requires one server-validated
+eligible install association. `platform-blended` is authoritative store truth
+without a unique eligible source. `not attributable` is spend/client diagnostic
+data without a reportable server join and never means organic. If attribution
+loading is unavailable or incomplete, stop the source analysis instead of
+relabeling rows.
+
+Every source/platform/campaign/subscription breakdown needs at least 20
+production transitions. Do not show or copy exact sub-threshold values. A paid
+cohort must be at least 16 full days old before a campaign CAC is shown. Compare
+that CAC with the provisional R$60 ceiling, but do not call it D30 retained CAC
+and do not treat passing the ceiling as permission to spend.
+
+Confirm the spend-ledger audit is complete before reading CAC. A missing mature
+ledger row is unavailable data, not R$0; only an explicit zero-cent ledger row
+is zero spend. For an open current-day report, maturity is measured no later
+than the current instant, never tomorrow's report boundary.
 
 ## Product funnel
 
@@ -32,11 +48,18 @@ labeling the difference.
 
 ## Mature subscription cohorts
 
-Only include cohorts at least 18–21 days old for trial conversion decisions.
+Only include cohorts at least 16 full days old for the first trial-conversion
+decision. Keep D30 retained-paid CAC as the later business north star.
 
-| Trial cohort | Trials | Converted paid | Conversion | Refunds | Early cancellations | Paid CAC |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| | | | | | | |
+| Attribution label | Trial cohort | Production trials | Converted paid | Conversion | Refunds | Early cancellations | Mature paid CAC | R$60 ceiling |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| | | | | | | | | `within | above | unavailable` |
+
+Hold conversion conclusions while fewer than 20 verified trial starts have
+matured for 16 full days. Scale only after two consecutive cohorts of at least
+50 paid installs each meet every product, retention, refund, entitlement, and
+CAC guardrail; any eventual Android increase is capped at 20% once per seven-day
+review and still requires a separate go/no-go decision.
 
 ## Creative learning
 
@@ -82,3 +105,16 @@ content-safety failures.
 Confirm that no report, export, campaign, or audience contains prayer text,
 prayer themes, Scripture searches, private notes, onboarding spiritual answers,
 posts, identity fields, push/purchase tokens, or inferred religious attributes.
+
+## Historical spend reconciliation note
+
+Keep the prior Google Ads record separate from any future R$60/day test:
+
+- account `712-460-9192`, campaign `24120421103`;
+- 2026-08-09 through 2026-08-21, Ended / inactive, R$46/day;
+- UI total R$594.09;
+- displayed rounded daily rows total R$594.08.
+
+Record the one-cent discrepancy as display/export rounding. Do not invent,
+distribute, or import the cent, and do not claim a future campaign ID. All paid
+campaigns remain paused or ended until an explicit launch approval.

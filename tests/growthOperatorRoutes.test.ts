@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { isValidElement } from 'react';
 
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
@@ -10,6 +11,7 @@ vi.mock('@/lib/supabase', () => ({
 
 import { GET as getSummary } from '@/app/api/v1/operator/growth/summary/route';
 import { POST as saveSpend } from '@/app/api/v1/operator/growth/spend/route';
+import * as growthDashboardModule from '@/components/operator/GrowthDashboard';
 
 const OPERATOR_KEY = 'growth-operator-test-key'.padEnd(48, 'x');
 
@@ -25,6 +27,16 @@ function adversarialPrivacySentinels() {
     ['receipt', 'r'.repeat(48)].join('_'),
     'f'.repeat(64),
   ];
+}
+
+function renderedText(value: unknown): string {
+  if (value === null || value === undefined || typeof value === 'boolean') return '';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (Array.isArray(value)) return value.map(renderedText).join(' ');
+  if (isValidElement(value)) {
+    return renderedText((value.props as { children?: unknown }).children);
+  }
+  return '';
 }
 
 function orderedReportBlocks() {
@@ -62,10 +74,138 @@ function orderedReportBlocks() {
   };
 }
 
+function mockGrowthRpcs(
+  report: Record<string, unknown>,
+  attributionRows: Record<string, unknown>[] = [],
+  attributionError: Record<string, unknown> | null = null,
+) {
+  const attributionBuilder: {
+    order: ReturnType<typeof vi.fn>;
+    range: ReturnType<typeof vi.fn>;
+  } = {
+    order: vi.fn(),
+    range: vi.fn(),
+  };
+  attributionBuilder.order.mockImplementation(() => attributionBuilder);
+  attributionBuilder.range.mockImplementation((from: number, to: number) => Promise.resolve({
+    data: attributionRows.slice(from, to + 1),
+    error: attributionError,
+    count: attributionError ? null : attributionRows.length,
+  }));
+  const rpc = vi.fn((name: string) => {
+    if (name === 'growth_subscription_attribution_truth') return attributionBuilder;
+    return Promise.resolve({ data: report, error: null });
+  });
+  return { rpc, attributionBuilder };
+}
+
+function subscriptionAttributionRows(
+  count: number,
+  overrides: Record<string, unknown>,
+  idOffset = 0,
+) {
+  return Array.from({ length: count }, (_, index) => ({
+    transition_id: `70000000-0000-4000-8000-${String(idOffset + index).padStart(12, '0')}`,
+    attribution_scope: 'source_qualified',
+    subscription_provider: 'google',
+    plan: 'yearly',
+    phase: 'paid',
+    occurred_at: '2026-07-05T12:00:00.000Z',
+    platform: 'android',
+    attribution_provider: 'play_install_referrer',
+    source: 'google',
+    medium: 'cpc',
+    campaign: 'vella_br_android_202608_prayerdaily',
+    creative_code: null,
+    org_id: null,
+    campaign_id: null,
+    ad_group_id: null,
+    keyword_id: null,
+    ad_id: null,
+    supply_placement: null,
+    conversion_type: null,
+    ...overrides,
+  }));
+}
+
+type MockTableQueryResult = {
+  data: unknown;
+  error: unknown;
+  count?: number | null;
+};
+
+function mockTableQueries(
+  resolve: (table: string, eventName: string) => MockTableQueryResult = () => ({
+    data: [],
+    error: null,
+  }),
+) {
+  const buildersByTable = new Map<string, Array<Record<string, ReturnType<typeof vi.fn>>>>();
+  const from = vi.fn((table: string) => {
+    let eventName = '';
+    const builder: Record<string, ReturnType<typeof vi.fn>> = {};
+    const result = () => resolve(table, eventName);
+
+    builder.select = vi.fn(() => builder);
+    builder.eq = vi.fn((column: string, value: string) => {
+      if (column === 'event_name') eventName = value;
+      return builder;
+    });
+    builder.gte = vi.fn(() => builder);
+    builder.lt = vi.fn(() => builder);
+    builder.order = vi.fn(() => builder);
+    builder.limit = vi.fn(async (maximum?: number) => {
+      const resolved = result();
+      return {
+        data: Array.isArray(resolved.data) && typeof maximum === 'number'
+          ? resolved.data.slice(0, maximum)
+          : resolved.data,
+        error: resolved.error,
+      };
+    });
+    builder.range = vi.fn(async (fromIndex: number, toIndex: number) => {
+      const resolved = result();
+      return {
+        data: Array.isArray(resolved.data)
+          ? resolved.data.slice(fromIndex, toIndex + 1)
+          : resolved.data,
+        error: resolved.error,
+        count: resolved.count === undefined
+          ? Array.isArray(resolved.data) ? resolved.data.length : null
+          : resolved.count,
+      };
+    });
+
+    const tableBuilders = buildersByTable.get(table) ?? [];
+    tableBuilders.push(builder);
+    buildersByTable.set(table, tableBuilders);
+    return builder;
+  });
+
+  return { from, buildersByTable };
+}
+
+function pagedQuery(limit: ReturnType<typeof vi.fn>) {
+  const builder: Record<string, ReturnType<typeof vi.fn>> = {};
+  builder.limit = limit;
+  builder.order = vi.fn(() => builder);
+  builder.range = vi.fn(async (fromIndex: number, toIndex: number) => {
+    const resolved = await limit() as { data: unknown; error: unknown };
+    return {
+      ...resolved,
+      data: Array.isArray(resolved.data)
+        ? resolved.data.slice(fromIndex, toIndex + 1)
+        : resolved.data,
+      count: Array.isArray(resolved.data) ? resolved.data.length : null,
+    };
+  });
+  return builder;
+}
+
 function mockSummaryClient(report: Record<string, unknown>) {
-  const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+  const { rpc } = mockGrowthRpcs(report);
   const limit = vi.fn().mockResolvedValue({ data: [], error: null });
-  const lt = vi.fn(() => ({ limit }));
+  const lt = vi.fn(() => pagedQuery(limit));
   const gte = vi.fn(() => ({ lt }));
   const eq = vi.fn(() => ({ gte }));
   const select = vi.fn(() => ({ gte, eq }));
@@ -117,9 +257,9 @@ describe('growth operator routes', () => {
         small_transition_segments_omitted: true,
       },
     };
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const limit = vi.fn().mockResolvedValue({ data: [], error: null });
-    const lt = vi.fn(() => ({ limit }));
+    const lt = vi.fn(() => pagedQuery(limit));
     const gte = vi.fn(() => ({ lt }));
     const eq = vi.fn(() => ({ gte }));
     const select = vi.fn(() => ({ gte, eq }));
@@ -135,6 +275,19 @@ describe('growth operator routes', () => {
     expect(response.headers.get('cache-control')).toBe('no-store');
     await expect(response.json()).resolves.toEqual({ data: {
       ...report,
+      attribution_economics: {
+        audit_available: true,
+        spend_audit_available: true,
+        row_limit_reached: false,
+        spend_row_limit_reached: false,
+        minimum_breakdown_transitions: 20,
+        mature_after_days: 16,
+        provisional_cac_ceiling_cents: 6000,
+        source_qualified: [],
+        platform_blended: [],
+        campaign_economics: [],
+        not_attributable_campaigns: [],
+      },
       onboarding_steps: [],
       onboarding_step_results: [],
       onboarding_diagnostics: {
@@ -191,7 +344,7 @@ describe('growth operator routes', () => {
       p_to: '2026-07-31',
       p_cohort_days: 14,
     });
-    expect(from).toHaveBeenCalledTimes(17);
+    expect(from).toHaveBeenCalledTimes(18);
   });
 
   it('projects ordered truth and independently enforces every 20-unit privacy threshold', async () => {
@@ -385,6 +538,629 @@ describe('growth operator routes', () => {
     for (const sentinel of privacySentinels) {
       expect(JSON.stringify(body)).not.toContain(sentinel);
     }
+  });
+
+  it('separates source-qualified, platform-blended, and not-attributable economics with mature CAC gates', async () => {
+    const report = {
+      ...orderedReportBlocks(),
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [],
+      daily: [],
+      cohorts: [],
+      campaigns: [
+        {
+          source: 'google',
+          campaign: 'vella_br_android_202608_prayerdaily',
+          spend_cents: 120000,
+          currency: 'BRL',
+          attributed_installs: 20,
+          attribution_suppressed: false,
+          landing_views: 30,
+          store_cta_clicks: 24,
+          first_opens: 20,
+          trial_starts: 8,
+          paid_starts: 4,
+          cost_per_first_open_cents: 6000,
+          cost_per_trial_cents: 15000,
+          cost_per_paid_start_cents: 30000,
+        },
+        {
+          source: 'google',
+          campaign: 'android_first_launch',
+          spend_cents: 59409,
+          currency: 'BRL',
+          attributed_installs: 0,
+          attribution_suppressed: false,
+          landing_views: 0,
+          store_cta_clicks: 0,
+          first_opens: 0,
+          trial_starts: 0,
+          paid_starts: 0,
+          cost_per_first_open_cents: null,
+          cost_per_trial_cents: null,
+          cost_per_paid_start_cents: null,
+        },
+      ],
+      authoritative_subscriptions: {
+        verified_starts: 0,
+        active_now: 0,
+        auto_renew_off_now: 0,
+        ended_updates: 0,
+        by_provider_product: [],
+        source_of_truth: 'verified_store_subscriptions',
+      },
+      webhook_health: { received: 0, processed: 0, pending: 0, by_provider: [] },
+      privacy: {
+        raw_retention_days: 90,
+        minimum_breakdown_installs: 20,
+        small_cohorts_omitted: true,
+        small_campaign_metrics_suppressed: true,
+        small_subscription_product_groups_omitted: true,
+        contains_ip_or_raw_content: false,
+        contains_account_identifier: false,
+        client_subscription_events_are_authoritative: false,
+      },
+    };
+    const sourceQualifiedMature = subscriptionAttributionRows(20, {}, 0);
+    const sourceQualifiedRecent = subscriptionAttributionRows(20, {
+      occurred_at: '2026-07-25T12:00:00.000Z',
+    }, 100);
+    const platformBlended = subscriptionAttributionRows(20, {
+      attribution_scope: 'platform_blended',
+      subscription_provider: 'apple',
+      plan: 'monthly',
+      platform: null,
+      attribution_provider: null,
+      source: null,
+      medium: null,
+      campaign: null,
+      campaign_id: null,
+    }, 200);
+    const appleSourceQualified = subscriptionAttributionRows(20, {
+      subscription_provider: 'apple',
+      plan: 'monthly',
+      platform: 'ios',
+      attribution_provider: 'apple_ads',
+      source: null,
+      medium: null,
+      campaign: null,
+      campaign_id: 42,
+    }, 300);
+    const suppressedGoogleTrialSource = subscriptionAttributionRows(19, {
+      phase: 'trial',
+    }, 350);
+    const invalidProviderPlatformMatch = subscriptionAttributionRows(1, {
+      subscription_provider: 'apple',
+      plan: 'monthly',
+      platform: 'android',
+      attribution_provider: 'apple_ads',
+      source: null,
+      medium: null,
+      campaign: null,
+      campaign_id: 42,
+    }, 400);
+    const { rpc, attributionBuilder } = mockGrowthRpcs(report, [
+      ...sourceQualifiedMature,
+      ...sourceQualifiedRecent,
+      ...platformBlended,
+      ...appleSourceQualified,
+      ...suppressedGoogleTrialSource,
+      ...invalidProviderPlatformMatch,
+    ]);
+    const matureSpendRows = [
+      {
+        spend_date: '2026-07-01', source: 'google',
+        campaign: 'vella_br_android_202608_prayerdaily', currency: 'BRL', spend_cents: 60000,
+      },
+      {
+        spend_date: '2026-07-02', source: 'google',
+        campaign: 'vella_br_android_202608_prayerdaily', currency: 'BRL', spend_cents: 60000,
+      },
+      {
+        spend_date: '2026-07-10', source: 'google',
+        campaign: 'android_first_launch', currency: 'BRL', spend_cents: 59409,
+      },
+    ];
+    const from = vi.fn((table: string) => {
+      const limit = vi.fn().mockResolvedValue({
+        data: table === 'growth_campaign_spend_daily' ? matureSpendRows : [],
+        error: null,
+      });
+      const lt = vi.fn(() => pagedQuery(limit));
+      const gte = vi.fn(() => ({ lt }));
+      const eq = vi.fn(() => ({ gte }));
+      const select = vi.fn(() => ({ gte, eq }));
+      return { select };
+    });
+    mocks.createServiceClient.mockReturnValue({ rpc, from });
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.campaigns[0].campaign).toBe('vella_br_android_202608_prayerdaily');
+    expect(body.data.attribution_economics).toEqual({
+      audit_available: true,
+      spend_audit_available: true,
+      row_limit_reached: false,
+      spend_row_limit_reached: false,
+      minimum_breakdown_transitions: 20,
+      mature_after_days: 16,
+      provisional_cac_ceiling_cents: 6000,
+      source_qualified: [
+        {
+          attribution_label: 'source-qualified',
+          subscription_provider: 'google',
+          plan: 'yearly',
+          phase: 'paid',
+          platform: 'android',
+          attribution_provider: 'play_install_referrer',
+          source: 'google',
+          medium: 'cpc',
+          campaign: 'vella_br_android_202608_prayerdaily',
+          apple_campaign_id: null,
+          transitions: 40,
+          mature_transitions: 20,
+          maturity_suppressed: false,
+        },
+        {
+          attribution_label: 'source-qualified',
+          subscription_provider: 'apple',
+          plan: 'monthly',
+          phase: 'paid',
+          platform: 'ios',
+          attribution_provider: 'apple_ads',
+          source: null,
+          medium: null,
+          campaign: null,
+          apple_campaign_id: 42,
+          transitions: 20,
+          mature_transitions: 20,
+          maturity_suppressed: false,
+        },
+      ],
+      platform_blended: [{
+        attribution_label: 'platform-blended',
+        subscription_provider: 'apple',
+        plan: 'monthly',
+        phase: 'paid',
+        transitions: 21,
+        mature_transitions: 21,
+        maturity_suppressed: false,
+      }],
+      campaign_economics: [{
+        attribution_label: 'source-qualified',
+        source: 'google',
+        campaign: 'vella_br_android_202608_prayerdaily',
+        paid_transitions: 40,
+        mature_paid_transitions: 20,
+        maturity_suppressed: false,
+        mature_spend_cents: 120000,
+        currency: 'BRL',
+        mature_paid_cac_cents: 6000,
+        provisional_cac_ceiling_cents: 6000,
+        within_provisional_cac_ceiling: true,
+        diagnostic_attributed_installs: 20,
+        diagnostic_first_opens: 20,
+        diagnostic_trial_starts: 8,
+        diagnostic_paid_starts: 4,
+      }],
+      not_attributable_campaigns: [{
+        attribution_label: 'not attributable',
+        source: 'google',
+        campaign: 'android_first_launch',
+        spend_cents: 59409,
+        currency: 'BRL',
+        attributed_installs: 0,
+        first_opens: 0,
+        trial_starts: 0,
+        paid_starts: 0,
+      }],
+    });
+    expect(rpc).toHaveBeenCalledWith('growth_subscription_attribution_truth', {
+      p_from: '2026-07-01T00:00:00.000Z',
+      p_to: '2026-08-01T00:00:00.000Z',
+    }, { count: 'exact' });
+    expect(attributionBuilder.order).toHaveBeenNthCalledWith(1, 'occurred_at', { ascending: true });
+    expect(attributionBuilder.order).toHaveBeenNthCalledWith(2, 'transition_id', { ascending: true });
+    expect(attributionBuilder.range).toHaveBeenCalledWith(0, 999);
+  });
+
+  it('pages the complete spend ledger with an exact count and stable ordering', async () => {
+    const report = {
+      ...orderedReportBlocks(),
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const spendRows = Array.from({ length: 1001 }, (_, index) => ({
+      spend_date: '2026-07-01',
+      source: 'google',
+      campaign: `ledger_${String(index).padStart(4, '0')}`,
+      currency: 'BRL',
+      spend_cents: 1,
+    }));
+    const { rpc } = mockGrowthRpcs(report);
+    const { from, buildersByTable } = mockTableQueries((table) => ({
+      data: table === 'growth_campaign_spend_daily' ? spendRows : [],
+      error: null,
+    }));
+    mocks.createServiceClient.mockReturnValue({ rpc, from });
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.attribution_economics.spend_audit_available).toBe(true);
+    const spendBuilders = buildersByTable.get('growth_campaign_spend_daily') ?? [];
+    expect(spendBuilders).toHaveLength(2);
+    expect(spendBuilders[0].select).toHaveBeenCalledWith(
+      'spend_date,source,campaign,currency,spend_cents',
+      { count: 'exact' },
+    );
+    for (const spendBuilder of spendBuilders) {
+      expect(spendBuilder.order).toHaveBeenNthCalledWith(1, 'spend_date', { ascending: true });
+      expect(spendBuilder.order).toHaveBeenNthCalledWith(2, 'source', { ascending: true });
+      expect(spendBuilder.order).toHaveBeenNthCalledWith(3, 'campaign', { ascending: true });
+      expect(spendBuilder.order).toHaveBeenNthCalledWith(4, 'currency', { ascending: true });
+    }
+    expect(spendBuilders[0].range).toHaveBeenCalledWith(0, 999);
+    expect(spendBuilders[1].range).toHaveBeenCalledWith(1000, 1999);
+  });
+
+  it.each([
+    {
+      caseName: 'missing matching mature spend rows',
+      spendRows: [] as Record<string, unknown>[],
+      expectedSpend: null,
+      expectedCac: null,
+      expectedWithinCeiling: null,
+    },
+    {
+      caseName: 'an explicit zero-cent mature spend row',
+      spendRows: [{
+        spend_date: '2026-07-01',
+        source: 'google',
+        campaign: 'vella_br_android_202608_prayerdaily',
+        currency: 'BRL',
+        spend_cents: 0,
+      }],
+      expectedSpend: 0,
+      expectedCac: 0,
+      expectedWithinCeiling: true,
+    },
+  ])('does not invent spend or discard zero for $caseName', async ({
+    spendRows,
+    expectedSpend,
+    expectedCac,
+    expectedWithinCeiling,
+  }) => {
+    const report = {
+      ...orderedReportBlocks(),
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const { rpc } = mockGrowthRpcs(report, subscriptionAttributionRows(20, {}, 450));
+    const { from } = mockTableQueries((table) => ({
+      data: table === 'growth_campaign_spend_daily' ? spendRows : [],
+      error: null,
+    }));
+    mocks.createServiceClient.mockReturnValue({ rpc, from });
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.attribution_economics.campaign_economics).toEqual([
+      expect.objectContaining({
+        mature_paid_transitions: 20,
+        mature_spend_cents: expectedSpend,
+        mature_paid_cac_cents: expectedCac,
+        within_provisional_cac_ceiling: expectedWithinCeiling,
+      }),
+    ]);
+  });
+
+  it('uses no later than now for the exact 16-full-day maturity boundary', async () => {
+    const report = {
+      ...orderedReportBlocks(),
+      window: { from: '2026-08-01', to: '2026-08-25', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const exactlyMature = subscriptionAttributionRows(20, {
+      occurred_at: '2026-08-09T12:00:00.000Z',
+    }, 500);
+    const oneMillisecondTooRecent = subscriptionAttributionRows(1, {
+      occurred_at: '2026-08-09T12:00:00.001Z',
+    }, 550);
+    const { rpc } = mockGrowthRpcs(report, [...exactlyMature, ...oneMillisecondTooRecent]);
+    const { from } = mockTableQueries();
+    mocks.createServiceClient.mockReturnValue({ rpc, from });
+    const dateNow = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-25T12:00:00.000Z'));
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-08-01&to=2026-08-25',
+      { headers: headers() },
+    ));
+
+    dateNow.mockRestore();
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.attribution_economics.source_qualified).toEqual([
+      expect.objectContaining({
+        transitions: 21,
+        mature_transitions: 20,
+        maturity_suppressed: false,
+      }),
+    ]);
+  });
+
+  it('fails attribution reporting closed when service-only truth is unavailable', async () => {
+    const report = {
+      ...orderedReportBlocks(),
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const privacySentinels = adversarialPrivacySentinels();
+    const hiddenError = privacySentinels.join('|');
+    const { rpc } = mockGrowthRpcs(report, [], { code: hiddenError, message: hiddenError });
+    const limit = vi.fn().mockResolvedValue({ data: [], error: null });
+    const lt = vi.fn(() => pagedQuery(limit));
+    const gte = vi.fn(() => ({ lt }));
+    const eq = vi.fn(() => ({ gte }));
+    const select = vi.fn(() => ({ gte, eq }));
+    const from = vi.fn(() => ({ select }));
+    mocks.createServiceClient.mockReturnValue({ rpc, from });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.attribution_economics).toMatchObject({
+      audit_available: false,
+      source_qualified: [],
+      platform_blended: [],
+      campaign_economics: [],
+      not_attributable_campaigns: [],
+    });
+    expect(consoleError).toHaveBeenCalledWith('[operator.growth] attribution_truth_unavailable', {
+      rpcQueryFailed: true,
+      rowLimitReached: false,
+      malformedResult: false,
+    });
+    const serializedResponse = JSON.stringify(body);
+    const serializedLogs = JSON.stringify(consoleError.mock.calls);
+    for (const sentinel of privacySentinels) {
+      expect(serializedResponse).not.toContain(sentinel);
+      expect(serializedLogs).not.toContain(sentinel);
+    }
+    consoleError.mockRestore();
+  });
+
+  it.each([
+    {
+      caseName: 'a malformed production transition row',
+      rows: subscriptionAttributionRows(1, { phase: 'renewal' }, 500),
+    },
+    {
+      caseName: 'a duplicated production transition ID',
+      rows: (() => {
+        const [row] = subscriptionAttributionRows(1, {}, 600);
+        return [row, { ...row }];
+      })(),
+    },
+  ])('fails attribution reporting closed for $caseName', async ({ rows }) => {
+    const report = {
+      ...orderedReportBlocks(),
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const { rpc } = mockGrowthRpcs(report, rows);
+    const limit = vi.fn().mockResolvedValue({ data: [], error: null });
+    const lt = vi.fn(() => pagedQuery(limit));
+    const gte = vi.fn(() => ({ lt }));
+    const eq = vi.fn(() => ({ gte }));
+    const select = vi.fn(() => ({ gte, eq }));
+    const from = vi.fn(() => ({ select }));
+    mocks.createServiceClient.mockReturnValue({ rpc, from });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.attribution_economics).toMatchObject({
+      audit_available: false,
+      source_qualified: [],
+      platform_blended: [],
+      campaign_economics: [],
+      not_attributable_campaigns: [],
+    });
+    expect(consoleError).toHaveBeenCalledWith('[operator.growth] attribution_truth_unavailable', {
+      rpcQueryFailed: false,
+      rowLimitReached: false,
+      malformedResult: true,
+    });
+    consoleError.mockRestore();
+  });
+
+  it('disables CAC instead of zero-filling a malformed spend-ledger result', async () => {
+    const report = {
+      ...orderedReportBlocks(),
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const { rpc } = mockGrowthRpcs(report);
+    const from = vi.fn((table: string) => {
+      const limit = vi.fn().mockResolvedValue({
+        data: table === 'growth_campaign_spend_daily'
+          ? [{
+              spend_date: 'not-a-date',
+              source: 'google',
+              campaign: 'vella_br_android_202608_prayerdaily',
+              currency: 'BRL',
+              spend_cents: 4600,
+            }]
+          : [],
+        error: null,
+      });
+      const lt = vi.fn(() => pagedQuery(limit));
+      const gte = vi.fn(() => ({ lt }));
+      const eq = vi.fn(() => ({ gte }));
+      const select = vi.fn(() => ({ gte, eq }));
+      return { select };
+    });
+    mocks.createServiceClient.mockReturnValue({ rpc, from });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.attribution_economics).toMatchObject({
+      audit_available: true,
+      spend_audit_available: false,
+      campaign_economics: [],
+    });
+    expect(consoleError).toHaveBeenCalledWith('[operator.growth] attribution_spend_unavailable', {
+      queryFailed: false,
+      rowLimitReached: false,
+      malformedResult: true,
+    });
+    consoleError.mockRestore();
+  });
+
+  it('renders truthful attribution labels, maturity suppression, and the provisional CAC ceiling', () => {
+    const panel = (growthDashboardModule as Record<string, unknown>).AttributionEconomicsPanel;
+    expect(typeof panel).toBe('function');
+    const html = renderedText((panel as (props: Record<string, unknown>) => unknown)({
+      economics: {
+        audit_available: true,
+        spend_audit_available: true,
+        row_limit_reached: false,
+        spend_row_limit_reached: false,
+        minimum_breakdown_transitions: 20,
+        mature_after_days: 16,
+        provisional_cac_ceiling_cents: 6000,
+        source_qualified: [],
+        platform_blended: [{
+          attribution_label: 'platform-blended',
+          subscription_provider: 'apple',
+          plan: 'monthly',
+          phase: 'paid',
+          transitions: 20,
+          mature_transitions: null,
+          maturity_suppressed: true,
+        }],
+        campaign_economics: [{
+          attribution_label: 'source-qualified',
+          source: 'google',
+          campaign: 'vella_br_android_202608_prayerdaily',
+          paid_transitions: 20,
+          mature_paid_transitions: null,
+          maturity_suppressed: true,
+          mature_spend_cents: 4600,
+          currency: 'BRL',
+          mature_paid_cac_cents: null,
+          provisional_cac_ceiling_cents: 6000,
+          within_provisional_cac_ceiling: null,
+          diagnostic_attributed_installs: 20,
+          diagnostic_first_opens: 20,
+          diagnostic_trial_starts: 2,
+          diagnostic_paid_starts: 1,
+        }],
+        not_attributable_campaigns: [{
+          attribution_label: 'not attributable',
+          source: 'google',
+          campaign: 'android_first_launch',
+          spend_cents: 59409,
+          currency: 'BRL',
+          attributed_installs: 0,
+          first_opens: 0,
+          trial_starts: 0,
+          paid_starts: 0,
+        }],
+      },
+    })).replace(/\s+/g, ' ').trim();
+
+    expect(html).toContain('source-qualified');
+    expect(html).toContain('platform-blended');
+    expect(html).toContain('not attributable');
+    expect(html).toContain('16 full days');
+    expect(html).toContain('R$60');
+    expect(html).toContain('Immature / suppressed');
+    expect(html).toContain('never means organic');
+    expect(html).toContain('Paid campaigns remain paused');
+  });
+
+  it('renders missing mature spend separately from an immature cohort', () => {
+    const panel = (growthDashboardModule as Record<string, unknown>).AttributionEconomicsPanel;
+    expect(typeof panel).toBe('function');
+    const html = renderedText((panel as (props: Record<string, unknown>) => unknown)({
+      economics: {
+        audit_available: true,
+        spend_audit_available: true,
+        row_limit_reached: false,
+        spend_row_limit_reached: false,
+        minimum_breakdown_transitions: 20,
+        mature_after_days: 16,
+        provisional_cac_ceiling_cents: 6000,
+        source_qualified: [],
+        platform_blended: [],
+        campaign_economics: [{
+          attribution_label: 'source-qualified',
+          source: 'google',
+          campaign: 'vella_br_android_202608_prayerdaily',
+          paid_transitions: 20,
+          mature_paid_transitions: 20,
+          maturity_suppressed: false,
+          mature_spend_cents: null,
+          currency: 'BRL',
+          mature_paid_cac_cents: null,
+          provisional_cac_ceiling_cents: 6000,
+          within_provisional_cac_ceiling: null,
+          diagnostic_attributed_installs: 20,
+          diagnostic_first_opens: 20,
+          diagnostic_trial_starts: 2,
+          diagnostic_paid_starts: 1,
+        }],
+        not_attributable_campaigns: [],
+      },
+    })).replace(/\s+/g, ' ').trim();
+
+    expect(html).toContain('Missing ledger rows');
+    expect(html).toContain('CAC unavailable');
+    expect(html).toContain('Spend required');
   });
 
   it('fails closed when the required ordered summary blocks are unavailable', async () => {
@@ -636,9 +1412,9 @@ describe('growth operator routes', () => {
       [adversarialKey]: adversarialValue,
     };
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const limit = vi.fn().mockResolvedValue({ data: [], error: null });
-    const lt = vi.fn(() => ({ limit }));
+    const lt = vi.fn(() => pagedQuery(limit));
     const gte = vi.fn(() => ({ lt }));
     const eq = vi.fn(() => ({ gte }));
     const select = vi.fn(() => ({ gte, eq }));
@@ -832,7 +1608,7 @@ describe('growth operator routes', () => {
       },
     ];
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const from = vi.fn((table: string) => {
       let selectedColumns = '';
       const limit = vi.fn().mockImplementation(() => Promise.resolve({
@@ -841,7 +1617,7 @@ describe('growth operator routes', () => {
           : [],
         error: null,
       }));
-      const lt = vi.fn(() => ({ limit }));
+      const lt = vi.fn(() => pagedQuery(limit));
       const gte = vi.fn(() => ({ lt }));
       const eq = vi.fn(() => ({ gte }));
       const select = vi.fn((columns: string) => {
@@ -889,7 +1665,7 @@ describe('growth operator routes', () => {
     const privacySentinels = adversarialPrivacySentinels();
     const adversarialErrorValue = privacySentinels.join('|');
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const from = vi.fn((table: string) => {
       const limit = vi.fn().mockResolvedValue({
         data: null,
@@ -902,7 +1678,7 @@ describe('growth operator routes', () => {
             }
           : null,
       });
-      const lt = vi.fn(() => ({ limit }));
+      const lt = vi.fn(() => pagedQuery(limit));
       const gte = vi.fn(() => ({ lt }));
       const eq = vi.fn(() => ({ gte }));
       const select = vi.fn(() => ({ gte, eq }));
@@ -1002,10 +1778,10 @@ describe('growth operator routes', () => {
       ],
     };
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const from = vi.fn((table: string) => {
       const limit = vi.fn().mockResolvedValue({ data: rowsByTable[table] ?? [], error: null });
-      const lt = vi.fn(() => ({ limit }));
+      const lt = vi.fn(() => pagedQuery(limit));
       const gte = vi.fn(() => ({ lt }));
       const eq = vi.fn(() => ({ gte }));
       const select = vi.fn(() => ({ gte, eq }));
@@ -1061,13 +1837,13 @@ describe('growth operator routes', () => {
       retryable: false,
       proof_fingerprint: repeatedProof,
     }));
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const from = vi.fn((table: string) => {
       const limit = vi.fn().mockResolvedValue({
         data: table === 'failed_receipts' ? cappedFailureRows : [],
         error: null,
       });
-      const lt = vi.fn(() => ({ limit }));
+      const lt = vi.fn(() => pagedQuery(limit));
       const gte = vi.fn(() => ({ lt }));
       const eq = vi.fn(() => ({ gte }));
       const select = vi.fn(() => ({ gte, eq }));
@@ -1245,14 +2021,14 @@ describe('growth operator routes', () => {
       first_experience_error: [],
     };
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const from = vi.fn((table: string) => {
       let eventName = '';
       const limit = vi.fn().mockImplementation(() => Promise.resolve({
         data: table === 'growth_analytics_events' ? rowsByEvent[eventName] ?? [] : [],
         error: null,
       }));
-      const lt = vi.fn(() => ({ limit }));
+      const lt = vi.fn(() => pagedQuery(limit));
       const gte = vi.fn(() => ({ lt }));
       const eq = vi.fn((column: string, value: string) => {
         if (column === 'event_name') eventName = value;
@@ -1363,14 +2139,14 @@ describe('growth operator routes', () => {
         ...retainedCohort.map((installation_id) => ({ installation_id, ...release22, properties: {} })),
       ],
     };
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const from = vi.fn((table: string) => {
       let eventName = '';
       const limit = vi.fn().mockImplementation(() => Promise.resolve({
         data: table === 'growth_analytics_events' ? rowsByEvent[eventName] ?? [] : [],
         error: null,
       }));
-      const lt = vi.fn(() => ({ limit }));
+      const lt = vi.fn(() => pagedQuery(limit));
       const gte = vi.fn(() => ({ lt }));
       const eq = vi.fn((column: string, value: string) => {
         if (column === 'event_name') eventName = value;
@@ -1428,7 +2204,7 @@ describe('growth operator routes', () => {
       runtime_version: '1.1.0',
       properties: {},
     }));
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const from = vi.fn((table: string) => {
       let eventName = '';
       const limit = vi.fn().mockImplementation(() => Promise.resolve({
@@ -1437,7 +2213,7 @@ describe('growth operator routes', () => {
           : [],
         error: null,
       }));
-      const lt = vi.fn(() => ({ limit }));
+      const lt = vi.fn(() => pagedQuery(limit));
       const gte = vi.fn(() => ({ lt }));
       const eq = vi.fn((column: string, value: string) => {
         if (column === 'event_name') eventName = value;
@@ -1474,7 +2250,7 @@ describe('growth operator routes', () => {
       webhook_health: {},
       privacy: { minimum_breakdown_installs: 20, contains_account_identifier: false },
     };
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const from = vi.fn((table: string) => {
       let eventName = '';
       const limit = vi.fn().mockImplementation(() => Promise.resolve({
@@ -1483,7 +2259,7 @@ describe('growth operator routes', () => {
           ? { code: 'query_failed', message: 'do-not-return' }
           : null,
       }));
-      const lt = vi.fn(() => ({ limit }));
+      const lt = vi.fn(() => pagedQuery(limit));
       const gte = vi.fn(() => ({ lt }));
       const eq = vi.fn((column: string, value: string) => {
         if (column === 'event_name') eventName = value;
@@ -1566,7 +2342,7 @@ describe('growth operator routes', () => {
     const privacySentinels = adversarialPrivacySentinels();
     const adversarialErrorValue = privacySentinels.join('|');
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-    const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
+    const { rpc } = mockGrowthRpcs(report);
     const from = vi.fn((table: string) => {
       let eventName = '';
       const limit = vi.fn().mockImplementation(() => Promise.resolve({
@@ -1580,7 +2356,7 @@ describe('growth operator routes', () => {
             }
           : null,
       }));
-      const lt = vi.fn(() => ({ limit }));
+      const lt = vi.fn(() => pagedQuery(limit));
       const gte = vi.fn(() => ({ lt }));
       const eq = vi.fn((column: string, value: string) => {
         if (column === 'event_name') eventName = value;

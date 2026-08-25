@@ -215,6 +215,40 @@ counts become zero and invalid nullable campaign metrics become `null`.
   Daily and provider/plan/phase segments require at least 20 distinct
   subscriptions. Client `trial_started` or `subscription_paid_started`
   events never contribute to these totals;
+- `attribution_economics`: independently projected output from the service-only
+  `faith_harbor.growth_subscription_attribution_truth(timestamptz,
+  timestamptz)` RPC. The API pages the complete result in stable
+  occurrence/transition order, refuses partial results above its 10,000-row
+  safety bound, rejects duplicated or malformed transition rows, and
+  independently rechecks the
+  Apple↔iOS and Google↔Android/provider/campaign boundary before any source is
+  shown. Its labels have exact meanings:
+  - **source-qualified** — exactly one server-validated, non-ambiguous eligible
+    install is joined to a production subscription transition. Google requires
+    `google` / `cpc` / `vella_br_android_202608_prayerdaily`; Apple requires an
+    iOS `apple_ads` row with a positive campaign ID;
+  - **platform-blended** — the production transition is authoritative, but
+    zero or multiple eligible sources exist, the account-switch history is
+    ambiguous, or the provider/platform/source boundary cannot be proven;
+  - **not attributable** — spend or client-observed campaign diagnostics have
+    no reportable server-qualified transition join. This never means organic.
+    An unavailable or incomplete attribution RPC also never becomes organic or
+    unattributed; the attribution section fails closed instead;
+  Every source, platform, campaign, Apple campaign, plan, phase, and
+  subscription breakdown requires at least 20 production transitions. Mature
+  counts between one and 19 are returned as `null`, not as a revealing exact
+  value. Campaign CAC is emitted only when at least 20 exact-source paid
+  transitions are at least 16 full days old and the matching BRL spend days are
+  equally mature. The maturity clock uses the earlier of the report's exclusive
+  end and the current instant, so an open current-day window cannot age a
+  transition early. The spend ledger is independently paged in stable primary
+  key order with an exact count, a 5,000-row safety bound, and fail-closed
+  validation for partial, duplicated, or malformed rows. A missing matching
+  mature ledger row remains `null`; an explicit zero-cent row remains R$0 and
+  can produce R$0 CAC. An unavailable ledger prevents CAC rather than
+  manufacturing zero spend. The API displays the provisional R$60 (6,000-centavo)
+  mature-paid transition CAC guardrail; this is not retained-paid or D30 CAC
+  and never authorizes spend automatically;
 - `funnel`, `daily`, `cohorts`, `campaigns`,
   `authoritative_subscriptions`, and `webhook_health`: legacy top-level
   diagnostic keys retained unchanged for migration-first API compatibility;
@@ -272,15 +306,23 @@ An active-subscriber bypass is a closed outcome only for an exact
 whose allowlisted properties say `destination=app`,
 `auth_state=authenticated`, and `subscription_state=active`. A bearer token
 or anonymous event cannot create this outcome. Reporting never joins analytics
-installations or subscription transitions to shared Auth users.
+installations to `auth.users`, profile creation timestamps, or email. The
+attribution RPC may associate a transition only through the purpose-built,
+server-validated install↔Vella-profile link described above; the API never
+returns a transition, install, profile, or Auth identifier.
 
-The dashboard labels all spend in the selected period divided by authoritative
-paid transitions in that independently selected period as **Period spend per authoritative paid transition**. This is an observation only ratio, is not
-cohort-aligned CAC, and cannot authorize spend. Campaign-level source-qualified
-costs remain directional client-event metrics; without a privacy-approved
-install-referrer bridge, they must not be presented as authoritative
-source-qualified CAC. **Paid campaigns remain paused** until a separate,
-explicit decision uses reconciled store/ad-platform evidence.
+The dashboard retains **Period spend per authoritative paid transition** for
+historical compatibility: all spend in the selected period divided by all
+authoritative paid transitions in that independently selected period. It is an
+observation only ratio, is not cohort-aligned CAC, and cannot authorize spend.
+The separate attribution panel clearly separates client-observed install
+diagnostics from production-authoritative transitions. Only its mature,
+exact-source row may show source-qualified campaign CAC, subject to the 20-row
+privacy gate and 16-day maturity gate above. Google Ads modeled conversions
+remain an external platform-blended reconciliation input and never become
+first-party transition truth. **Paid campaigns remain paused** until a separate,
+explicit decision uses reconciled store/ad-platform evidence and every launch
+gate is green.
 
 Task 5 database rollout uses two project-scoped, transaction-safe artifacts.
 Use Supabase MCP `apply_migration` for the summary migration first. List remote
@@ -324,6 +366,26 @@ upserted by date/source/campaign/currency, so importing the same daily export is
 safe. Store money as integer centavos. The endpoint currently accepts BRL only;
 do currency conversion before import rather than combining unlike currencies.
 
+### Historical Google Ads spend audit — do not import by approximation
+
+The previous Brazil Android campaign is an immutable audit record, not the next
+R$60/day launch:
+
+- Google Ads account `712-460-9192`;
+- campaign `24120421103`;
+- ran 2026-08-09 through 2026-08-21 and is **Ended / inactive**;
+- configured budget was R$46/day;
+- the Google Ads UI campaign total is R$594.09;
+- the downloaded chart's displayed, individually rounded daily rows sum to
+  R$594.08.
+
+The one-cent difference is an export/display rounding discrepancy. Do not add,
+remove, distribute, or import a cent merely to force the two views to agree.
+No historical production ledger import is authorized until an exact
+source-of-record daily export is reconciled. The future R$60/day test remains
+paused and has no approved campaign ID; never reuse `24120421103` or invent a
+future ID.
+
 ## Privacy, access and retention
 
 - Tables use RLS, grant no access to `anon`/`authenticated`, and are reachable
@@ -361,7 +423,9 @@ do currency conversion before import rather than combining unlike currencies.
    event; verify `accepted/inserted/duplicates`.
 5. Confirm anonymous paywall/plan/trial-term intent is accepted, anonymous
    checkout is rejected, and invalid bearer tokens are never downgraded.
-6. Import a small BRL spend sample and inspect the operator summary.
+6. In local/test data, exercise an idempotent BRL spend sample and inspect all
+   three attribution labels. In production, import only an exact reconciled
+   daily source-of-record export; never approximate from a rounded chart.
 7. Verify the retention cron in Vercel logs. Do not add raw payload logging.
 
 No third-party tracker is required; producers send only the strict first-party

@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 
 type FunnelRow = {
   event_name: string;
@@ -74,6 +74,76 @@ type CampaignRow = {
   cost_per_paid_start_cents: number | null;
 };
 
+type SourceQualifiedAttributionRow = {
+  attribution_label: 'source-qualified';
+  subscription_provider: 'apple' | 'google';
+  plan: 'monthly' | 'yearly';
+  phase: 'trial' | 'paid';
+  platform: 'ios' | 'android';
+  attribution_provider: 'apple_ads' | 'play_install_referrer';
+  source: 'google' | null;
+  medium: 'cpc' | null;
+  campaign: string | null;
+  apple_campaign_id: number | null;
+  transitions: number;
+  mature_transitions: number | null;
+  maturity_suppressed: boolean;
+};
+
+type PlatformBlendedAttributionRow = {
+  attribution_label: 'platform-blended';
+  subscription_provider: 'apple' | 'google';
+  plan: 'monthly' | 'yearly';
+  phase: 'trial' | 'paid';
+  transitions: number;
+  mature_transitions: number | null;
+  maturity_suppressed: boolean;
+};
+
+type CampaignEconomicsRow = {
+  attribution_label: 'source-qualified';
+  source: 'google';
+  campaign: string;
+  paid_transitions: number;
+  mature_paid_transitions: number | null;
+  maturity_suppressed: boolean;
+  mature_spend_cents: number | null;
+  currency: 'BRL';
+  mature_paid_cac_cents: number | null;
+  provisional_cac_ceiling_cents: number;
+  within_provisional_cac_ceiling: boolean | null;
+  diagnostic_attributed_installs: number | null;
+  diagnostic_first_opens: number | null;
+  diagnostic_trial_starts: number | null;
+  diagnostic_paid_starts: number | null;
+};
+
+type NotAttributableCampaignRow = {
+  attribution_label: 'not attributable';
+  source: string;
+  campaign: string;
+  spend_cents: number;
+  currency: string;
+  attributed_installs: number | null;
+  first_opens: number | null;
+  trial_starts: number | null;
+  paid_starts: number | null;
+};
+
+type AttributionEconomics = {
+  audit_available: boolean;
+  spend_audit_available: boolean;
+  row_limit_reached: boolean;
+  spend_row_limit_reached: boolean;
+  minimum_breakdown_transitions: number;
+  mature_after_days: number;
+  provisional_cac_ceiling_cents: number;
+  source_qualified: SourceQualifiedAttributionRow[];
+  platform_blended: PlatformBlendedAttributionRow[];
+  campaign_economics: CampaignEconomicsRow[];
+  not_attributable_campaigns: NotAttributableCampaignRow[];
+};
+
 type OnboardingStepRow = {
   step_key: string;
   unique_installs: number;
@@ -94,6 +164,7 @@ type ReleaseFunnelRow = {
 
 type GrowthSummary = {
   window: { from: string; to: string; cohort_days: number };
+  attribution_economics: AttributionEconomics;
   ordered_funnel: OrderedFunnelRow[];
   diagnostic_totals: {
     source_of_truth: string;
@@ -256,6 +327,127 @@ function downloadJson(summary: GrowthSummary) {
   anchor.download = `vella-growth-${summary.window.from}-${summary.window.to}.json`;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+export function AttributionEconomicsPanel({ economics }: { economics: AttributionEconomics }) {
+  if (!economics.audit_available) {
+    return (
+      <section className="growth-panel">
+        <div className="growth-panel-heading">
+          <div><p className="growth-kicker">Attribution unavailable</p><h2>Do not infer a source</h2></div>
+          <p>The service-only attribution truth could not be loaded completely. Missing data is never classified as organic or unattributed.</p>
+        </div>
+        <div className="growth-alert" role="alert">Paid campaigns remain paused until attribution truth is complete.</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="growth-panel">
+      <div className="growth-panel-heading">
+        <div><p className="growth-kicker">Attribution-safe economics</p><h2>Source-qualified and platform-blended truth</h2></div>
+        <p>
+          Source-qualified means one server-validated install association. Platform-blended means no
+          unique eligible source. Not attributable means there is no reportable server join; it never
+          means organic.
+        </p>
+      </div>
+      <div className="growth-health-grid">
+        <div><span>Privacy threshold</span><strong>{economics.minimum_breakdown_transitions}</strong><small>Transitions per breakdown</small></div>
+        <div><span>Maturity gate</span><strong>{economics.mature_after_days} full days</strong><small>Before any campaign CAC appears</small></div>
+        <div><span>Provisional ceiling</span><strong>R$60</strong><small>{money(economics.provisional_cac_ceiling_cents)} mature-paid transition CAC guardrail</small></div>
+        <div className={economics.spend_audit_available ? '' : 'growth-warning'}><span>Spend ledger</span><strong>{economics.spend_audit_available ? 'Available' : 'Unavailable'}</strong><small>Integer BRL centavos only</small></div>
+      </div>
+
+      <div className="growth-panel-heading">
+        <div><p className="growth-kicker">source-qualified</p><h2>Exact first-party campaign joins</h2></div>
+        <p>Install signals remain diagnostic; subscription transitions are production-authoritative. CAC uses only reportable, mature paid transitions and mature spend days.</p>
+      </div>
+      <div className="growth-table-wrap">
+        <table className="growth-table">
+          <thead><tr><th>Source / campaign</th><th>Diagnostic installs / opens</th><th>Production paid</th><th>Mature paid</th><th>Mature spend</th><th>Mature CAC</th><th>Ceiling</th></tr></thead>
+          <tbody>
+            {economics.campaign_economics.length ? economics.campaign_economics.map((row) => (
+              <tr key={`${row.source}:${row.campaign}`}>
+                <td><strong>{row.source}</strong><small>{row.campaign}</small></td>
+                <td>{metric(row.diagnostic_attributed_installs)} / {metric(row.diagnostic_first_opens)}<small>Client diagnostic only</small></td>
+                <td>{row.paid_transitions.toLocaleString()}</td>
+                <td>{row.mature_paid_transitions === null ? 'Immature / suppressed' : row.mature_paid_transitions.toLocaleString()}</td>
+                <td>{!economics.spend_audit_available
+                  ? 'Unavailable'
+                  : row.mature_spend_cents === null
+                    ? 'Missing ledger rows'
+                    : money(row.mature_spend_cents, row.currency)}</td>
+                <td>{row.mature_paid_cac_cents !== null
+                  ? money(row.mature_paid_cac_cents, row.currency)
+                  : !economics.spend_audit_available || row.mature_spend_cents === null
+                    ? 'CAC unavailable'
+                    : 'Immature / suppressed'}</td>
+                <td>{row.within_provisional_cac_ceiling !== null
+                  ? row.within_provisional_cac_ceiling ? 'Within ceiling' : 'Above ceiling'
+                  : !economics.spend_audit_available || row.mature_spend_cents === null
+                    ? 'Spend required'
+                    : 'Await maturity'}</td>
+              </tr>
+            )) : <tr><td colSpan={7} className="growth-table-empty">No source-qualified campaign has reached the 20-transition reporting threshold.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {economics.source_qualified.length ? (
+        <div className="growth-table-wrap">
+          <table className="growth-table">
+            <thead><tr><th>Qualified source</th><th>Plan / phase</th><th>Production transitions</th><th>Mature transitions</th></tr></thead>
+            <tbody>{economics.source_qualified.map((row) => (
+              <tr key={`${row.subscription_provider}:${row.plan}:${row.phase}:${row.campaign ?? row.apple_campaign_id ?? ''}`}>
+                <td><strong>{row.campaign ?? `Apple campaign ${row.apple_campaign_id}`}</strong><small>{row.platform} · {row.attribution_provider}</small></td>
+                <td>{humanize(row.plan)} · {humanize(row.phase)}</td>
+                <td>{row.transitions.toLocaleString()}</td>
+                <td>{row.mature_transitions === null ? 'Immature / suppressed' : row.mature_transitions.toLocaleString()}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      ) : null}
+
+      <div className="growth-panel-heading">
+        <div><p className="growth-kicker">platform-blended</p><h2>Authoritative outcomes without a unique source</h2></div>
+        <p>Zero or multiple eligible installs, provider/platform mismatches, and permanently ambiguous account-switch history cannot claim campaign credit.</p>
+      </div>
+      <div className="growth-table-wrap">
+        <table className="growth-table">
+          <thead><tr><th>Store / plan</th><th>Phase</th><th>Production transitions</th><th>Mature transitions</th></tr></thead>
+          <tbody>{economics.platform_blended.length ? economics.platform_blended.map((row) => (
+            <tr key={`${row.subscription_provider}:${row.plan}:${row.phase}`}>
+              <td><strong>{humanize(row.subscription_provider)}</strong><small>{humanize(row.plan)}</small></td>
+              <td>{humanize(row.phase)}</td>
+              <td>{row.transitions.toLocaleString()}</td>
+              <td>{row.mature_transitions === null ? 'Immature / suppressed' : row.mature_transitions.toLocaleString()}</td>
+            </tr>
+          )) : <tr><td colSpan={4} className="growth-table-empty">No platform-blended segment has reached the 20-transition reporting threshold.</td></tr>}</tbody>
+        </table>
+      </div>
+
+      <div className="growth-panel-heading">
+        <div><p className="growth-kicker">not attributable</p><h2>Spend and client diagnostics without a reportable join</h2></div>
+        <p>These rows may support reconciliation, but they cannot claim subscriptions or CAC.</p>
+      </div>
+      <div className="growth-table-wrap">
+        <table className="growth-table">
+          <thead><tr><th>Source / campaign</th><th>Spend</th><th>Diagnostic installs</th><th>First opens</th><th>Client trials / paid</th></tr></thead>
+          <tbody>{economics.not_attributable_campaigns.length ? economics.not_attributable_campaigns.map((row) => (
+            <tr key={`${row.source}:${row.campaign}`}>
+              <td><strong>{row.source}</strong><small>{row.campaign}</small></td>
+              <td>{money(row.spend_cents, row.currency || 'BRL')}</td>
+              <td>{metric(row.attributed_installs)}</td>
+              <td>{metric(row.first_opens)}</td>
+              <td>{metric(row.trial_starts)} / {metric(row.paid_starts)}</td>
+            </tr>
+          )) : <tr><td colSpan={5} className="growth-table-empty">No non-attributable campaign diagnostics in this window.</td></tr>}</tbody>
+        </table>
+      </div>
+      <div className="growth-alert" role="status">Paid campaigns remain paused. The R$60 ceiling is a review guardrail, never an automatic authorization to spend.</div>
+    </section>
+  );
 }
 
 export function GrowthDashboard() {
@@ -624,32 +816,7 @@ export function GrowthDashboard() {
             ) : null}
           </section>
 
-          <section className="growth-panel">
-            <div className="growth-panel-heading">
-              <div><p className="growth-kicker">Source-qualified directional economics</p><h2>Campaign signal, separate from the period ratio</h2></div>
-              <p>Campaign costs use client-observed source events and are not authoritative CAC. Subscription transitions are intentionally not joined through shared Auth. The period spend per authoritative paid transition above is observation only and cannot authorize spend. Paid campaigns remain paused; use Google Ads/Play Console for source reconciliation.</p>
-            </div>
-            <div className="growth-table-wrap">
-              <table className="growth-table">
-                <thead><tr><th>Source / campaign</th><th>Spend</th><th>Landing</th><th>Store CTA</th><th>First opens</th><th>Client trials</th><th>Client paid</th><th>Directional cost / trial</th><th>Directional cost / paid</th></tr></thead>
-                <tbody>
-                  {summary.campaigns.length ? summary.campaigns.map((row) => (
-                    <tr key={`${row.source}:${row.campaign}`}>
-                      <td><strong>{row.source}</strong><small>{row.campaign}</small></td>
-                      <td>{money(row.spend_cents, row.currency || 'BRL')}</td>
-                      <td>{metric(row.landing_views)}</td>
-                      <td>{metric(row.store_cta_clicks)}</td>
-                      <td>{metric(row.first_opens)}</td>
-                      <td>{metric(row.trial_starts)}</td>
-                      <td>{metric(row.paid_starts)}</td>
-                      <td>{money(row.cost_per_trial_cents, row.currency || 'BRL')}</td>
-                      <td>{money(row.cost_per_paid_start_cents, row.currency || 'BRL')}</td>
-                    </tr>
-                  )) : <tr><td colSpan={9} className="growth-table-empty">No campaign data in this window.</td></tr>}
-                </tbody>
-              </table>
-            </div>
-          </section>
+          <AttributionEconomicsPanel economics={summary.attribution_economics} />
 
           <section className="growth-panel">
             <div className="growth-panel-heading"><div><p className="growth-kicker">Diagnostic mature cohorts</p><h2>Independent activation and retention totals</h2></div><p>These raw totals are not ordered conversions. Cohorts below 20 installs are suppressed by both SQL and the API.</p></div>

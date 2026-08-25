@@ -145,10 +145,22 @@ const CAMPAIGN_CODES = new Set([
   'android_first_launch',
   'android_launch_br',
   'br_android_202608_prayer_words',
+  'vella_br_android_202608_prayerdaily',
 ]);
 const STORE_PROVIDERS = new Set(['apple', 'google']);
 const SUBSCRIPTION_PLANS = new Set(['monthly', 'yearly']);
 const REPORT_CURRENCIES = new Set(['BRL']);
+const ATTRIBUTION_SCOPES = new Set(['source_qualified', 'platform_blended']);
+const ATTRIBUTION_PAGE_SIZE = 1000;
+const MAX_ATTRIBUTION_TRANSITIONS = 10_000;
+const SPEND_LEDGER_PAGE_SIZE = 1000;
+const MAX_SPEND_LEDGER_ROWS = 5000;
+const ATTRIBUTION_MATURITY_DAYS = 16;
+const PROVISIONAL_CAC_CEILING_CENTS = 6000;
+const APPROVED_GOOGLE_ATTRIBUTION_CAMPAIGN = 'vella_br_android_202608_prayerdaily';
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SPEND_SOURCE_PATTERN = /^[a-z0-9][a-z0-9._~-]{0,31}$/;
+const SPEND_CAMPAIGN_PATTERN = /^[a-z0-9][a-z0-9._~-]{0,63}$/;
 const SUBSCRIPTION_TRUTH_SOURCES = new Set(['verified_store_subscriptions']);
 const TRANSITION_TRUTH_SOURCES = new Set(['subscription_marketing_transitions']);
 const DIAGNOSTIC_TRUTH_SOURCES = new Set(['independent_client_events']);
@@ -569,6 +581,475 @@ function projectGrowthSummary(
   };
 }
 
+type AttributionLoadResult = {
+  rows: DiagnosticRow[];
+  rpcQueryFailed: boolean;
+  rowLimitReached: boolean;
+  malformedResult: boolean;
+};
+
+type SpendLedgerLoadResult = {
+  rows: DiagnosticRow[];
+  queryFailed: boolean;
+  rowLimitReached: boolean;
+  malformedResult: boolean;
+};
+
+type NormalizedAttributionTransition = {
+  transitionId: string;
+  attributionLabel: 'source-qualified' | 'platform-blended';
+  subscriptionProvider: 'apple' | 'google';
+  plan: 'monthly' | 'yearly';
+  phase: 'trial' | 'paid';
+  occurredAtMs: number;
+  platform: 'ios' | 'android' | null;
+  attributionProvider: 'apple_ads' | 'play_install_referrer' | null;
+  source: 'google' | null;
+  medium: 'cpc' | null;
+  campaign: typeof APPROVED_GOOGLE_ATTRIBUTION_CAMPAIGN | null;
+  appleCampaignId: number | null;
+};
+
+type ProjectedCampaign = ReturnType<typeof projectDiagnosticSummary>['campaigns'][number];
+
+async function loadSubscriptionAttributionTruth(
+  supabase: ReturnType<typeof createServiceClient>,
+  fromTimestamp: string,
+  toTimestamp: string,
+): Promise<AttributionLoadResult> {
+  const rows: DiagnosticRow[] = [];
+  let expectedCount: number | null = null;
+
+  for (let offset = 0; offset <= MAX_ATTRIBUTION_TRANSITIONS; offset += ATTRIBUTION_PAGE_SIZE) {
+    const result = await supabase
+      .rpc('growth_subscription_attribution_truth', {
+        p_from: fromTimestamp,
+        p_to: toTimestamp,
+      }, { count: 'exact' })
+      .order('occurred_at', { ascending: true })
+      .order('transition_id', { ascending: true })
+      .range(offset, offset + ATTRIBUTION_PAGE_SIZE - 1);
+
+    if (result.error) {
+      return { rows: [], rpcQueryFailed: true, rowLimitReached: false, malformedResult: false };
+    }
+    if (!Array.isArray(result.data) ||
+      !Number.isSafeInteger(result.count) || Number(result.count) < 0) {
+      return { rows: [], rpcQueryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+    if (expectedCount === null) {
+      expectedCount = Number(result.count);
+      if (expectedCount > MAX_ATTRIBUTION_TRANSITIONS) {
+        return { rows: [], rpcQueryFailed: false, rowLimitReached: true, malformedResult: false };
+      }
+    } else if (result.count !== expectedCount) {
+      return { rows: [], rpcQueryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+
+    const pageRows = diagnosticRows(result.data);
+    if (pageRows.length !== result.data.length) {
+      return { rows: [], rpcQueryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+    rows.push(...pageRows);
+    if (rows.length >= expectedCount) break;
+    if (pageRows.length === 0) {
+      return { rows: [], rpcQueryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+  }
+
+  if (expectedCount === null || rows.length !== expectedCount) {
+    return { rows: [], rpcQueryFailed: false, rowLimitReached: false, malformedResult: true };
+  }
+  const fromMs = Date.parse(fromTimestamp);
+  const toExclusiveMs = Date.parse(toTimestamp);
+  const transitionIds = new Set<string>();
+  for (const row of rows) {
+    const normalized = normalizeAttributionTransition(row, fromMs, toExclusiveMs);
+    if (normalized === null || transitionIds.has(normalized.transitionId)) {
+      return { rows: [], rpcQueryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+    transitionIds.add(normalized.transitionId);
+  }
+  return { rows, rpcQueryFailed: false, rowLimitReached: false, malformedResult: false };
+}
+
+async function loadSpendLedger(
+  supabase: ReturnType<typeof createServiceClient>,
+  fromDate: string,
+  toExclusiveDate: string,
+): Promise<SpendLedgerLoadResult> {
+  const rows: DiagnosticRow[] = [];
+  let expectedCount: number | null = null;
+
+  for (let offset = 0; offset <= MAX_SPEND_LEDGER_ROWS; offset += SPEND_LEDGER_PAGE_SIZE) {
+    const result = await supabase
+      .from('growth_campaign_spend_daily')
+      .select('spend_date,source,campaign,currency,spend_cents', { count: 'exact' })
+      .gte('spend_date', fromDate)
+      .lt('spend_date', toExclusiveDate)
+      .order('spend_date', { ascending: true })
+      .order('source', { ascending: true })
+      .order('campaign', { ascending: true })
+      .order('currency', { ascending: true })
+      .range(offset, offset + SPEND_LEDGER_PAGE_SIZE - 1);
+    if (result.error) {
+      return { rows: [], queryFailed: true, rowLimitReached: false, malformedResult: false };
+    }
+    if (!Array.isArray(result.data) ||
+      !Number.isSafeInteger(result.count) || Number(result.count) < 0) {
+      return { rows: [], queryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+    if (expectedCount === null) {
+      expectedCount = Number(result.count);
+      if (expectedCount > MAX_SPEND_LEDGER_ROWS) {
+        return { rows: [], queryFailed: false, rowLimitReached: true, malformedResult: false };
+      }
+    } else if (result.count !== expectedCount) {
+      return { rows: [], queryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+    const pageRows = diagnosticRows(result.data);
+    if (pageRows.length !== result.data.length) {
+      return { rows: [], queryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+    rows.push(...pageRows);
+    if (rows.length >= expectedCount) break;
+    if (pageRows.length === 0) {
+      return { rows: [], queryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+  }
+
+  if (expectedCount === null || rows.length !== expectedCount) {
+    return { rows: [], queryFailed: false, rowLimitReached: false, malformedResult: true };
+  }
+  const ledgerKeys = new Set<string>();
+  if (rows.some((row) => (
+    typeof row.spend_date !== 'string' || !dateSchema.safeParse(row.spend_date).success ||
+    row.spend_date < fromDate || row.spend_date >= toExclusiveDate ||
+    typeof row.source !== 'string' || !SPEND_SOURCE_PATTERN.test(row.source) ||
+    typeof row.campaign !== 'string' || !SPEND_CAMPAIGN_PATTERN.test(row.campaign) ||
+    row.currency !== 'BRL' || typeof row.spend_cents !== 'number' ||
+    !Number.isSafeInteger(row.spend_cents) || row.spend_cents < 0 ||
+    row.spend_cents > 1_000_000_000_000
+  ))) {
+    return { rows: [], queryFailed: false, rowLimitReached: false, malformedResult: true };
+  }
+  for (const row of rows) {
+    const key = `${row.spend_date}\u0000${row.source}\u0000${row.campaign}\u0000${row.currency}`;
+    if (ledgerKeys.has(key)) {
+      return { rows: [], queryFailed: false, rowLimitReached: false, malformedResult: true };
+    }
+    ledgerKeys.add(key);
+  }
+  return { rows, queryFailed: false, rowLimitReached: false, malformedResult: false };
+}
+
+function positiveSafeInteger(value: unknown) {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
+    ? value
+    : null;
+}
+
+function normalizeAttributionTransition(
+  row: DiagnosticRow,
+  fromMs: number,
+  toExclusiveMs: number,
+): NormalizedAttributionTransition | null {
+  if (typeof row.transition_id !== 'string' || !UUID_PATTERN.test(row.transition_id)) return null;
+  const scope = safeDimension(row.attribution_scope, ATTRIBUTION_SCOPES);
+  const subscriptionProvider = safeDimension(row.subscription_provider, STORE_PROVIDERS);
+  const plan = safeDimension(row.plan, SUBSCRIPTION_PLANS);
+  const phase = safeDimension(row.phase, IAP_BILLING_PHASES);
+  if (scope === PRIVACY_SAFE_UNKNOWN || subscriptionProvider === PRIVACY_SAFE_UNKNOWN ||
+    plan === PRIVACY_SAFE_UNKNOWN || phase === PRIVACY_SAFE_UNKNOWN ||
+    typeof row.occurred_at !== 'string') return null;
+  const occurredAtMs = Date.parse(row.occurred_at);
+  if (!Number.isFinite(occurredAtMs) || occurredAtMs < fromMs || occurredAtMs >= toExclusiveMs) {
+    return null;
+  }
+
+  const base = {
+    transitionId: row.transition_id,
+    subscriptionProvider: subscriptionProvider as 'apple' | 'google',
+    plan: plan as 'monthly' | 'yearly',
+    phase: phase as 'trial' | 'paid',
+    occurredAtMs,
+  };
+  const googleSourceQualified = scope === 'source_qualified' &&
+    subscriptionProvider === 'google' && row.platform === 'android' &&
+    row.attribution_provider === 'play_install_referrer' && row.source === 'google' &&
+    row.medium === 'cpc' && row.campaign === APPROVED_GOOGLE_ATTRIBUTION_CAMPAIGN;
+  const appleCampaignId = positiveSafeInteger(row.campaign_id);
+  const appleSourceQualified = scope === 'source_qualified' &&
+    subscriptionProvider === 'apple' && row.platform === 'ios' &&
+    row.attribution_provider === 'apple_ads' && appleCampaignId !== null;
+
+  if (googleSourceQualified) {
+    return {
+      ...base,
+      attributionLabel: 'source-qualified',
+      platform: 'android',
+      attributionProvider: 'play_install_referrer',
+      source: 'google',
+      medium: 'cpc',
+      campaign: APPROVED_GOOGLE_ATTRIBUTION_CAMPAIGN,
+      appleCampaignId: null,
+    };
+  }
+  if (appleSourceQualified) {
+    return {
+      ...base,
+      attributionLabel: 'source-qualified',
+      platform: 'ios',
+      attributionProvider: 'apple_ads',
+      source: null,
+      medium: null,
+      campaign: null,
+      appleCampaignId,
+    };
+  }
+  return {
+    ...base,
+    attributionLabel: 'platform-blended',
+    platform: null,
+    attributionProvider: null,
+    source: null,
+    medium: null,
+    campaign: null,
+    appleCampaignId: null,
+  };
+}
+
+function matureCount(count: number) {
+  if (count === 0) return 0;
+  return count >= MINIMUM_BREAKDOWN_INSTALLS ? count : null;
+}
+
+function projectAttributionEconomics(
+  attributionLoad: AttributionLoadResult,
+  spendLoad: SpendLedgerLoadResult,
+  campaigns: ProjectedCampaign[],
+  requestedWindow: { from: string; toExclusive: string },
+) {
+  const auditAvailable = !attributionLoad.rpcQueryFailed && !attributionLoad.rowLimitReached &&
+    !attributionLoad.malformedResult;
+  const spendAuditAvailable = !spendLoad.queryFailed && !spendLoad.rowLimitReached &&
+    !spendLoad.malformedResult;
+  const emptyReport = {
+    audit_available: auditAvailable,
+    spend_audit_available: spendAuditAvailable,
+    row_limit_reached: attributionLoad.rowLimitReached,
+    spend_row_limit_reached: spendLoad.rowLimitReached,
+    minimum_breakdown_transitions: MINIMUM_BREAKDOWN_INSTALLS,
+    mature_after_days: ATTRIBUTION_MATURITY_DAYS,
+    provisional_cac_ceiling_cents: PROVISIONAL_CAC_CEILING_CENTS,
+    source_qualified: [] as DiagnosticRow[],
+    platform_blended: [] as DiagnosticRow[],
+    campaign_economics: [] as DiagnosticRow[],
+    not_attributable_campaigns: [] as DiagnosticRow[],
+  };
+  if (!auditAvailable) return emptyReport;
+
+  const fromMs = Date.parse(`${requestedWindow.from}T00:00:00.000Z`);
+  const toExclusiveMs = Date.parse(requestedWindow.toExclusive);
+  const maturityAsOfMs = Math.min(toExclusiveMs, Date.now());
+  const maturityCutoffMs = maturityAsOfMs - ATTRIBUTION_MATURITY_DAYS * 24 * 60 * 60 * 1000;
+  const maturityCutoffDate = new Date(maturityCutoffMs).toISOString().slice(0, 10);
+  const deduplicated = new Map<string, NormalizedAttributionTransition>();
+  for (const rawRow of attributionLoad.rows) {
+    const row = normalizeAttributionTransition(rawRow, fromMs, toExclusiveMs);
+    if (row && !deduplicated.has(row.transitionId)) deduplicated.set(row.transitionId, row);
+  }
+  const transitions = [...deduplicated.values()];
+
+  const sourceGroups = new Map<string, {
+    dimensions: Omit<NormalizedAttributionTransition, 'transitionId' | 'occurredAtMs'>;
+    transitions: number;
+    matureTransitions: number;
+  }>();
+  const blendedGroups = new Map<string, {
+    subscriptionProvider: 'apple' | 'google';
+    plan: 'monthly' | 'yearly';
+    phase: 'trial' | 'paid';
+    transitions: number;
+    matureTransitions: number;
+  }>();
+
+  for (const row of transitions) {
+    if (row.attributionLabel === 'source-qualified') {
+      const key = [
+        row.subscriptionProvider, row.plan, row.phase, row.platform,
+        row.attributionProvider, row.source, row.medium, row.campaign, row.appleCampaignId,
+      ].join('\u0000');
+      const group = sourceGroups.get(key) ?? {
+        dimensions: {
+          attributionLabel: row.attributionLabel,
+          subscriptionProvider: row.subscriptionProvider,
+          plan: row.plan,
+          phase: row.phase,
+          platform: row.platform,
+          attributionProvider: row.attributionProvider,
+          source: row.source,
+          medium: row.medium,
+          campaign: row.campaign,
+          appleCampaignId: row.appleCampaignId,
+        },
+        transitions: 0,
+        matureTransitions: 0,
+      };
+      group.transitions += 1;
+      if (row.occurredAtMs <= maturityCutoffMs) group.matureTransitions += 1;
+      sourceGroups.set(key, group);
+      continue;
+    }
+    const key = [row.subscriptionProvider, row.plan, row.phase].join('\u0000');
+    const group = blendedGroups.get(key) ?? {
+      subscriptionProvider: row.subscriptionProvider,
+      plan: row.plan,
+      phase: row.phase,
+      transitions: 0,
+      matureTransitions: 0,
+    };
+    group.transitions += 1;
+    if (row.occurredAtMs <= maturityCutoffMs) group.matureTransitions += 1;
+    blendedGroups.set(key, group);
+  }
+
+  const sourceQualified = [...sourceGroups.values()]
+    .filter((group) => group.transitions >= MINIMUM_BREAKDOWN_INSTALLS)
+    .map((group) => ({
+      attribution_label: 'source-qualified',
+      subscription_provider: group.dimensions.subscriptionProvider,
+      plan: group.dimensions.plan,
+      phase: group.dimensions.phase,
+      platform: group.dimensions.platform,
+      attribution_provider: group.dimensions.attributionProvider,
+      source: group.dimensions.source,
+      medium: group.dimensions.medium,
+      campaign: group.dimensions.campaign,
+      apple_campaign_id: group.dimensions.appleCampaignId,
+      transitions: group.transitions,
+      mature_transitions: matureCount(group.matureTransitions),
+      maturity_suppressed: group.matureTransitions > 0 &&
+        group.matureTransitions < MINIMUM_BREAKDOWN_INSTALLS,
+    }))
+    .sort((a, b) => b.transitions - a.transitions ||
+      `${a.subscription_provider}:${a.campaign ?? a.apple_campaign_id ?? ''}`
+        .localeCompare(`${b.subscription_provider}:${b.campaign ?? b.apple_campaign_id ?? ''}`));
+  const platformBlended = [...blendedGroups.values()]
+    .filter((group) => group.transitions >= MINIMUM_BREAKDOWN_INSTALLS)
+    .map((group) => ({
+      attribution_label: 'platform-blended',
+      subscription_provider: group.subscriptionProvider,
+      plan: group.plan,
+      phase: group.phase,
+      transitions: group.transitions,
+      mature_transitions: matureCount(group.matureTransitions),
+      maturity_suppressed: group.matureTransitions > 0 &&
+        group.matureTransitions < MINIMUM_BREAKDOWN_INSTALLS,
+    }))
+    .sort((a, b) => b.transitions - a.transitions ||
+      `${a.subscription_provider}:${a.plan}:${a.phase}`
+        .localeCompare(`${b.subscription_provider}:${b.plan}:${b.phase}`));
+
+  const spendByCampaign = new Map<string, number>();
+  if (spendAuditAvailable) {
+    for (const row of spendLoad.rows) {
+      if (typeof row.spend_date !== 'string' || !dateSchema.safeParse(row.spend_date).success ||
+        row.spend_date < requestedWindow.from || row.spend_date >= maturityCutoffDate ||
+        row.currency !== 'BRL' || row.source !== 'google' ||
+        row.campaign !== APPROVED_GOOGLE_ATTRIBUTION_CAMPAIGN) continue;
+      const spendCents = safeNullableNonnegativeInteger(row.spend_cents);
+      if (spendCents === null) continue;
+      const key = `${row.source}\u0000${row.campaign}`;
+      const next = (spendByCampaign.get(key) ?? 0) + spendCents;
+      if (Number.isSafeInteger(next)) spendByCampaign.set(key, next);
+    }
+  }
+
+  const paidCampaignGroups = new Map<string, {
+    source: 'google';
+    campaign: typeof APPROVED_GOOGLE_ATTRIBUTION_CAMPAIGN;
+    transitions: number;
+    matureTransitions: number;
+  }>();
+  for (const row of transitions) {
+    if (row.attributionLabel !== 'source-qualified' || row.phase !== 'paid' ||
+      row.source !== 'google' || row.campaign !== APPROVED_GOOGLE_ATTRIBUTION_CAMPAIGN) continue;
+    const key = `${row.source}\u0000${row.campaign}`;
+    const group = paidCampaignGroups.get(key) ?? {
+      source: row.source,
+      campaign: row.campaign,
+      transitions: 0,
+      matureTransitions: 0,
+    };
+    group.transitions += 1;
+    if (row.occurredAtMs <= maturityCutoffMs) group.matureTransitions += 1;
+    paidCampaignGroups.set(key, group);
+  }
+  const campaignsByKey = new Map(campaigns.map((campaign) => [
+    `${campaign.source}\u0000${campaign.campaign}`,
+    campaign,
+  ]));
+  const campaignEconomics = [...paidCampaignGroups.entries()]
+    .filter(([, group]) => group.transitions >= MINIMUM_BREAKDOWN_INSTALLS)
+    .map(([key, group]) => {
+      const spendCents = spendAuditAvailable && spendByCampaign.has(key)
+        ? spendByCampaign.get(key) ?? null
+        : null;
+      const reportableMatureTransitions = matureCount(group.matureTransitions);
+      const cacCents = spendCents !== null &&
+        reportableMatureTransitions !== null && reportableMatureTransitions > 0
+        ? Math.round(spendCents / reportableMatureTransitions)
+        : null;
+      const campaign = campaignsByKey.get(key);
+      return {
+        attribution_label: 'source-qualified',
+        source: group.source,
+        campaign: group.campaign,
+        paid_transitions: group.transitions,
+        mature_paid_transitions: reportableMatureTransitions,
+        maturity_suppressed: group.matureTransitions > 0 &&
+          group.matureTransitions < MINIMUM_BREAKDOWN_INSTALLS,
+        mature_spend_cents: spendCents,
+        currency: 'BRL',
+        mature_paid_cac_cents: cacCents,
+        provisional_cac_ceiling_cents: PROVISIONAL_CAC_CEILING_CENTS,
+        within_provisional_cac_ceiling: cacCents === null
+          ? null
+          : cacCents <= PROVISIONAL_CAC_CEILING_CENTS,
+        diagnostic_attributed_installs: campaign?.attributed_installs ?? null,
+        diagnostic_first_opens: campaign?.first_opens ?? null,
+        diagnostic_trial_starts: campaign?.trial_starts ?? null,
+        diagnostic_paid_starts: campaign?.paid_starts ?? null,
+      };
+    })
+    .sort((a, b) => b.paid_transitions - a.paid_transitions || a.campaign.localeCompare(b.campaign));
+  const reportableCampaignKeys = new Set(sourceQualified.flatMap((row) => (
+    row.source && row.campaign ? [`${row.source}\u0000${row.campaign}`] : []
+  )));
+  const notAttributableCampaigns = campaigns
+    .filter((campaign) => !reportableCampaignKeys.has(`${campaign.source}\u0000${campaign.campaign}`))
+    .map((campaign) => ({
+      attribution_label: 'not attributable',
+      source: campaign.source,
+      campaign: campaign.campaign,
+      spend_cents: campaign.spend_cents,
+      currency: campaign.currency,
+      attributed_installs: campaign.attributed_installs,
+      first_opens: campaign.first_opens,
+      trial_starts: campaign.trial_starts,
+      paid_starts: campaign.paid_starts,
+    }));
+
+  return {
+    ...emptyReport,
+    source_qualified: sourceQualified,
+    platform_blended: platformBlended,
+    campaign_economics: campaignEconomics,
+    not_attributable_campaigns: notAttributableCampaigns,
+  };
+}
+
 function countBy(
   rows: DiagnosticRow[],
   dimensions: Array<{ column: string; allowed: ReadonlySet<string> }>,
@@ -824,6 +1305,8 @@ export async function GET(req: Request) {
     .lt('received_at', toExclusive.toISOString())
     .limit(5000);
   const [
+    attributionTruthResult,
+    spendLedgerResult,
     clientResult,
     failureResult,
     receiptResult,
@@ -842,6 +1325,8 @@ export async function GET(req: Request) {
     firstExperienceCompletedResult,
     firstExperienceErrorResult,
   ] = await Promise.all([
+    loadSubscriptionAttributionTruth(supabase, fromTimestamp, toExclusive.toISOString()),
+    loadSpendLedger(supabase, parsed.data.from, toExclusive.toISOString().slice(0, 10)),
     loadDiagnostics('iap_client_events', 'stage,outcome,error_code,platform'),
     loadDiagnostics('failed_receipts', 'error_code,source,platform,retryable,proof_fingerprint'),
     loadDiagnostics('in_app_purchase_receipts', 'platform,billing_phase'),
@@ -860,6 +1345,24 @@ export async function GET(req: Request) {
     loadGrowthEvent('first_experience_completed'),
     loadGrowthEvent('first_experience_error'),
   ]);
+  const attributionAuditAvailable = !attributionTruthResult.rpcQueryFailed &&
+    !attributionTruthResult.rowLimitReached && !attributionTruthResult.malformedResult;
+  if (!attributionAuditAvailable) {
+    console.error('[operator.growth] attribution_truth_unavailable', {
+      rpcQueryFailed: attributionTruthResult.rpcQueryFailed,
+      rowLimitReached: attributionTruthResult.rowLimitReached,
+      malformedResult: attributionTruthResult.malformedResult,
+    });
+  }
+  const spendAuditAvailable = !spendLedgerResult.queryFailed &&
+    !spendLedgerResult.rowLimitReached && !spendLedgerResult.malformedResult;
+  if (!spendAuditAvailable) {
+    console.error('[operator.growth] attribution_spend_unavailable', {
+      queryFailed: spendLedgerResult.queryFailed,
+      rowLimitReached: spendLedgerResult.rowLimitReached,
+      malformedResult: spendLedgerResult.malformedResult,
+    });
+  }
   const iapAuditAvailable = !clientResult.error && !failureResult.error && !receiptResult.error;
   const funnelAuditAvailable = !onboardingStepResult.error && !onboardingStepResultResult.error &&
     !onboardingInteractionResult.error && !onboardingErrorResult.error && !onboardingCompletedResult.error &&
@@ -910,11 +1413,19 @@ export async function GET(req: Request) {
   const firstExperienceErrorRows = (firstExperienceErrorResult.data ?? []) as unknown as DiagnosticRow[];
   const clientFailures = clientRows.filter((row) => !['started', 'succeeded'].includes(String(row.outcome)));
 
+  const projectedSummary = projectGrowthSummary(data, {
+    ...parsed.data,
+    cohort_days: parsed.data.cohort_days ?? 14,
+  });
+
   return ok({
-    ...projectGrowthSummary(data, {
-      ...parsed.data,
-      cohort_days: parsed.data.cohort_days ?? 14,
-    }),
+    ...projectedSummary,
+    attribution_economics: projectAttributionEconomics(
+      attributionTruthResult,
+      spendLedgerResult,
+      projectedSummary.campaigns,
+      { from: parsed.data.from, toExclusive: toExclusive.toISOString() },
+    ),
     onboarding_steps: onboardingStepBreakdown(onboardingStepRows),
     onboarding_step_results: propertyBreakdown(onboardingStepResultRows, [
       { column: 'step_key', allowed: ONBOARDING_STEP_KEYS },
