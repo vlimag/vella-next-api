@@ -50,6 +50,22 @@ const authMethodSchema = z.enum(['email', 'google', 'apple']);
 const authStageSchema = z.enum(['credentials', 'provider', 'verification']);
 const authOutcomeSchema = z.enum(['started', 'verification_required', 'succeeded', 'failed', 'cancelled']);
 const funnelVariantSchema = z.enum(['legacy_v1', 'compact_v2']);
+const firstExperienceResultSchema = z.enum(['viewed', 'continued', 'completed', 'backgrounded', 'error']);
+
+const legacyFirstExperienceStepSchema = z.object({
+  step_number: z.number().int().min(1).max(4),
+  total_steps: z.literal(4),
+  step_key: z.enum(['arrival', 'scripture', 'reflection', 'completion']),
+  result: firstExperienceResultSchema,
+}).strict();
+
+const compactFirstExperienceStepSchema = z.object({
+  variant: z.literal('compact_v2'),
+  step_number: z.number().int().min(1).max(2),
+  total_steps: z.literal(2),
+  step_key: z.enum(['moment', 'completion']),
+  result: firstExperienceResultSchema,
+}).strict();
 
 const onboardingStepPropertiesSchema = properties({
   step_number: z.number().int().min(1).max(20),
@@ -85,7 +101,7 @@ const eventBase = z.object({
   session_id: uuidSchema.optional(),
 }).strict();
 
-export const growthEventSchema = z.union([
+const growthEventUnionSchema = z.union([
   eventBase.extend({
     event_name: z.literal('landing_viewed'),
     properties: properties({}),
@@ -108,7 +124,7 @@ export const growthEventSchema = z.union([
   eventBase.extend({
     event_name: z.literal('route_resolved'),
     properties: properties({
-      destination: z.enum(['onboarding', 'first-experience', 'authentication', 'subscription-verification', 'paywall', 'app']),
+      destination: z.enum(['onboarding', 'first-experience', 'offer', 'authentication', 'subscription-verification', 'paywall', 'app']),
       onboarding_state: z.enum(['incomplete', 'complete']),
       auth_state: z.enum(['anonymous', 'authenticated']),
       subscription_state: z.enum(['unknown', 'inactive', 'active']),
@@ -118,18 +134,16 @@ export const growthEventSchema = z.union([
   eventBase.extend({
     event_name: z.literal('first_experience_viewed'),
     properties: z.object({
-      variant: z.literal('v1'),
+      variant: z.enum(['v1', 'compact_v2']),
       content_source: z.enum(['remote', 'fallback']),
     }).strict(),
   }).strict(),
   eventBase.extend({
     event_name: z.literal('first_experience_step'),
-    properties: z.object({
-      step_number: z.number().int().min(1).max(4),
-      total_steps: z.literal(4),
-      step_key: z.enum(['arrival', 'scripture', 'reflection', 'completion']),
-      result: z.enum(['viewed', 'continued', 'completed', 'backgrounded', 'error']),
-    }).strict(),
+    properties: z.union([
+      legacyFirstExperienceStepSchema,
+      compactFirstExperienceStepSchema,
+    ]),
   }).strict(),
   eventBase.extend({
     event_name: z.literal('first_experience_completed'),
@@ -231,7 +245,7 @@ export const growthEventSchema = z.union([
   }).strict(),
   eventBase.extend({
     event_name: z.literal('paywall_viewed'),
-    properties: properties({}),
+    properties: z.object({}).strict(),
   }).strict(),
   eventBase.extend({
     event_name: z.literal('trial_terms_viewed'),
@@ -249,15 +263,15 @@ export const growthEventSchema = z.union([
   }).strict(),
   eventBase.extend({
     event_name: z.literal('plan_selected'),
-    properties: properties({
+    properties: z.object({
       plan: billingPeriodSchema,
-    }),
+    }).strict(),
   }).strict(),
   eventBase.extend({
     event_name: z.literal('checkout_started'),
-    properties: properties({
+    properties: z.object({
       plan: billingPeriodSchema,
-    }),
+    }).strict(),
   }).strict(),
   eventBase.extend({
     event_name: z.literal('purchase_validation_result'),
@@ -290,6 +304,40 @@ export const growthEventSchema = z.union([
   }).strict(),
 ]);
 
+export const GROWTH_EVENT_NAMES = growthEventUnionSchema.options.map((option) => (
+  option.shape.event_name.value
+));
+
+export const growthEventSchema = growthEventUnionSchema.superRefine((event, context) => {
+  if (event.event_name === 'first_experience_viewed') {
+    const matchesEnvelope = event.properties.variant === 'compact_v2'
+      ? event.funnel_variant === 'compact_v2'
+      : event.funnel_variant === undefined || event.funnel_variant === 'legacy_v1';
+    if (!matchesEnvelope) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'first-experience variant must match funnel_variant',
+        path: ['funnel_variant'],
+      });
+    }
+  }
+
+  if (event.event_name === 'first_experience_step') {
+    const compactProperties = 'variant' in event.properties &&
+      event.properties.variant === 'compact_v2';
+    const matchesEnvelope = compactProperties
+      ? event.funnel_variant === 'compact_v2'
+      : event.funnel_variant === undefined || event.funnel_variant === 'legacy_v1';
+    if (!matchesEnvelope) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'first-experience variant must match funnel_variant',
+        path: ['funnel_variant'],
+      });
+    }
+  }
+});
+
 export type GrowthEvent = z.infer<typeof growthEventSchema>;
 
 export const growthEventBatchSchema = z.object({
@@ -314,6 +362,9 @@ export const ANONYMOUS_GROWTH_EVENTS = new Set<GrowthEvent['event_name']>([
   'onboarding_completed',
   'auth_started',
   'auth_attempt',
+  'paywall_viewed',
+  'trial_terms_viewed',
+  'plan_selected',
 ]);
 
 type AnalyticsFailure = { response: ReturnType<typeof fail> };

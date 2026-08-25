@@ -30,6 +30,7 @@ Envelope (one to 20 events, maximum 32 KiB):
       "app_version": "1.0.0",
       "build_number": "8",
       "runtime_version": "1.0.0",
+      "funnel_variant": "compact_v2",
       "locale": "pt",
       "session_id": "33333333-3333-4333-8333-333333333333",
       "properties": {}
@@ -43,6 +44,12 @@ not an advertising identifier and not a device fingerprint. A batch may contain
 only one installation ID. A bearer token is verified only to gate post-auth
 event names; its account ID is neither accepted in the payload, passed to the
 ingestion RPC, nor persisted in analytics.
+
+Native Runtime 1.3+ envelopes carry the closed `funnel_variant` value
+`legacy_v1` or `compact_v2`. Runtime-1.2 queued envelopes remain readable
+without that field. The event-specific `first_experience_step.variant` exists
+only to discriminate its two payload shapes; neither variant value is forwarded
+as a Firebase marketing property.
 
 Successful response (`202`):
 
@@ -76,9 +83,9 @@ accept exactly their listed properties and no attribution fields.
 | `store_cta_clicked` | anonymous | `cta_id`, `store: android\|ios` |
 | `first_open` | anonymous | none |
 | `app_session_started` | anonymous | none; correlated only by an ephemeral random `session_id` |
-| `route_resolved` | anonymous | coarse destination/access states and launch-time bucket |
-| `first_experience_viewed` | anonymous | `variant: v1`, `content_source: remote\|fallback` |
-| `first_experience_step` | anonymous | `step_number` (1–4), `total_steps: 4`, `step_key: arrival\|scripture\|reflection\|completion`, coarse `result` only |
+| `route_resolved` | anonymous | coarse destination (`onboarding\|first-experience\|offer\|authentication\|subscription-verification\|paywall\|app`), access states, and launch-time bucket |
+| `first_experience_viewed` | anonymous | `variant: v1\|compact_v2`, `content_source: remote\|fallback` |
+| `first_experience_step` | anonymous | legacy: no `variant`, `step_number` 1–4, `total_steps: 4`, `step_key: arrival\|scripture\|reflection\|completion`; compact: `variant: compact_v2`, `step_number` 1–2, `total_steps: 2`, `step_key: moment\|completion`; coarse `result` only |
 | `first_experience_completed` | anonymous | coarse `duration_bucket`, `content_source: remote\|fallback` |
 | `first_experience_error` | anonymous | allowlisted stage/code only; never content or raw errors |
 | `onboarding_started` | anonymous | none |
@@ -91,10 +98,10 @@ accept exactly their listed properties and no attribution fields.
 | `auth_attempt` | anonymous | `mode`, `method`, `stage`, and coarse `outcome`; never provider errors or identity |
 | `account_created` | bearer | legacy diagnostic only: `method: email\|apple\|google`; never Vella acquisition truth |
 | `vella_profile_initialized` | bearer | truthful Vella acquisition signal from the profile-insert winner: `provider_class: email\|google\|apple` |
-| `paywall_viewed` | bearer | none |
-| `trial_terms_viewed` | bearer | `plan: yearly`, `trial_days_bucket: 14_days\|other` |
+| `paywall_viewed` | anonymous | none |
+| `trial_terms_viewed` | anonymous | `plan: yearly`, `trial_days_bucket: 14_days\|other` |
 | `subscription_management_opened` | bearer | `source: paywall\|settings`, `result: opened\|failed` |
-| `plan_selected` | bearer | `plan: monthly\|yearly` |
+| `plan_selected` | anonymous | `plan: monthly\|yearly` |
 | `checkout_started` | bearer | `plan: monthly\|yearly` |
 | `purchase_validation_result` | bearer | `result: verified_active\|rejected`, `plan: monthly\|yearly` |
 | `trial_started` | bearer | `plan: monthly\|yearly` |
@@ -291,14 +298,26 @@ do currency conversion before import rather than combining unlike currencies.
 
 ## Rollout checklist
 
-1. Apply all reviewed growth migrations in order, including the route and
-   interaction telemetry allowlist migration.
-2. Deploy the API with a 32+ byte `VELLA_OPERATOR_API_KEY` and `CRON_SECRET`.
-3. Deploy mobile/site producers using exactly the catalog above.
+1. Apply all reviewed growth migrations in order. For compact-v2, install the
+   additive v6 property validator before changing the API; it delegates every
+   shipped legacy shape to v5, adds the closed compact/offer branches, and
+   intentionally narrows paywall, plan-selection, and checkout properties to
+   their exact coarse shapes. Shipped clients already emit those exact shapes.
+   Verify the property, first-experience variant, and authenticated-checkout
+   constraints before continuing.
+2. Deploy the API with the compact-v2 union and anonymous allowlist. During this
+   step shipped legacy clients keep their four-step shape and existing bearer
+   behavior.
+3. Deploy the compact mobile producer last. Change the native analytics
+   singleton to `compact_v2` only in the same client release that activates the
+   compact controller; the currently shipped four-screen flow remains
+   `legacy_v1`.
 4. Send one synthetic web event, one anonymous app event and one authenticated
    event; verify `accepted/inserted/duplicates`.
-5. Import a small BRL spend sample and inspect the operator summary.
-6. Verify the retention cron in Vercel logs. Do not add raw payload logging.
+5. Confirm anonymous paywall/plan/trial-term intent is accepted, anonymous
+   checkout is rejected, and invalid bearer tokens are never downgraded.
+6. Import a small BRL spend sample and inspect the operator summary.
+7. Verify the retention cron in Vercel logs. Do not add raw payload logging.
 
 No third-party tracker is required; producers send only the strict first-party
 contract above.

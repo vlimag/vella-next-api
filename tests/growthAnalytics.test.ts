@@ -10,7 +10,12 @@ vi.mock('@/lib/supabase', () => ({
   createServiceClient: mocks.createServiceClient,
 }));
 
-import { growthEventSchema, ingestGrowthEvents, parseGrowthEventRequest } from '@/lib/growthAnalytics';
+import {
+  GROWTH_EVENT_NAMES,
+  growthEventSchema,
+  ingestGrowthEvents,
+  parseGrowthEventRequest,
+} from '@/lib/growthAnalytics';
 import { POST } from '@/app/api/v1/analytics/events/route';
 
 const INSTALL_ID = '11111111-1111-4111-8111-111111111111';
@@ -120,12 +125,49 @@ describe('growth analytics ingestion', () => {
       },
     })).success).toBe(true);
     expect(growthEventSchema.safeParse(event({
+      event_name: 'route_resolved',
+      properties: {
+        destination: 'offer',
+        onboarding_state: 'complete',
+        auth_state: 'anonymous',
+        subscription_state: 'unknown',
+        load_time_bucket: 'under_500ms',
+      },
+    })).success).toBe(true);
+    expect(growthEventSchema.safeParse(event({
       event_name: 'first_experience_viewed',
       properties: { variant: 'v1', content_source: 'fallback' },
     })).success).toBe(true);
     expect(growthEventSchema.safeParse(event({
       event_name: 'first_experience_step',
       properties: { step_number: 4, total_steps: 4, step_key: 'completion', result: 'completed' },
+    })).success).toBe(true);
+    expect(growthEventSchema.safeParse(event({
+      event_name: 'first_experience_viewed',
+      funnel_variant: 'compact_v2',
+      properties: { variant: 'compact_v2', content_source: 'remote' },
+    })).success).toBe(true);
+    expect(growthEventSchema.safeParse(event({
+      event_name: 'first_experience_step',
+      funnel_variant: 'compact_v2',
+      properties: {
+        variant: 'compact_v2',
+        step_number: 1,
+        total_steps: 2,
+        step_key: 'moment',
+        result: 'viewed',
+      },
+    })).success).toBe(true);
+    expect(growthEventSchema.safeParse(event({
+      event_name: 'first_experience_step',
+      funnel_variant: 'compact_v2',
+      properties: {
+        variant: 'compact_v2',
+        step_number: 2,
+        total_steps: 2,
+        step_key: 'completion',
+        result: 'completed',
+      },
     })).success).toBe(true);
     expect(growthEventSchema.safeParse(event({
       event_name: 'first_experience_completed',
@@ -284,6 +326,80 @@ describe('growth analytics ingestion', () => {
       event_name: 'subscription_management_opened',
       properties: { source: 'settings', result: 'opened', purchase_token: 'private' },
     })).success).toBe(false);
+
+    for (const properties of [
+      { step_number: 1, total_steps: 2, step_key: 'moment', result: 'viewed' },
+      { variant: 'compact_v2', step_number: 1, total_steps: 4, step_key: 'arrival', result: 'viewed' },
+      { variant: 'compact_v2', step_number: 1, total_steps: 2, step_key: 'arrival', result: 'viewed' },
+      { variant: 'compact_v2', step_number: 1, total_steps: 4, step_key: 'moment', result: 'viewed' },
+      { step_number: 1, total_steps: 2, step_key: 'arrival', result: 'viewed' },
+      { step_number: 1, total_steps: 4, step_key: 'moment', result: 'viewed' },
+      { variant: 'v1', step_number: 1, total_steps: 4, step_key: 'arrival', result: 'viewed' },
+      { variant: 'compact_v3', step_number: 1, total_steps: 2, step_key: 'moment', result: 'viewed' },
+      { variant: 'compact_v2', step_number: 3, total_steps: 2, step_key: 'completion', result: 'completed' },
+    ]) {
+      expect(growthEventSchema.safeParse(event({
+        event_name: 'first_experience_step',
+        properties,
+      })).success).toBe(false);
+    }
+
+    for (const mismatch of [
+      event({
+        event_name: 'first_experience_viewed',
+        properties: { variant: 'compact_v2', content_source: 'remote' },
+      }),
+      event({
+        event_name: 'first_experience_viewed',
+        funnel_variant: 'legacy_v1',
+        properties: { variant: 'compact_v2', content_source: 'remote' },
+      }),
+      event({
+        event_name: 'first_experience_viewed',
+        funnel_variant: 'compact_v2',
+        properties: { variant: 'v1', content_source: 'remote' },
+      }),
+      event({
+        event_name: 'first_experience_step',
+        properties: {
+          variant: 'compact_v2',
+          step_number: 1,
+          total_steps: 2,
+          step_key: 'moment',
+          result: 'viewed',
+        },
+      }),
+      event({
+        event_name: 'first_experience_step',
+        funnel_variant: 'legacy_v1',
+        properties: {
+          variant: 'compact_v2',
+          step_number: 1,
+          total_steps: 2,
+          step_key: 'moment',
+          result: 'viewed',
+        },
+      }),
+      event({
+        event_name: 'first_experience_step',
+        funnel_variant: 'compact_v2',
+        properties: { step_number: 1, total_steps: 4, step_key: 'arrival', result: 'viewed' },
+      }),
+    ]) {
+      expect(growthEventSchema.safeParse(mismatch).success).toBe(false);
+    }
+
+    for (const premiumIntent of [
+      event({ event_name: 'paywall_viewed', properties: { source: 'google' } }),
+      event({ event_name: 'plan_selected', properties: { plan: 'yearly', campaign: 'launch_br' } }),
+      event({ event_name: 'checkout_started', properties: { plan: 'monthly', content: 'creative_1' } }),
+      event({
+        event_name: 'trial_terms_viewed',
+        properties: { plan: 'yearly', trial_days_bucket: '14_days', source: 'google' },
+      }),
+    ]) {
+      expect(growthEventSchema.safeParse(premiumIntent).success).toBe(false);
+    }
   });
 
   it('ingests anonymous pre-auth events without inventing an identity', async () => {
@@ -347,31 +463,94 @@ describe('growth analytics ingestion', () => {
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
-  it('requires authentication for post-auth lifecycle events', async () => {
+  it('accepts only the coarse Premium intent events before authentication', async () => {
     const supabase = serviceClient();
     mocks.createServiceClient.mockReturnValue(supabase);
 
-    const result = await ingestGrowthEvents(request([event({
-      event_name: 'paywall_viewed',
-      properties: {},
-    })]));
+    const intentEvents = [
+      event({ event_name: 'paywall_viewed', properties: {} }),
+      event({
+        event_id: '44444444-4444-4444-8444-444444444444',
+        event_name: 'plan_selected',
+        properties: { plan: 'monthly' },
+      }),
+      event({
+        event_id: '55555555-5555-4555-8555-555555555555',
+        event_name: 'trial_terms_viewed',
+        properties: { plan: 'yearly', trial_days_bucket: '14_days' },
+      }),
+    ];
+    const result = await ingestGrowthEvents(request(intentEvents));
 
-    expect('response' in result).toBe(true);
-    if ('response' in result) expect(result.response.status).toBe(401);
-    expect(supabase.rpc).not.toHaveBeenCalled();
+    expect('data' in result).toBe(true);
+    expect(supabase.auth.getUser).not.toHaveBeenCalled();
+    expect(supabase.rpc).toHaveBeenCalledWith('ingest_growth_analytics_events', {
+      p_events: intentEvents,
+      p_authenticated: false,
+    });
   });
 
-  it('retains the bearer boundary for trial and paywall management events', async () => {
+  it('retains the bearer boundary for checkout and post-purchase events', async () => {
     const supabase = serviceClient();
     mocks.createServiceClient.mockReturnValue(supabase);
 
     for (const analyticsEvent of [
-      event({ event_name: 'trial_terms_viewed', properties: { plan: 'yearly', trial_days_bucket: 'other' } }),
+      event({ event_name: 'checkout_started', properties: { plan: 'yearly' } }),
       event({ event_name: 'subscription_management_opened', properties: { source: 'settings', result: 'opened' } }),
+      event({ event_name: 'purchase_validation_result', properties: { plan: 'yearly', result: 'verified_active' } }),
     ]) {
       const result = await ingestGrowthEvents(request([analyticsEvent]));
       expect('response' in result && result.response.status).toBe(401);
     }
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('accepts checkout only after bearer authentication succeeds', async () => {
+    const supabase = serviceClient({ user: { id: USER_ID } });
+    mocks.createServiceClient.mockReturnValue(supabase);
+
+    const checkout = event({
+      event_name: 'checkout_started',
+      properties: { plan: 'yearly' },
+    });
+    const result = await ingestGrowthEvents(request([checkout], 'Bearer valid-token'));
+
+    expect('data' in result).toBe(true);
+    expect(supabase.auth.getUser).toHaveBeenCalledWith('valid-token');
+    expect(supabase.rpc).toHaveBeenCalledWith('ingest_growth_analytics_events', {
+      p_events: [checkout],
+      p_authenticated: true,
+    });
+  });
+
+  it('requires bearer authentication for a mixed batch containing checkout', async () => {
+    const supabase = serviceClient();
+    mocks.createServiceClient.mockReturnValue(supabase);
+
+    const result = await ingestGrowthEvents(request([
+      event({ event_name: 'plan_selected', properties: { plan: 'yearly' } }),
+      event({
+        event_id: '44444444-4444-4444-8444-444444444444',
+        event_name: 'checkout_started',
+        properties: { plan: 'yearly' },
+      }),
+    ]));
+
+    expect('response' in result && result.response.status).toBe(401);
+    expect(supabase.rpc).not.toHaveBeenCalled();
+  });
+
+  it('never downgrades an invalid bearer on newly anonymous Premium intent', async () => {
+    const supabase = serviceClient({ authError: { message: 'invalid token' } });
+    mocks.createServiceClient.mockReturnValue(supabase);
+
+    const result = await ingestGrowthEvents(request([event({
+      event_name: 'plan_selected',
+      properties: { plan: 'yearly' },
+    })], 'Bearer invalid-token'));
+
+    expect('response' in result && result.response.status).toBe(401);
+    expect(supabase.auth.getUser).toHaveBeenCalledWith('invalid-token');
     expect(supabase.rpc).not.toHaveBeenCalled();
   });
 
@@ -481,11 +660,7 @@ describe('growth analytics ingestion', () => {
     )?.[1] ?? '';
     const databaseEventNames = [...eventConstraint.matchAll(/'([^']+)'/g)]
       .map((match) => match[1]);
-    const apiEventNames = growthEventSchema.options.map((option) => (
-      option.shape.event_name.value
-    ));
-
-    expect([...databaseEventNames].sort()).toEqual([...apiEventNames].sort());
+    expect([...databaseEventNames].sort()).toEqual([...GROWTH_EVENT_NAMES].sort());
     expect(new Set(databaseEventNames).size).toBe(databaseEventNames.length);
     expect(profileMigration).toContain('growth_event_properties_are_safe_v4');
     expect(profileMigration).toMatch(
@@ -542,6 +717,29 @@ describe('growth analytics ingestion', () => {
     );
     expect(migration).toContain("set search_path = ''");
     expect(migration).not.toMatch(/validate constraint growth_analytics_properties_check/);
+    expect(migration).not.toMatch(/prayer_text|email_address|user_id|receipt|purchase_token/i);
+  });
+
+  it('adds the compact-v2 database contract without bypassing the live v5 validator', () => {
+    const migrationsPath = path.resolve(process.cwd(), '../supabase/migrations');
+    const migrationName = fs.readdirSync(migrationsPath)
+      .find((name) => name.endsWith('_compact_v2_growth_contract.sql'));
+    expect(migrationName).toBeDefined();
+
+    const migration = fs.readFileSync(path.join(migrationsPath, migrationName!), 'utf8');
+    expect(migration).toContain('growth_event_properties_are_safe_v6');
+    expect(migration).toContain('growth_event_properties_are_safe_v5');
+    expect(migration).toMatch(
+      /growth_analytics_properties_check check \(\s*faith_harbor\.growth_event_properties_are_safe_v6\(event_name, properties\)\s*\) not valid;/,
+    );
+    expect(migration).toMatch(
+      /growth_analytics_checkout_actor_check check \(\s*event_name <> 'checkout_started'\s+or actor_type = 'authenticated'\s*\) not valid;/,
+    );
+    expect(migration).toMatch(
+      /growth_analytics_first_experience_variant_check check \(/,
+    );
+    expect(migration).toContain("set search_path = ''");
+    expect(migration).not.toMatch(/validate constraint growth_analytics_(?:properties|checkout_actor)_check/);
     expect(migration).not.toMatch(/prayer_text|email_address|user_id|receipt|purchase_token/i);
   });
 
