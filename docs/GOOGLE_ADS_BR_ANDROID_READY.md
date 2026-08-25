@@ -1,19 +1,36 @@
 # Google Ads — Vella Brazil Android setup
 
-Last updated: 2026-08-20
+Last updated: 2026-08-25
 
-This is the approved configuration for the first controlled Google learning
-campaign. Create it paused or with a future start date until the readiness gates
-in `GROWTH_LAUNCH_BOARD_BR.md` are green.
+This records the ended historical campaign separately from the approved setup
+for a new controlled Google learning campaign. Do not reactivate the historical
+campaign. Create the replacement in a paused state only after the readiness
+gates in `GROWTH_LAUNCH_BOARD_BR.md` are green, and do not enable spend without
+an explicit final go/no-go.
 
-## Account and campaign
+## Account and historical campaign evidence
 
 - Manager account: approved manager account (identifier omitted).
-- Client account: dedicated Vella client account (identifier omitted).
+- Client account: `712-460-9192`.
 - Billing country: Brazil.
 - Time zone: `(GMT-03:00) Brasília`.
 - Currency: BRL. Currency and time zone cannot be casually changed later.
+- Historical campaign ID: `24120421103`.
+- Historical campaign status observed: **Ended / inactive**.
+- Historical budget: R$46/day.
+- Historical campaign total shown in the Google Ads UI: R$594.09.
+- Displayed historical daily rows summed to R$594.08, a R$0.01
+  display/reconciliation difference. Preserve both observations and reconcile
+  them against billing/export data before financial reporting; do not infer
+  missing spend or alter a row merely to force agreement.
+
+The historical campaign and its R$594.09 total are evidence, not authorization
+to reactivate it or to spend against a new campaign.
+
+## Planned controlled replacement
+
 - Campaign name: `Vella_BR_Android_202608_PrayerDaily`.
+- Planned campaign ID: pending.
 - Campaign type: App promotion / Android.
 - App listing: approved Vella Android store listing (identifier omitted).
 - Geography: Brazil only.
@@ -22,13 +39,15 @@ in `GROWTH_LAUNCH_BOARD_BR.md` are green.
   subscription quality are observed separately.
 - Initial bid mode: Maximize conversions / install volume without an invented
   target CPI or target CPA.
-- Budget: R$46/day for no more than 13 campaign days, hard Month 1 Google ceiling
-  of R$600.
-- Start state: paused until checkout, analytics, and asset gates are verified.
+- Budget: R$60/day, with a 14-day campaign cap of R$840 and an R$1,000 total learning ceiling including contingency. The remaining R$160 cannot be spent without a new explicit approval.
+- start state: **paused** until the runtime-1.3 signed-build, checkout, analytics,
+  attribution, privacy, and creative gates are verified.
 
 Do not optimize to a client-declared trial event. Google/Play-reported installs
-and Vella's authoritative subscription state must be reviewed together until a
-proper native attribution bridge is shipped.
+and Vella's authoritative subscription state must be reviewed together. The
+native Install Referrer bridge is implemented in candidate source but is not
+production-shipped; campaign
+activation still waits for signed-build and production measurement proof.
 
 ## Text assets
 
@@ -78,13 +97,26 @@ Required exports:
 - This document records intended configuration and evidence gates only. It does
   not establish that Firebase, GA4, Google Play, or Google Ads is linked, that a
   production event has been observed, or that any conversion action is imported.
+- The runtime-1.3 custom lifecycle events are not yet production-shipped or
+  observed from an installed store artifact. Keep every lifecycle/subscription
+  action Secondary or unimported until exact-build DebugView and reconciliation
+  evidence exists.
 - Google Ads and Play Console own the ad-click-to-install view.
 - Vella's first-party report owns anonymous product mechanics and authoritative
   server/store subscription health.
-- Website links use normalized campaign IDs and Google Install Referrer query
-  data, but the current JavaScript-only mobile stream cannot read native Play
-  Install Referrer data. Do not report first-party campaign-to-install CAC as if
-  that bridge already existed.
+- Runtime 1.3 uses Google's native Play Install Referrer library. It parses and
+  sends only allowlisted source, medium, campaign, and creative codes beside the
+  random pseudonymous install ID, then discards the raw referrer on-device. It
+  never stores or sends `gclid`, arbitrary referrer text, timestamps, install
+  version, AAID, account identity, or devotional data.
+- After authenticated Vella-profile hydration, the server may link that install
+  to the Vella profile for authoritative subscription-outcome measurement. A
+  shared Supabase Auth user created in another app is not counted until Vella
+  creates that profile. Multi-account installs remain permanently ambiguous for
+  user-level attribution.
+- Google Ads and Play reporting remain the authoritative modeled ad-to-install
+  view. Do not claim exact first-party campaign CAC when no approved campaign
+  code is present.
 - Record daily actual Google spend in the Vella operator growth console.
 - Decide from mature cohorts, not the first few days of a 14-day trial.
 
@@ -108,16 +140,21 @@ Evidence gates before any conversion import or optimization change:
 
 Intended conversion hierarchy after those gates pass:
 
-1. `verified_trial_start` and `verified_subscription_start` are the only
-   server-verified subscription outcomes eligible to become business conversion
-   goals. Keep them separate so trial volume never obscures paid starts.
-2. Automatic client-side purchase/subscription events are diagnostic signals
+1. Use exactly one Google Play install/download conversion as Primary at
+   relaunch. Do not create overlapping Primary install actions.
+2. `verified_trial_start` and `verified_subscription_start` are the only
+   server-verified subscription outcomes eligible to become later business
+   conversion goals. Keep them Secondary until they are unique, reconciled, and
+   each reaches at least ten distinct users per day; keep them separate so trial
+   volume never obscures paid starts.
+3. Automatic client-side purchase/subscription events are diagnostic signals
    only. Do not import or label them as verified subscription conversions.
-3. `onboarding_begin`, `onboarding_complete`, `first_experience_begin`,
-   `first_experience_complete`, `sign_up`, `paywall_view`, `plan_select`, and
-   `begin_checkout` start secondary and observation-only. They may diagnose the
-   funnel but must not steer bidding as primary goals at launch.
-4. Google Play install/first-open reporting remains the uppermost acquisition
+4. `onboarding_begin`, `onboarding_complete`, `first_experience_begin`,
+   `first_experience_complete`, `vella_profile_initialized`, `paywall_view`,
+   `plan_select`, and `begin_checkout` start Secondary and observation-only.
+   They may diagnose the funnel but must not steer bidding as Primary goals at
+   launch.
+5. Google Play install/first-open reporting remains the uppermost acquisition
    signal and must not be represented as proof of subscription value.
 
 ## Launch checklist
@@ -127,6 +164,8 @@ Intended conversion hierarchy after those gates pass:
 - [ ] The intended production Firebase/GA4 property is linked and verified.
 - [ ] Play Console and Google Ads are linked.
 - [ ] Production-equivalent DebugView evidence exists for each intended event.
+- [ ] Exactly one Play install/download action is Primary; all upper-funnel and
+      subscription outcomes remain Secondary at launch.
 - [ ] Server-verified trial and paid events are reconciled before import.
 - [ ] Conversion actions are imported with upper-funnel actions kept
       secondary/observation-only.
@@ -137,5 +176,9 @@ Intended conversion hierarchy after those gates pass:
 - [x] First-party ingestion, retention, operator report, and privacy disclosure
       are live.
 - [ ] At least two real-UI creatives pass the truth/privacy review.
-- [ ] Campaign starts paused or with a deliberate future date.
-- [ ] Spend cannot exceed R$600 in Month 1 without a new explicit decision.
+- [ ] Planned replacement campaign remains paused until every signed-build, checkout, attribution,
+      privacy, and creative gate is green and the final go/no-go is explicit.
+- [ ] Historical campaign `24120421103` remains ended/inactive and is not
+      reactivated; the replacement campaign ID is recorded after paused setup.
+- [ ] Spend cannot exceed R$840 during the initial 14 campaign days or the
+      R$1,000 total learning ceiling without a new explicit decision.

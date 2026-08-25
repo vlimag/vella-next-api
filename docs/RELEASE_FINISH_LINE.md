@@ -1,14 +1,16 @@
 # Vella release finish line
 
-Last verified: **2026-07-31**. This is the operational source of truth for the first store release. Store copy and localized subscription names live in [`store-metadata.json`](./store-metadata.json); detailed questionnaire guidance lives in [`STORE_SUBMISSION_PACKAGE.md`](./STORE_SUBMISSION_PACKAGE.md).
+Last source verification: **2026-08-25**. This is the operational source of truth for the runtime-1.3 Vella release. Store copy and localized subscription names live in [`store-metadata.json`](./store-metadata.json); detailed questionnaire guidance lives in [`STORE_SUBMISSION_PACKAGE.md`](./STORE_SUBMISSION_PACKAGE.md). Exact store-console state and finished signed build IDs must be read live immediately before release actions; configured next values in this document do not prove an artifact exists.
 
 ## 1. Current status
 
-### Engineering and infrastructure complete
+### Engineering and infrastructure status
 
 - Production website and API are live at `https://vella.one` and `https://www.vella.one` with managed TLS.
 - Support, privacy, terms, community-guidelines, and account-deletion pages are live in all eight UI languages.
 - The authenticated app is subscription-only; there is **no permanent free tier**.
+- A clean install uses compact onboarding: automatic/saved language, one primary goal, one anonymous first Vella moment, a transparent Premium preview, and then Apple, Google, or email authentication. The chosen plan survives authentication. Existing active subscribers bypass the paywall before its content mounts.
+- Shared Supabase Auth creation is not a Vella acquisition. A missing `faith_harbor` profile is created lazily on the user's first authenticated Vella entry, including for users first created by another app in the shared project. Same-account email/OAuth recovery can add a password without creating a duplicate Vella profile.
 - Daily Scripture is selected from the approved corpus and returned with edition attribution. AI can draft only the reflection prompt, not Scripture wording, identity, reference, language, or edition.
 - The complete ordered journey is rendered. Verse steps are corpus-hydrated in the requested approved language, fall back to approved English, and are omitted if no approved verse exists. Optional private reflection and gratitude are submitted with completion.
 - The moderation keyword hard-block was removed. Multilingual and Catholic, Orthodox, liturgical, and non-English regression cases are covered.
@@ -18,19 +20,23 @@ Last verified: **2026-07-31**. This is the operational source of truth for the f
 - On 2026-07-31, `https://vella.one/api/v1/health` returned `apple_iap: true`, `google_iap: true`, `google_webhook: true`, and `database_schema: true`.
 - Account deletion removes database data and uploaded Feed media. Feed post/comment owner deletion and operator moderation endpoints are implemented.
 - iOS privacy manifest, production notification entitlement, Sign in with Apple entitlement, selected-photo-only access, and Expo Updates production channel are present in source/native configuration.
-- Android source version is `1.0.0 (13)`. Its Google Play production release is **Changes in review**.
-- iOS source version is `1.0.0 (15)`. Build 15 is reported uploaded to App Store Connect.
+- Runtime `1.3` is the native release target for iOS and Android. The configured next values are app version `1.0.1`, next iOS build `23`, and next Android version code `25`; signed EAS build IDs remain pending. Never reuse or decrease those identifiers.
+- The native update launch wait is `5000 ms`: keep the branded splash visible while checking/downloading, then reload a compatible newly downloaded update on the same first launch. Do not publish a runtime-1.3 OTA until signed runtime-1.3 artifacts exist.
+- Runtime 1.3 includes privacy-safe native attribution: Google Play Install Referrer on Android and Apple AdServices on iOS. Only coarse, bounded campaign fields persist; raw referrer/token/upstream response data is discarded. There is no IDFA, AAID, ATT prompt, fingerprinting, or cross-app tracking.
+- The reviewed attribution API and database boundary are deployed. `APPLE_ADS_ORG_ID` is not configured in production as of 2026-08-25, so iOS attribution remains intentionally fail-closed/retryable until the real Apple Ads organization ID is supplied; never substitute a sample value.
+- Runtime-1.3 custom lifecycle events exist in candidate source but are not yet production-shipped or observed from an installed store artifact. Do not import or optimize to them yet.
 
-No local `.ipa` or `.aab` file was found during the 2026-07-31 repository audit. Treat upload/signing facts as store-console or build-service evidence; do not claim that a local artifact was inspected or verified.
+No signed runtime-1.3 EAS build exists yet, and no runtime-1.3 `.ipa` or `.aab` is claimed as inspected. Treat configured build numbers, source, and future build-service completion as separate facts; only the installed exact artifact can close device QA.
 
 ### Release gates still open
 
-- Complete the authenticated Apple version record: localized metadata and screenshots, App Privacy, age rating/content rights, legal entity/trader and real contact fields, reviewer access, build `1.0.0 (15)` selection, both subscription attachments, and final submission.
-- Wait for the Google production change review to finish and record the actual approval/rollout state. **Changes in review** is not the same as live.
-- Configure monitored mail for `support@vella.one` and `privacy@vella.one`, then prove inbound delivery and replies. No MX or end-to-end mail delivery was verified on 2026-07-31.
-- Run purchase lifecycle tests on the exact signed TestFlight and Google Play builds.
-- Run clean-install and lapsed-access smoke tests on physical iOS and Android devices.
+- Create runtime-1.3 EAS builds with iOS build 23 and Android version code 25, record their signed build IDs, confirm them in the stores, install those exact artifacts, and retain the evidence.
+- Complete or update both store version records with current localized metadata and exact-runtime screenshots, App Privacy/Data safety, age/content-rights, legal/trader/contact data, reviewer access, exact build selection, subscription attachment, and submission.
+- Configure the real `APPLE_ADS_ORG_ID`, prove one safe iOS attribution exchange, and keep Apple Ads paused. Never use a documentation/sample identifier.
+- Prove monitored inbound and reply mail for `support@vella.one` and `privacy@vella.one` rather than inferring it from published pages.
+- Run purchase lifecycle and clean-install/lapsed-access smoke tests on the exact signed runtime-1.3 TestFlight and Google Play artifacts.
 - Assign and verify the real moderation owner, reviewer account, escalation process, and response SLA.
+- Keep every paid campaign inactive—ended, uncreated, or paused as applicable—until signed-build, checkout, analytics, attribution, privacy, and creative gates pass and an explicit go/no-go is recorded.
 
 ## 2. Commercial configuration — configured, still test end to end
 
@@ -78,8 +84,8 @@ Open the Vella app record: `https://appstoreconnect.apple.com/apps/6790616297`.
 
 ### D. Complete the App Store version
 
-1. Open iOS version `1.0.0`.
-2. Select uploaded build **`1.0.0 (15)`**. Verify its processing/compliance state in the console; source version numbers alone are not proof.
+1. Open iOS version `1.0.1`.
+2. After the EAS build finishes and uploads, select runtime-1.3 build **`1.0.1 (23)`**. Verify its processing/compliance state in the console; configured source numbers alone are not proof.
 3. Use [`store-metadata.json`](./store-metadata.json) as the copy source for name, subtitle, promotional text, keywords, description, and release notes in all eight locales.
 4. Set or verify:
    - Primary category: `Lifestyle`
@@ -104,24 +110,24 @@ Open the Vella app record: `https://appstoreconnect.apple.com/apps/6790616297`.
 
 1. Create or verify a durable email/password reviewer account that does not require OTP or 2FA.
 2. Enter the real review contact name, phone, and monitored email.
-3. Paste [`APPLE_REVIEW_NOTES_READY.md`](./APPLE_REVIEW_NOTES_READY.md) only after verifying every described path in build 15.
-4. Attach both subscriptions to the `1.0.0` review submission.
+3. Paste [`APPLE_REVIEW_NOTES_READY.md`](./APPLE_REVIEW_NOTES_READY.md) only after verifying every described path in the exact selected runtime-1.3 build.
+4. Attach both subscriptions to the `1.0.1` review submission.
 5. Run sections 6 and 7 below before **Add for Review → Submit to App Review**.
 
-## 4. Google Play — production review in progress
+## 4. Google Play — exact runtime-1.3 release pending
 
-Current external state: Android `1.0.0 (13)` production changes are **Changes in review**.
+Current configured target: Android app version `1.0.1`, runtime `1.3`, Android version code `25`; signed EAS build ID pending. Read the actual Play review/rollout state in the authenticated console before acting.
 
 Do not create a duplicate release or upload an older local path. Instead:
 
-1. Monitor the existing production release until Google records an approval, rejection, or required change.
-2. Verify the artifact details, package `io.vella.app`, version code `13`, rollout countries, managed/pending rollout choice, and release notes in Play Console.
+1. Build Android version code 25 in EAS, record the signed build ID, and confirm that exact artifact in Play Console; do not substitute or reuse an older artifact.
+2. Verify package `io.vella.app`, app version `1.0.1`, version code `25`, runtime `1.3`, rollout countries, managed/pending rollout choice, and release notes in Play Console.
 3. Confirm the store listing, privacy policy, account-deletion URL, App access, Data safety, target audience, content rating, content rights, ads, news, financial-feature, and health declarations reflect the submitted build.
 4. Confirm both subscriptions and the annual offer remain active in intended regions.
 5. Confirm Play Developer API/RTDN configuration and the health endpoint remain green; do not recreate already-configured service accounts or Pub/Sub resources without evidence of failure.
-6. Keep the release state recorded as **Changes in review** until the console shows a later state. Record the final review and rollout result before declaring Android publicly released.
+6. Record the exact review and rollout result before declaring the runtime-1.3 Android build publicly released.
 
-Android remote push still requires Firebase native configuration and a new native build if it is added later. Local daily reminders are already implemented; do not conflate them with remote community push.
+Remote and local notification paths are separate. Test both on the exact signed artifact and verify the next scheduled notification cron/API delivery; do not infer push health from permission or local scheduling alone.
 
 ## 5. Domain mail and legal identity
 
@@ -135,7 +141,7 @@ The website publishes `support@vella.one` and `privacy@vella.one`, but publicati
 
 ## 6. Required signed-binary purchase lifecycle tests
 
-Run on a physical TestFlight iPhone using build 15 and a physical Android device using the exact Play build 13:
+After both EAS builds complete, run on a physical TestFlight iPhone using iOS build 23 and a physical Android device using version code 25, both on runtime 1.3:
 
 1. New monthly purchase charges immediately and unlocks access.
 2. Eligible new annual purchase displays the store-confirmed 14-day trial and unlocks access.
@@ -156,7 +162,7 @@ Green health checks prove configuration availability, not any of these lifecycle
 
 On each exact signed store build, cover:
 
-- clean install, eight-locale copy spot checks, onboarding, sign-up/sign-in, hard paywall, and lapsed access;
+- clean install, compact onboarding, one anonymous first moment, selected-plan handoff, email/Google/Apple authentication as available, shared-user Vella-profile hydration, active-subscriber bypass, hard paywall, and lapsed access;
 - daily corpus-backed Scripture with visible edition attribution;
 - every available journey step, requested-language/English verse fallback behavior, absent-corpus omission, private reflection/gratitude, and completion lock;
 - localized reminder scheduling, denial, edit, disable, and tap-through;
@@ -170,12 +176,12 @@ Do not record inferred passes. Preserve screenshots/logs without private notes, 
 
 The first public release is complete only when all of these are true:
 
-- Google review has a recorded final outcome and the intended rollout is confirmed.
-- Apple build `1.0.0 (15)` is selected; metadata, screenshots, App Privacy, ratings, content rights, reviewer access, legal/trader/contact fields, and both subscriptions are complete and submitted.
+- Android version code 25 has a recorded final review outcome and the intended rollout is confirmed.
+- iOS build 23 is selected; metadata, screenshots, App Privacy, ratings, content rights, reviewer access, legal/trader/contact fields, and both subscriptions are complete and submitted.
 - Signed-build purchase, restore, renewal, cancellation, expiry, billing-retry, and refund/revocation evidence passes on both platforms.
 - Exact-build real-device smoke testing passes on both platforms.
 - `support@vella.one` and `privacy@vella.one` have verified inbound and reply delivery.
 - Reviewer credentials work without OTP and the staffed moderation process is active.
 - Production health remains green.
 
-Until then, the accurate statement is: **P0 product engineering and commerce configuration are complete; Android build 13 is in production review; iOS build 15 is uploaded but not submitted; external release evidence remains open.**
+Until then, the accurate statement is: **iOS build 23 and Android version code 25 are the configured next runtime-1.3 targets; signed EAS build IDs, exact-artifact QA, and store-review evidence remain open; campaigns remain inactive.**

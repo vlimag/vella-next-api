@@ -42,6 +42,26 @@ const googleAdsReadiness = readFileSync(
   new URL('../docs/GOOGLE_ADS_BR_ANDROID_READY.md', import.meta.url),
   'utf8',
 );
+const growthPlatformAccess = readFileSync(
+  new URL('../docs/GROWTH_PLATFORM_ACCESS_BR.md', import.meta.url),
+  'utf8',
+);
+const appleReviewNotes = readFileSync(
+  new URL('../docs/APPLE_REVIEW_NOTES_READY.md', import.meta.url),
+  'utf8',
+);
+const releaseFinishLine = readFileSync(
+  new URL('../docs/RELEASE_FINISH_LINE.md', import.meta.url),
+  'utf8',
+);
+const historicalFinalProductAudit = readFileSync(
+  new URL('../docs/FINAL_PRODUCT_AUDIT_2026-07-31.md', import.meta.url),
+  'utf8',
+);
+const historicalProductionAudit = readFileSync(
+  new URL('../docs/VELLA_PRODUCTION_AUDIT.md', import.meta.url),
+  'utf8',
+);
 const renderToStaticMarkup = (
   createRequire(import.meta.url)('react-dom/server') as {
     renderToStaticMarkup: (element: unknown) => string;
@@ -349,6 +369,81 @@ const growthAnalyticsPrivacyChecks = {
   },
 } as const;
 
+const installAttributionPrivacyChecks = {
+  en: {
+    coarse: 'coarse first-party install attribution',
+    androidDiscard: 'discards the raw referrer on the device',
+    appleToken: 'transient Apple AdServices attribution token',
+    appleBounded: 'only coarse, bounded campaign fields',
+    appleDiscard: "discards both the token and Apple's raw response",
+    profile: 'linked to that Vella profile',
+    excluded: 'IDFA, Google Advertising ID (AAID), ATT, device fingerprinting, or cross-app tracking',
+  },
+  pt: {
+    coarse: 'atribuição própria e aproximada da instalação',
+    androidDiscard: 'descarta o referenciador bruto no próprio aparelho',
+    appleToken: 'token transitório de atribuição do Apple AdServices',
+    appleBounded: 'apenas campos de campanha gerais e delimitados',
+    appleDiscard: 'descarta tanto o token quanto a resposta bruta da Apple',
+    profile: 'vinculada a esse perfil da Vella',
+    excluded: 'IDFA, o ID de publicidade do Google (AAID), ATT, impressão digital do dispositivo ou rastreamento entre apps',
+  },
+  es: {
+    coarse: 'atribución propia y aproximada de la instalación',
+    androidDiscard: 'descarta el referidor sin procesar en el dispositivo',
+    appleToken: 'token transitorio de atribución de Apple AdServices',
+    appleBounded: 'solo campos de campaña generales y acotados',
+    appleDiscard: 'descarta tanto el token como la respuesta sin procesar de Apple',
+    profile: 'vincularse a ese perfil de Vella',
+    excluded: 'IDFA, el identificador de publicidad de Google (AAID), ATT, huellas digitales del dispositivo ni seguimiento entre apps',
+  },
+  fr: {
+    coarse: "attribution interne et approximative de l'installation",
+    androidDiscard: "supprime le référent brut sur l'appareil",
+    appleToken: "jeton d'attribution temporaire Apple AdServices",
+    appleBounded: 'uniquement des champs de campagne généraux et bornés',
+    appleDiscard: "supprime à la fois le jeton et la réponse brute d'Apple",
+    profile: 'associée à ce profil Vella',
+    excluded: "IDFA, l'identifiant publicitaire Google (AAID), ATT, l'empreinte numérique de l'appareil ni le suivi inter-apps",
+  },
+  de: {
+    coarse: 'grobe, selbst erhobene Installationsattribution',
+    androidDiscard: 'verwirft den rohen Referrer auf dem Gerät',
+    appleToken: 'vorübergehendes Apple-AdServices-Attributionstoken',
+    appleBounded: 'nur grobe, begrenzte Kampagnenfelder',
+    appleDiscard: 'sowohl das Token als auch die rohe Antwort von Apple',
+    profile: 'mit diesem Vella-Profil verknüpft',
+    excluded: 'IDFA, Google Advertising ID (AAID), ATT, Geräte-Fingerprinting noch App-übergreifendes Tracking',
+  },
+  it: {
+    coarse: "attribuzione approssimativa e proprietaria dell'installazione",
+    androidDiscard: 'elimina il referrer grezzo sul dispositivo',
+    appleToken: 'token transitorio di attribuzione Apple AdServices',
+    appleBounded: 'solo campi di campagna generali e delimitati',
+    appleDiscard: 'elimina sia il token sia la risposta grezza di Apple',
+    profile: 'collegata a quel profilo Vella',
+    excluded: "IDFA, l'ID pubblicitario di Google (AAID), ATT, l'impronta digitale del dispositivo o il tracciamento tra app",
+  },
+  ru: {
+    coarse: 'приблизительную собственную атрибуцию установки',
+    androidDiscard: 'необработанный реферер удаляется на устройстве',
+    appleToken: 'временный токен атрибуции Apple AdServices',
+    appleBounded: 'только укрупнённые поля кампании с ограниченным набором значений',
+    appleDiscard: 'удаляет и токен, и необработанный ответ Apple',
+    profile: 'связана с этим профилем Vella',
+    excluded: 'IDFA, рекламный идентификатор Google (AAID), ATT, цифровые отпечатки устройства или межприложенное отслеживание',
+  },
+  pl: {
+    coarse: 'przybliżoną własną atrybucję instalacji',
+    androidDiscard: 'usuwa surowy referrer na urządzeniu',
+    appleToken: 'tymczasowy token atrybucji Apple AdServices',
+    appleBounded: 'wyłącznie ogólne, ograniczone pola kampanii',
+    appleDiscard: 'usuwa zarówno token, jak i surową odpowiedź Apple',
+    profile: 'powiązana z tym profilem Vella',
+    excluded: 'IDFA, identyfikatora reklamowego Google (AAID), ATT, fingerprintingu urządzenia ani śledzenia między aplikacjami',
+  },
+} as const;
+
 const firebaseAnalyticsPrivacyChecks = {
   en: [
     'separate Google Analytics for Firebase SDK stream',
@@ -489,14 +584,14 @@ const firebaseAnalyticsPrivacyChecks = {
 } as const;
 
 const firebasePolicyUpdatedChecks = {
-  en: 'Last updated: August 20, 2026',
-  pt: 'Última atualização: 20 de agosto de 2026',
-  es: 'Última actualización: 20 de agosto de 2026',
-  fr: 'Dernière mise à jour : 20 août 2026',
-  de: 'Zuletzt aktualisiert: 20. August 2026',
-  it: 'Ultimo aggiornamento: 20 agosto 2026',
-  ru: 'Последнее обновление: 20 августа 2026 г.',
-  pl: 'Ostatnia aktualizacja: 20 sierpnia 2026 r.',
+  en: 'Last updated: August 25, 2026',
+  pt: 'Última atualização: 25 de agosto de 2026',
+  es: 'Última actualización: 25 de agosto de 2026',
+  fr: 'Dernière mise à jour : 25 août 2026',
+  de: 'Zuletzt aktualisiert: 25. August 2026',
+  it: 'Ultimo aggiornamento: 25 agosto 2026',
+  ru: 'Последнее обновление: 25 августа 2026 г.',
+  pl: 'Ostatnia aktualizacja: 25 sierpnia 2026 r.',
 } as const;
 
 const firebaseCustomMarketingEvents = [
@@ -624,6 +719,22 @@ describe('Vella localized website', () => {
     }
   });
 
+  it('discloses privacy-safe native install attribution in every locale', async () => {
+    for (const locale of LOCALES) {
+      const copy = await getCopy(locale);
+      const privacy = JSON.stringify(copy.legal.privacySections);
+      const checks = installAttributionPrivacyChecks[locale];
+
+      expect(privacy).toContain(checks.coarse);
+      expect(privacy).toContain(checks.androidDiscard);
+      expect(privacy).toContain(checks.appleToken);
+      expect(privacy).toContain(checks.appleBounded);
+      expect(privacy).toContain(checks.appleDiscard);
+      expect(privacy).toContain(checks.profile);
+      expect(privacy).toContain(checks.excluded);
+    }
+  });
+
   it('discloses the separate Google Analytics for Firebase SDK stream in every locale', async () => {
     expect(firebaseCustomMarketingEvents).toHaveLength(10);
 
@@ -712,10 +823,10 @@ describe('Vella localized website', () => {
     expect(unbranded.title).toBe('A private prayer journal for everyday life');
   });
 
-  it('names Android 24, iOS 21, and runtime 1.2 as the only current release candidate', () => {
+  it('keeps runtime 1.3 build numbers explicit without claiming nonexistent EAS artifacts', () => {
     const currentCandidate = markdownSection(
       storeSubmissionPackage,
-      '## Current release candidate — 2026-08-21',
+      '## Current release candidate — 2026-08-25',
       '## Historical release context — 2026-07-31 (superseded)',
     );
     const historicalContext = markdownSection(
@@ -729,20 +840,29 @@ describe('Vella localized website', () => {
       '## Official references',
     );
 
-    expect(currentCandidate.includes('only current release candidate')).toBe(true);
-    expect(currentCandidate.includes('Runtime: `1.2`.')).toBe(true);
-    expect(currentCandidate.includes('Android: version `1.0.0`, version code `24`.')).toBe(true);
-    expect(currentCandidate.includes('iOS: version `1.0.1`, build `21`.')).toBe(true);
-    expect(currentCandidate.includes('`0 ms` native launch wait')).toBe(true);
-    expect(currentCandidate.includes('Builds 23 and 20 were superseded')).toBe(true);
+    expect(currentCandidate.includes('Runtime: `1.3`.')).toBe(true);
+    expect(currentCandidate.includes('Android: version `1.0.1`, next version code `25`; signed EAS build ID pending.')).toBe(true);
+    expect(currentCandidate.includes('iOS: version `1.0.1`, next build `23`; signed EAS build ID pending.')).toBe(true);
+    expect(currentCandidate.includes('`5000 ms` native launch wait')).toBe(true);
+    expect(currentCandidate.includes('branded splash')).toBe(true);
+    expect(currentCandidate.includes('Do not reuse or decrease either build number')).toBe(true);
+    expect(currentCandidate.includes('No signed runtime-1.3 EAS build exists yet')).toBe(true);
+    expect(currentCandidate.includes('Live EAS records identify')).toBe(false);
+    expect(currentCandidate.includes('current signed candidate')).toBe(false);
     expect(currentCandidate.includes('`1.0.0 (13)`')).toBe(false);
     expect(currentCandidate.includes('`1.0.0 (15)`')).toBe(false);
     expect(historicalContext.includes('Android build `1.0.0 (13)`')).toBe(true);
     expect(historicalContext.includes('iOS build `1.0.0 (15)`')).toBe(true);
-    expect(finalChecklist.includes('build 21 in App Store Connect')).toBe(true);
-    expect(finalChecklist.includes('build 24 in Play Console')).toBe(true);
+    expect(finalChecklist.includes('iOS build 23')).toBe(true);
+    expect(finalChecklist.includes('Android version code 25')).toBe(true);
     expect(finalChecklist.includes('build 15')).toBe(false);
     expect(finalChecklist.includes('build 13')).toBe(false);
+    expect(releaseFinishLine).toContain('Runtime `1.3`');
+    expect(releaseFinishLine).toContain('next iOS build `23`');
+    expect(releaseFinishLine).toContain('next Android version code `25`');
+    expect(releaseFinishLine).toContain('No signed runtime-1.3 EAS build exists yet');
+    expect(releaseFinishLine).not.toContain('current signed candidates');
+    expect(releaseFinishLine).toContain('5000 ms');
   });
 
   it('keeps Apple and Play privacy answers form-ready for optional voice transcription', () => {
@@ -758,6 +878,8 @@ describe('Vella localized website', () => {
     );
     const appleRows = markdownTableRows(applePrivacy);
     const linkedAnswers = new Map(appleRows.map((row) => [row[0], row[2]]));
+    const trackingAnswers = new Map(appleRows.map((row) => [row[0], row[3]]));
+    const purposes = new Map(appleRows.map((row) => [row[0], row[4]]));
     const categoricalAudioExclusion = /do (?:\*\*)?not(?:\*\*)? select[^.\n]{0,160}\baudio\b/iu;
     const submissionCopy = storeSubmissionPackage.toLowerCase();
 
@@ -769,8 +891,30 @@ describe('Vella localized website', () => {
     expect(linkedAnswers.get('Usage Data — Product Interaction')).toBe('Yes');
     expect(linkedAnswers.get('Diagnostics — Other Diagnostic Data')).toBe('Yes');
     expect(linkedAnswers.get('User Content — Audio Data')).toBe('Yes');
+    expect(linkedAnswers.get('Advertising Data')).toBe('Yes');
+    expect(trackingAnswers.get('Advertising Data')).toBe('No');
+    expect(purposes.get('Advertising Data')).toContain('Analytics');
+    expect(purposes.get('Advertising Data')).toContain("Developer's Advertising");
+    for (const type of [
+      'Identifiers — User ID',
+      'Identifiers — Device ID',
+      'Purchases — Purchase History',
+      'Usage Data — Product Interaction',
+    ]) {
+      expect(purposes.get(type)).toContain('Analytics');
+      expect(purposes.get(type)).toContain("Developer's Advertising");
+    }
     expect(applePrivacy.includes('Firebase app-instance stream remains pseudonymous')).toBe(true);
+    expect(applePrivacy).toContain('raw Android referrer is discarded on-device');
+    expect(applePrivacy).toContain('Apple token and raw response are transient and discarded');
+    expect(applePrivacy).toContain('only coarse, bounded campaign fields');
+    expect(applePrivacy).not.toContain('numeric Apple Ads campaign fields');
+    expect(applePrivacy).not.toContain('only numeric campaign fields');
+    expect(applePrivacy).toContain('No IDFA, AAID, ATT prompt, fingerprinting, or cross-app tracking');
     expect(googlePrivacy.includes('| Audio files — Voice recordings | Yes | Optional/user-initiated |')).toBe(true);
+    expect(googlePrivacy).toContain('Advertising or marketing');
+    expect(googlePrivacy).toContain('raw Android referrer is discarded on-device');
+    expect(googlePrivacy).toContain('Apple token and raw response are transient and discarded');
     expect(submissionCopy.includes('optional, user-initiated voice transcription')).toBe(true);
     expect(submissionCopy.includes('microphone permission is requested only')).toBe(true);
     expect(submissionCopy.includes('recording leaves the device for openai transcription')).toBe(true);
@@ -781,18 +925,65 @@ describe('Vella localized website', () => {
     expect(categoricalAudioExclusion.test(storeSubmissionPackage)).toBe(false);
   });
 
-  it('keeps the Google Ads readiness document free of raw account and app identifiers', () => {
-    const rawAccountIdentifier = /\b\d{3}-\d{3}-\d{4}\b/u;
+  it('keeps the Google Ads readiness document bound to the verified account and campaign', () => {
+    const accountIdentifiers = [...googleAdsReadiness.matchAll(/\b\d{3}-\d{3}-\d{4}\b/gu)]
+      .map((match) => match[0]);
     const rawAppIdentifier = /\b[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*){2,}\b/iu;
-    const rawLabeledValue = /(?:manager|client|customer|project|app|package)[^:\n]{0,40}:\s*`[^`]+`/iu;
 
-    expect(rawAccountIdentifier.test(googleAdsReadiness)).toBe(false);
+    expect(accountIdentifiers).toEqual(['712-460-9192']);
     expect(rawAppIdentifier.test(googleAdsReadiness)).toBe(false);
-    expect(rawLabeledValue.test(googleAdsReadiness)).toBe(false);
     expect(googleAdsReadiness.includes('- Manager account: approved manager account (identifier omitted).')).toBe(true);
-    expect(googleAdsReadiness.includes('- Client account: dedicated Vella client account (identifier omitted).')).toBe(true);
+    expect(googleAdsReadiness.includes('- Client account: `712-460-9192`.')).toBe(true);
     expect(googleAdsReadiness.includes('- App listing: approved Vella Android store listing (identifier omitted).')).toBe(true);
     expect(googleAdsReadiness.includes('Campaign name: `Vella_BR_Android_202608_PrayerDaily`')).toBe(true);
+    expect(googleAdsReadiness.includes('Historical campaign ID: `24120421103`')).toBe(true);
+    expect(googleAdsReadiness.includes('Planned campaign ID: pending')).toBe(true);
+  });
+
+  it('keeps acquisition runbooks on shipped attribution truth and paused spend', () => {
+    expect(googleAdsReadiness).toContain('Budget: R$60/day');
+    expect(googleAdsReadiness).toContain('14-day campaign cap of R$840');
+    expect(googleAdsReadiness).toContain('R$1,000 total learning ceiling');
+    expect(googleAdsReadiness).toContain('start state: **paused**');
+    expect(googleAdsReadiness).toContain('vella_profile_initialized');
+    expect(googleAdsReadiness).not.toMatch(/\bsign_up\b/u);
+    expect(googleAdsReadiness).toContain('native Install Referrer bridge is implemented in candidate source');
+    expect(googleAdsReadiness).not.toContain('native Install Referrer bridge is shipped');
+    expect(googleAdsReadiness).not.toContain('proper native attribution bridge is shipped');
+    expect(growthPlatformAccess).toContain('Apple Ads campaign remains paused');
+    expect(growthPlatformAccess).toContain('R$40/day');
+    expect(growthPlatformAccess).toContain('R$560');
+    expect(growthPlatformAccess).toContain('R$56');
+    expect(growthPlatformAccess).not.toContain('added in a future store build');
+    expect(googleAdsReadiness).toContain('Historical campaign status observed: **Ended / inactive**');
+    expect(googleAdsReadiness).toContain('Historical budget: R$46/day');
+    expect(googleAdsReadiness).not.toContain('Campaign status observed: **Paused**');
+    expect(googleAdsReadiness).toContain('R$594.09');
+    expect(googleAdsReadiness).toContain('R$594.08');
+    expect(googleAdsReadiness).toMatch(/R\$0\.01\s+display\/reconciliation difference/u);
+    expect(googleAdsReadiness).toContain('custom lifecycle events are not yet production-shipped');
+    expect(growthPlatformAccess).toContain('`APPLE_ADS_ORG_ID` is not configured');
+    expect(growthPlatformAccess).toContain('historical campaign `24120421103` remains ended/inactive');
+    expect(growthPlatformAccess).toContain('replacement campaign ID is pending');
+  });
+
+  it('keeps reviewer guidance aligned with compact onboarding and shared-profile auth', () => {
+    expect(appleReviewNotes).toContain('compact onboarding');
+    expect(appleReviewNotes).toContain('one anonymous first Vella moment');
+    expect(appleReviewNotes).toContain('Continue with Apple, Continue with Google, or email');
+    expect(appleReviewNotes).toContain('active subscriber goes directly into Vella');
+    expect(appleReviewNotes).toContain('creates the missing Vella profile');
+    expect(appleReviewNotes).toContain('Microphone permission is requested only after');
+    expect(appleReviewNotes).not.toContain('seven-step onboarding');
+    expect(appleReviewNotes).not.toContain('does not request camera, microphone');
+  });
+
+  it('marks dated audits as superseded operational history', () => {
+    for (const audit of [historicalFinalProductAudit, historicalProductionAudit]) {
+      expect(audit.slice(0, 600)).toContain('SUPERSEDED');
+      expect(audit.slice(0, 600)).toContain('RELEASE_FINISH_LINE.md');
+      expect(audit.slice(0, 600)).toContain('STORE_SUBMISSION_PACKAGE.md');
+    }
   });
 
   it('uses the verified store identifiers', () => {

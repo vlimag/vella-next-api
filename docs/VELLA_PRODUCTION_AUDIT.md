@@ -1,5 +1,7 @@
 # Vella production audit and launch plan
 
+> **SUPERSEDED OPERATIONAL HISTORY.** This pre-release snapshot is preserved only for provenance. Do not use its runtime, build, onboarding/auth, privacy, billing, or release instructions. Current instructions are in [`RELEASE_FINISH_LINE.md`](./RELEASE_FINISH_LINE.md) and [`STORE_SUBMISSION_PACKAGE.md`](./STORE_SUBMISSION_PACKAGE.md).
+
 Last reviewed: 2026-07-28
 
 ## Release verdict

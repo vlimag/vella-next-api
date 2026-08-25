@@ -1,5 +1,7 @@
 # Vella final product audit
 
+> **SUPERSEDED OPERATIONAL HISTORY.** This 2026-07-31 snapshot is preserved only for provenance. Do not use its build numbers, onboarding/auth descriptions, privacy answers, release state, or action list. Current instructions are in [`RELEASE_FINISH_LINE.md`](./RELEASE_FINISH_LINE.md) and [`STORE_SUBMISSION_PACKAGE.md`](./STORE_SUBMISSION_PACKAGE.md).
+
 Last reviewed: **2026-07-31**  
 Scope: current `mobile`, `api`, release-safe migrations, repository assets, and the production health endpoint. Store-console state is recorded only where it was independently reported; it is not inferred from source. The operational checklist remains [`RELEASE_FINISH_LINE.md`](./RELEASE_FINISH_LINE.md).
 

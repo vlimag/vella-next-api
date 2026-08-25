@@ -2,19 +2,21 @@
 
 > Current operational status and click-by-click launch steps are maintained in [`RELEASE_FINISH_LINE.md`](./RELEASE_FINISH_LINE.md). This document remains the detailed metadata, privacy, reviewer-notes, and questionnaire reference.
 
-The current local release candidate was checked against repository configuration on **2026-08-21**. External store-console states remain controller-owned facts and are not inferred from source. This is an implementation audit, not legal advice.
+The current release plan was reconciled against repository source and separately observed controller evidence on **2026-08-25**. External store-console states remain controller-owned facts and are not inferred from source. This is an implementation audit, not legal advice.
 
-## Current release candidate — 2026-08-21
+## Current release candidate — 2026-08-25
 
-**Android version code 24, iOS build 21, and runtime 1.2 are the only current release candidate.** Builds 23 and 20 were superseded by the first-launch i18n hotfix and must not be submitted or released. Use these values for all current local release review and controller verification:
+**Runtime 1.3 is the current native release target. The next configured build values are iOS build 23 and Android version code 25. No signed runtime-1.3 EAS build exists yet.** Use these values for current local release review and controller verification:
 
-- Runtime: `1.2`.
-- Android: version `1.0.0`, version code `24`.
-- iOS: version `1.0.1`, build `21`.
-- Updates: check on launch without delaying the embedded bundle (`0 ms` native launch wait).
-- Production build auto-increment: disabled so the reviewed native build values cannot drift locally.
+- Runtime: `1.3`.
+- Android: version `1.0.1`, next version code `25`; signed EAS build ID pending.
+- iOS: version `1.0.1`, next build `23`; signed EAS build ID pending.
+- Updates: hold the branded splash while checking/downloading for up to the `5000 ms` native launch wait, then reload a newly downloaded compatible update on that first launch.
+- Production build auto-increment: disabled; explicitly set and verify these next values before building so they cannot drift.
 
-No local `.ipa` or `.aab` is claimed as inspected. Signed-build lifecycle proof, exact-binary store-account checks, the production-equivalent paywall screenshot, upload, selection, and submission remain controller gates. Older build references below are retained only as dated audit history and are not current instructions.
+Do not reuse or decrease either build number. Build 23 was selected from the exhaustive iOS EAS history and version code 25 from the live Play record, but neither is evidence of a completed runtime-1.3 artifact. No local runtime-1.3 `.ipa` or `.aab` is claimed as inspected. Signed-build IDs, lifecycle proof, exact-binary store-account checks, the production-equivalent paywall screenshot, upload, selection, and submission remain controller gates. Older build references below are retained only as dated audit history and are not current instructions.
+
+The runtime-1.3 custom lifecycle events are present in candidate source but are not yet production-shipped or observed from an installed store artifact. The attribution API is deployed, but production currently has no configured `APPLE_ADS_ORG_ID`, so iOS Apple Ads exchange remains intentionally fail-closed/retryable until the real organization ID is configured. No paid campaign is active: the historical Google campaign is ended/inactive, and any Google replacement or Apple campaign must remain uncreated or paused until its gates pass.
 
 ## Historical release context — 2026-07-31 (superseded)
 
@@ -97,7 +99,7 @@ The descriptions deliberately do not hard-code prices. They accurately disclose 
 - Financial features: **No**.
 - Health app: **No**; do not market Vella as treatment or mental-health care.
 - Content rights: **Yes, the app displays third-party content** if Bible translations are not wholly owned by the seller. Supply licenses if Apple asks.
-- Sign-in method to describe to review: **email and password**. Apple/Google auth libraries and the Apple entitlement are present, but no working social-auth UI was found; do not claim those login methods.
+- Sign-in methods shown in the current app: **email and password, Google on iOS and Android, and Apple on supported iOS devices**. A verified email already used by another supported method is reused through Supabase Auth's same-account flow; choosing email sign-up for an existing OAuth email sends a verification code and lets that user set a password. After any successful provider session, Vella lazily creates or hydrates the missing `faith_harbor` profile, including for a shared Supabase Auth user first created in another app.
 
 ## URLs and legal-page inventory
 
@@ -191,11 +193,11 @@ Do not recreate, rotate, print, or copy these secrets solely to satisfy document
 
 Replace every bracketed value before submission. Never leave placeholders in the actual review notes.
 
-> Vella is a subscription-only Christian Scripture, reflection, and community app. There is no permanent free tier. Users complete onboarding, sign in or create an email/password account, and then see the Premium screen. The monthly product is charged immediately and has no trial. Eligible new annual subscribers may see a 14-day introductory trial; the store determines eligibility and shows the renewal price before confirmation.
+> Vella is a subscription-only Christian Scripture, reflection, and community app. There is no permanent free tier. On a clean install, a user completes compact onboarding, receives one anonymous first Vella moment, reviews the Premium offer, and can continue with Apple, Google, or email. After authentication Vella checks authoritative entitlement before mounting the paywall: an active subscriber enters the app immediately, while a user without active access returns to the preserved Premium selection. The monthly product is charged immediately and has no trial. Eligible new annual subscribers may see a 14-day introductory trial; the store determines eligibility and shows the renewal price before confirmation.
 >
 > Review account: [EMAIL] / [PASSWORD]
 >
-> Main path: launch → complete onboarding → sign in → Premium → choose Monthly or Annual → confirm through the store. Restore purchases is on the Premium screen. Manage subscription, Terms, Privacy, sign-out, and account deletion remain reachable when content access is locked.
+> Main path: launch → choose one primary goal in compact onboarding → complete one anonymous first Vella moment → review Monthly or Annual → authenticate → return to the same selected offer if purchase is still required → confirm through the store. Restore purchases is on the Premium screen. Manage subscription, Terms, Privacy, sign-out, and account deletion remain reachable when content access is locked.
 >
 > To test Scripture and journeys after entitlement: open Home for the daily verse and journey, Explore for Bible search/favorites/private notes, Groups to create or join by invitation code, and Feed for user-generated content.
 >
@@ -217,21 +219,24 @@ These are conservative answers grounded in first-party code. They must include t
 | --- | --- | --- | --- | --- |
 | Contact Info — Email Address | Yes | Yes | No | Authentication and account management |
 | Contact Info — Name | Yes | Yes | No | Profile and public social identity |
-| Identifiers — User ID | Yes | Yes | No | Authentication, sync, entitlement, community |
-| Identifiers — Device ID | Yes | Yes | No | Firebase app-instance/device analytics is pseudonymous and is not assigned a Vella account ID; push registration and operational device records may be linked after account association |
+| Identifiers — User ID | Yes | Yes | No | App Functionality, Analytics, Developer's Advertising — authentication, sync, entitlement, community, and privacy-safe attribution linked only after Vella profile hydration |
+| Identifiers — Device ID | Yes | Yes | No | App Functionality, Analytics, Developer's Advertising — pseudonymous Firebase app-instance data, random first-party install ID, attribution, push registration, and operational device records; some paths become linked after account association |
 | Location — Coarse Location | Yes | No | No | Approximate location inferred by Google from a masked IP address for analytics; no precise or permission-based location collection |
-| Purchases — Purchase History | Yes | Yes | No | Firebase product/value/currency analytics plus linked authoritative server validation, access restoration, refunds, and audit |
+| Purchases — Purchase History | Yes | Yes | No | App Functionality, Analytics, Developer's Advertising — pseudonymous Firebase product/value/currency analytics plus linked authoritative server validation, access restoration, refunds, audit, and coarse campaign outcome measurement |
+| Advertising Data | Yes | Yes | No | Analytics, Developer's Advertising — coarse first-party source/campaign/creative codes on Android and coarse, bounded Apple Ads campaign fields on iOS, linked to a Vella profile only after sign-in; no third-party ad serving or cross-company tracking |
 | User Content — Photos or Videos | Yes, photos only | Yes | No | Optional Feed image posts and moderation |
 | User Content — Other User Content | Yes | Yes | No | Posts, comments, private notes, reflections, bio, groups, reports |
 | User Content — Audio Data | Yes | Yes | No | Optional, user-initiated voice transcription: microphone permission is requested only after the user starts recording, the recording leaves the device for OpenAI transcription, Vella does not retain the recording, and only confirmed text is saved |
-| Usage Data — Product Interaction | Yes | Yes | No | Automatic lifecycle/session/engagement/update events, ten closed custom marketing events, and linked journey/progress, favorites, likes, follows, blocks, settings, and personalization records |
+| Usage Data — Product Interaction | Yes | Yes | No | App Functionality, Analytics, Developer's Advertising — automatic lifecycle/session/engagement/update events, ten closed custom marketing events, privacy-safe campaign measurement, and linked journey/progress, favorites, likes, follows, blocks, settings, and personalization records |
 | Diagnostics — Other Diagnostic Data | Yes | Yes | No | Firebase SDK transport diagnostics are pseudonymous; broader authenticated service diagnostics may be linked, so the overall answer is conservative |
 | Sensitive Info | Conservatively Yes | Yes | No | Faith preferences and devotional/user-created content may reveal religious beliefs; app functionality/personalization |
 | Other Data | Yes | Yes | No | EULA acceptance records include IP address and user agent for security/compliance |
 
 The **Linked to user** column gives one overall Yes/No answer for each Apple data type. The Firebase app-instance stream remains pseudonymous: Vella does not set a Firebase account user ID or user properties, and its app-instance/device, coarse-location, purchase, interaction, and transport fields are not assigned to the Vella account. That Firebase distinction belongs in the notes, but any separate linked path makes the overall answer **Yes**. Coarse Location remains **No** because the Firebase masked-IP inference is the only implemented coarse-location path.
 
-Select coarse location only for the approximate location Google infers from a masked IP address in the Firebase analytics stream. Select Audio Data for the optional voice-transcription path. Do **not** select precise location, contacts, payment card details, advertising data, or browsing history based on the current code. Apple and Google process the payment method; Vella receives transaction and entitlement data, not full card details.
+Select coarse location only for the approximate location Google infers from a masked IP address in the Firebase analytics stream. Select Advertising Data for Vella's own coarse install/campaign attribution and select Audio Data for the optional voice-transcription path. Do **not** select precise location, contacts, payment card details, or browsing history based on the current code. Apple and Google process the payment method; Vella receives transaction and entitlement data, not full card details.
+
+For attribution, only allowlisted source, medium, campaign, and creative codes leave Android; the raw Android referrer is discarded on-device. On iOS, the Apple token and raw response are transient and discarded after the API validates only coarse, bounded campaign fields. The pseudonymous installation may be linked to the current Vella profile after sign-in so authoritative subscription outcomes can measure Vella's own campaigns. No IDFA, AAID, ATT prompt, fingerprinting, or cross-app tracking is used. Therefore Advertising Data is collected, linked, used for **Analytics** and **Developer's Advertising**, and **not used for tracking**.
 
 The Firebase analytics stream does not receive Vella account user IDs or user properties and excludes advertising IDs, advertising data, private devotional or other user content, identity fields, receipts or purchase tokens, notification tokens, localized prices, and raw errors. Ad storage, ad user data, and ad personalization are disabled. The broader account, subscription, user-content, and sensitive-information collection above remains separately disclosed because app functionality still processes it outside this analytics stream.
 
@@ -251,20 +256,22 @@ Answer “Does your app collect or share any required user data?” **Yes**. Ans
 | --- | --- | --- | --- |
 | Personal info — Name | Yes | Optional/user-configurable | App functionality, account management |
 | Personal info — Email address | Yes | Required for account | App functionality, account management |
-| Personal info — User IDs | Yes | Required | App functionality, account management, fraud/security |
+| Personal info — User IDs | Yes | Required | App functionality, account management, analytics, fraud/security, Advertising or marketing for Vella's own campaigns |
 | Personal info — Other info | Yes | Mixed | Handle, bio, locale, settings, faith preferences; functionality/personalization |
 | Location — Approximate location | Yes | Automatic for the Firebase stream | Analytics; inferred from a masked IP address, not device location permission |
-| Financial info — Purchase history | Yes | Required for paid access; Firebase product/value/currency fields are automatic | Analytics plus authoritative app functionality, account management, and fraud/security |
+| Financial info — Purchase history | Yes | Required for paid access; Firebase product/value/currency fields are automatic | Analytics, authoritative app functionality, account management, fraud/security, and Advertising or marketing measurement for Vella's own campaigns |
 | Photos and videos — Photos | Yes | Optional | User-selected Feed posting and moderation |
 | Audio files — Voice recordings | Yes | Optional/user-initiated | App functionality: the recording leaves the device for OpenAI transcription; Vella does not retain the recording, and only confirmed text is saved |
-| App activity — App interactions | Yes | Mixed: Firebase and first-party mechanical analytics are automatic; feature actions are optional | Analytics, app functionality, progress, favorites, likes, follows, blocks, settings, and personalization |
+| App activity — App interactions | Yes | Mixed: Firebase and first-party mechanical analytics are automatic; feature actions are optional | Analytics, app functionality, Advertising or marketing measurement for Vella's own campaigns, progress, favorites, likes, follows, blocks, settings, and personalization |
 | App activity — Other user-generated content | Yes | Optional | Posts, comments, notes, reflections, groups, reports; functionality/community safety |
 | App info and performance — Diagnostics | Yes | Automatic for Firebase SDK transport | Analytics delivery and troubleshooting |
-| Device or other IDs | Yes for Firebase app-instance/device information, a random first-party install ID, and device/push registration | Analytics IDs automatic; push token optional | Analytics, functionality, notifications, security; no advertising ID |
+| Device or other IDs | Yes for Firebase app-instance/device information, a random first-party install ID, and device/push registration | Analytics IDs automatic; push token optional | Analytics, functionality, notifications, security, and Advertising or marketing measurement for Vella's own campaigns; no advertising ID |
 
-Select approximate location for the masked-IP inference described above and Voice recordings for optional transcription. Do not select precise location, contacts, files/documents, calendar, installed apps, SMS/call logs, health data, payment-card information, advertising, or web browsing history from the current implementation.
+Select approximate location for the masked-IP inference described above and Voice recordings for optional transcription. Use the Advertising or marketing purpose only on the first-party identifiers, purchase outcomes, and app interactions used to measure Vella's own acquisition campaigns. Do not select precise location, contacts, files/documents, calendar, installed apps, SMS/call logs, health data, payment-card information, or web browsing history from the current implementation.
 
 Vella's first-party analytics stream uses a random pseudonymous install ID and mechanical events such as first open, onboarding, paywall and checkout steps, verified subscription status, meaningful-session completion, notification permission/open, and store CTA clicks. Its event properties exclude prayer, search, Scripture/verse, note, post, profile, identity, notification-token, receipt/purchase-token, localized-price, raw-error, religious-preference, and other user-created or devotional content. Raw first-party events are retained for no more than 90 days; longer-lived reporting is aggregate and suppresses small cohorts. The data is not sold or used to create or upload targeted-advertising audiences.
+
+For native attribution, Android sends only allowlisted source, medium, campaign, and creative codes; the raw Android referrer is discarded on-device. iOS sends a transient Apple AdServices token to Vella's API for direct Apple exchange; the Apple token and raw response are transient and discarded after only coarse, bounded campaign fields are validated. After sign-in and Vella-profile hydration, the pseudonymous installation may be linked to that Vella profile to measure authoritative subscription outcomes. This is Advertising or marketing measurement for Vella's own campaigns, not third-party ad serving: there is no IDFA, AAID, ATT prompt, fingerprinting, Customer Match, or cross-app tracking.
 
 Google Analytics for Firebase is a separate SDK stream. It automatically processes app-instance/device/platform/language information, approximate location inferred from a masked IP address, lifecycle/session/engagement/update events, client-side purchase product/value/currency fields, and SDK transport diagnostics. It also receives only the ten closed custom marketing events documented in the privacy policy. Vella does not set a Firebase account user ID or user properties, and advertising ID collection, ad storage, ad user data, and ad personalization are disabled. This stream excludes advertising data, sensitive devotional/user content, identity, receipts/tokens, localized prices, and raw errors. Google retention and processing follow the configured Analytics settings and applicable Google terms; do not apply Vella's first-party 90-day promise to this SDK stream.
 
@@ -333,12 +340,12 @@ No store screenshot files were found in the repository. The Google icon and feat
 5. **Encouragement with clear boundaries** — Feed with fictional, non-sensitive sample content and visible controls.
 6. **Premium, clearly explained** — actual paywall with current store prices, annual trial eligibility, renewal period, Restore, Terms, and Privacy.
 
-Do not show weekly recaps, family seats, shared plans/progress, social login, or any screen that is not in the submitted binary. Avoid prices and “free” claims in Play graphics because promotional pricing changes and Play restricts price/promotional language in listing imagery.
+Do not show weekly recaps, family seats, shared plans/progress, or any screen that is not in the submitted binary. Social login may appear only in an exact current authentication screenshot that truthfully shows Google and, on supported iOS devices, Apple. Avoid prices and “free” claims in Play graphics because promotional pricing changes and Play restricts price/promotional language in listing imagery.
 
 ## Final submission checklist
 
 - [ ] Close every P0 above.
-- [ ] Confirm build 21 in App Store Connect and build 24 in Play Console are the intended signed release artifacts; verify them against the completed signed EAS builds.
+- [ ] Build runtime 1.3 with iOS build 23 and Android version code 25; record the resulting signed EAS build IDs, confirm them in the respective store consoles, then install and verify those exact artifacts.
 - [ ] Test clean install, onboarding, sign-up, sign-in, paywall, both purchases, restore, renewal state, lapsed state, legal links, deletion, notifications, photo selection, Feed EULA, report, block, and sign-out on physical iOS and Android devices.
 - [ ] Confirm the exact uploaded builds point to HTTPS production API and live legal URLs.
 - [ ] Make `support@vella.one` and `privacy@vella.one` receive and send mail.
@@ -346,7 +353,7 @@ Do not show weekly recaps, family seats, shared plans/progress, social login, or
 - [ ] Verify both configured IAP catalogs, localizations, prices, territories, review screenshots, credentials, and notifications; do not create duplicates.
 - [ ] Complete Apple privacy and related questionnaires; verify the Google Data safety, content rating, target audience, ads, and content-rights answers already associated with the production review.
 - [ ] Complete Apple localized store copy/screenshots, privacy/legal/trader/contact data, build selection, subscription attachments, and submission.
-- [ ] Record the final Google production-review outcome and rollout state for build 24.
+- [ ] Record the final Google production-review outcome and rollout state for Android version code 25.
 - [ ] Keep the backend and moderation operator online throughout review.
 
 ## Official references

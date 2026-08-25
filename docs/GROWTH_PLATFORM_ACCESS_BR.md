@@ -1,6 +1,6 @@
 # Vella growth platform access — Brazil launch
 
-Last updated: 2026-08-20
+Last updated: 2026-08-25
 
 The Month 1 budget is R$1,000. Only Google Ads should receive paid-media budget
 at launch. The other accounts below establish owned distribution, measurement,
@@ -12,10 +12,15 @@ and future optionality without fragmenting the learning budget.
 
 - Open the organization-controlled Google Ads manager through the approved
   credential record; do not copy account identifiers into documentation.
-- Create a dedicated `Vella Brazil` client in BRL and Brasília time.
+- Open the existing Vella client `712-460-9192` in BRL and Brasília time; do not
+  create a duplicate client.
 - Link the existing Vella Android listing by its non-sensitive console label;
   do not copy application identifiers into documentation.
-- Create `Vella_BR_Android_202608_PrayerDaily` paused.
+- The historical campaign `24120421103` remains ended/inactive; do not
+  reactivate it.
+- Create `Vella_BR_Android_202608_PrayerDaily` only after the readiness gates
+  pass. The replacement campaign ID is pending, and its start state must remain
+  paused until the explicit go/no-go.
 - Do not enable spend until every gate in `GROWTH_LAUNCH_BOARD_BR.md` is green.
 
 ### 2. Google Search Console
@@ -42,13 +47,23 @@ and future optionality without fragmenting the learning budget.
   source files for the Google App campaign.
 - Do not expose real prayer, profile, purchase, or notification data in demos.
 
-## Sign in later
+## Configure paused; activate later
 
 ### Apple Ads
 
-Create after the iOS public App Store page is live and its subscription funnel
-is verified. Start with Brazil Search Results and high-intent terms; do not spend
-before the public product page resolves.
+Create one Brazil Search Results campaign only after the Vella product page can
+be selected in Apple Ads. The Apple Ads campaign remains paused until the exact
+signed runtime-1.3 iOS build, public product page, subscription funnel,
+attribution exchange, privacy answers, and creative all pass their gates. Its
+separate proposed limit is R$40/day with a 14-day R$560 cap; Discovery may use at
+most R$56 of that cap. These numbers authorize paused configuration only, not
+spend. Apple activation requires its own explicit go/no-go and cannot inherit an
+Android approval.
+
+`APPLE_ADS_ORG_ID` is not configured in production as of 2026-08-25. The iOS
+attribution endpoint therefore remains intentionally fail-closed/retryable until
+the real positive organization ID is obtained from the authenticated Apple Ads
+account and configured. Never copy a sample value from documentation.
 
 ### TikTok for Business
 
@@ -100,9 +115,12 @@ creator asset.
 - Check `iap_diagnostics.row_limit_reached`. When it is `true`, the underlying
   5,000-row query cap was reached, so all IAP counts and breakdowns are lower
   bounds for the requested window.
-- Google Play Console: use its acquisition reports as the authoritative view of
-  Google ad-to-install performance until native Install Referrer attribution is
-  added in a future store build.
+- Google Play Console and Google Ads remain the authoritative modeled view of
+  Google ad-to-install performance. Runtime 1.3 now includes the native Install
+  Referrer bridge for privacy-safe first-party measurement: only allowlisted
+  source, medium, campaign, and creative codes leave the device, and the raw
+  referrer is discarded on-device. Do not claim exact first-party campaign CAC
+  when an approved campaign code is absent.
 
 ## Access and safety rules
 
