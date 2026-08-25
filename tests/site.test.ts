@@ -823,7 +823,7 @@ describe('Vella localized website', () => {
     expect(unbranded.title).toBe('A private prayer journal for everyday life');
   });
 
-  it('records the exact inspected runtime 1.3 artifacts without claiming store-distributed QA', () => {
+  it('records the exact platform-bound runtime 1.3 release truth', () => {
     const currentCandidate = markdownSection(
       storeSubmissionPackage,
       '## Current release candidate — 2026-08-25',
@@ -850,9 +850,25 @@ describe('Vella localized website', () => {
     expect(currentCandidate).toContain('- Android: version `1.0.1`, version code `25`; EAS build `460d034c-b51f-494a-9281-4a9fe07471b3`; inspected AAB SHA-256 `145fd5ce504f7ab5c4ccc508b0d9b3a0a993fef08a1c2ca2a32b87890447981d`.');
     expect(currentCandidate).toContain('- iOS: version `1.0.1`, build `23`; EAS build `8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f`; inspected IPA SHA-256 `36295217084dc5dbb15ca925d4212e07c52a8804b991feb1790f46612f68088c`.');
     expect(currentCandidate).toContain('Both signed runtime-1.3 EAS production artifacts are finished and inspected');
-    expect(currentCandidate).toContain('not yet submitted or store-distributed');
-    expect(currentCandidate).toContain('No runtime-1.3 OTA has been published');
-    expect(currentCandidate).toContain('Neither artifact has been installed from TestFlight or Play Internal');
+    expect(currentCandidate).toContain('The API `main` branch and production deployment are already current');
+    expect(currentCandidate).toContain('EAS submission `d897fd82-bd2d-42a4-acb9-63f0a4c3c96a` successfully uploaded the exact iOS build to App Store Connect');
+    expect(currentCandidate).toContain('completed App Store Connect processing at `2026-08-25T06:27:47Z`');
+    expect(currentCandidate).toContain('available to test in TestFlight at `2026-08-25T06:30Z`');
+    expect(currentCandidate).toContain('not installed from TestFlight');
+    expect(currentCandidate).toContain('not selected or submitted for App Review');
+    expect(currentCandidate).toContain('targeted Google Play Internal');
+    expect(currentCandidate).toContain('Android Publisher API is enabled on the verified Google Cloud project `vella-faith-2026` (`15173925854`)');
+    expect(currentCandidate).toContain('retry submission `8160f454-f502-4e31-8697-4b528421d582` failed');
+    expect(currentCandidate).toContain('`vella-expo-push@vella-faith-2026.iam.gserviceaccount.com` lacks Vella app permissions in Play Console');
+    expect(currentCandidate).toContain('No Android release was created');
+    expect(currentCandidate).toContain('authoritative production runtime-1.3 update group is `83e563c4-20c1-4250-9612-b19e1f98920e`');
+    expect(currentCandidate).toContain('source commit `d8259d77a3aa6a4299f71149ad1d13cb5ebe631a`');
+    expect(currentCandidate).toContain('iOS update `01a037a2-d739-7d8c-8fc0-d0505924afbc`');
+    expect(currentCandidate).toContain('Android update `01a037a2-d739-706b-8802-42177a13019d`');
+    expect(currentCandidate).toContain('Direct update-server probes prove that the production channel at runtime `1.3` serves that exact final group');
+    expect(currentCandidate).toContain('runtime `1.2` remains on the prior `a670fc29…` group');
+    expect(currentCandidate).toContain('Two earlier runtime-1.3 groups are superseded');
+    expect(currentCandidate).toContain('Exact first-launch installed-client proof remains open');
     expect(currentCandidate).toContain('`APPLE_ADS_ORG_ID`');
     expect(currentCandidate).toContain('not configured');
     expect(currentCandidate).toContain('No paid campaign is active');
@@ -875,15 +891,31 @@ describe('Vella localized website', () => {
     expect(releaseFinishLine).toContain('`8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f`');
     expect(releaseFinishLine).toContain('`460d034c-b51f-494a-9281-4a9fe07471b3`');
     expect(releaseFinishLine).toContain('signed EAS artifacts are finished and inspected');
-    expect(releaseFinishLine).toContain('not yet store-distributed');
     expect(releaseFinishLine).not.toContain('No signed runtime-1.3 EAS build exists yet');
     expect(releaseFinishLine).toContain('5000 ms');
-    expect(releaseCurrentStatus).toContain('No runtime-1.3 OTA has been published');
-    expect(releaseCurrentStatus).toContain('Neither artifact has been installed from TestFlight or Play Internal');
+    expect(releaseCurrentStatus).toContain('The API `main` branch and production deployment are already current');
+    expect(releaseCurrentStatus).toContain('`d897fd82-bd2d-42a4-acb9-63f0a4c3c96a`');
+    expect(releaseCurrentStatus).toContain('completed App Store Connect processing at `2026-08-25T06:27:47Z`');
+    expect(releaseCurrentStatus).toContain('available to test in TestFlight at `2026-08-25T06:30Z`');
+    expect(releaseCurrentStatus).toContain('not installed from TestFlight');
+    expect(releaseCurrentStatus).toContain('not selected or submitted for App Review');
+    expect(releaseCurrentStatus).toContain('Google Play Internal');
+    expect(releaseCurrentStatus).toContain('`vella-faith-2026` (`15173925854`)');
+    expect(releaseCurrentStatus).toContain('`8160f454-f502-4e31-8697-4b528421d582`');
+    expect(releaseCurrentStatus).toContain('`vella-expo-push@vella-faith-2026.iam.gserviceaccount.com`');
+    expect(releaseCurrentStatus).toContain('No Android release was created');
+    expect(releaseCurrentStatus).toContain('`83e563c4-20c1-4250-9612-b19e1f98920e`');
+    expect(releaseCurrentStatus).toContain('`d8259d77a3aa6a4299f71149ad1d13cb5ebe631a`');
+    expect(releaseCurrentStatus).toContain('`01a037a2-d739-7d8c-8fc0-d0505924afbc`');
+    expect(releaseCurrentStatus).toContain('`01a037a2-d739-706b-8802-42177a13019d`');
+    expect(releaseCurrentStatus).toContain('runtime `1.2` remains on the prior `a670fc29…` group');
+    expect(releaseCurrentStatus).toContain('Two earlier runtime-1.3 groups are superseded');
+    expect(releaseCurrentStatus).toContain('Exact first-launch installed-client proof remains open');
     expect(releaseCurrentStatus).toContain('`APPLE_ADS_ORG_ID` is not configured');
     expect(releaseCurrentStatus).toContain('Keep every paid campaign inactive');
-    expect(releaseCurrentStatus).not.toContain('runtime-1.3 OTA is live');
-    expect(releaseCurrentStatus).not.toContain('installed from TestFlight and Play Internal');
+    expect(releaseCurrentStatus).not.toContain('No runtime-1.3 OTA has been published');
+    expect(releaseCurrentStatus).not.toContain('not yet submitted or store-distributed');
+    expect(releaseCurrentStatus).not.toContain('is processing in App Store Connect');
   });
 
   it('keeps Apple and Play privacy answers form-ready for optional voice transcription', () => {
@@ -990,7 +1022,15 @@ describe('Vella localized website', () => {
 
   it('keeps reviewer guidance aligned with compact onboarding and shared-profile auth', () => {
     expect(appleReviewNotes).toContain('`8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f`');
+    expect(appleReviewNotes).toContain('`d897fd82-bd2d-42a4-acb9-63f0a4c3c96a`');
+    expect(appleReviewNotes).toContain('successfully uploaded');
+    expect(appleReviewNotes).toContain('completed App Store Connect processing at `2026-08-25T06:27:47Z`');
+    expect(appleReviewNotes).toContain('available to test in TestFlight at `2026-08-25T06:30Z`');
     expect(appleReviewNotes).toContain('not yet installed from TestFlight');
+    expect(appleReviewNotes).toContain('not selected or submitted for App Review');
+    expect(appleReviewNotes).toContain('`83e563c4-20c1-4250-9612-b19e1f98920e`');
+    expect(appleReviewNotes).toContain('`01a037a2-d739-7d8c-8fc0-d0505924afbc`');
+    expect(appleReviewNotes).toContain('Exact first-launch installed-client proof remains open');
     expect(appleReviewNotes).toContain('compact onboarding');
     expect(appleReviewNotes).toContain('one anonymous first Vella moment');
     expect(appleReviewNotes).toContain('Continue with Apple, Continue with Google, or email');

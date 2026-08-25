@@ -6,7 +6,7 @@ The current release plan was reconciled against repository source and separately
 
 ## Current release candidate — 2026-08-25
 
-**Both signed runtime-1.3 EAS production artifacts are finished and inspected. They are not yet submitted or store-distributed.** Use these immutable artifacts for the remaining store and device gates:
+**Both signed runtime-1.3 EAS production artifacts are finished and inspected. The exact iOS build was uploaded, completed App Store Connect processing, and is available in TestFlight; the Android Play Internal attempt was permission-blocked and created no release.** Use these immutable artifacts for the remaining store and device gates:
 
 - Runtime: `1.3`.
 - Archived source commit for both artifacts: `39157ccf5c34ad01b74897ee87e279929bca8bab`.
@@ -15,11 +15,15 @@ The current release plan was reconciled against repository source and separately
 - Updates: hold the branded splash while checking/downloading for up to the `5000 ms` native launch wait, then reload a newly downloaded compatible update on that first launch.
 - Production build auto-increment: disabled; verify the fixed values above before any rebuild so they cannot drift or collide.
 
-Do not reuse or decrease either build number, and do not substitute a newer or “latest” build implicitly. Static inspection confirms the expected package/bundle identity, versions, runtime, update gate, privacy/permission boundary, and Vella branding in these exact artifacts. It does not prove TestFlight/Play Internal installation, store processing, purchase lifecycle, first-launch OTA behavior, or physical-device behavior. Those exact-binary store-account checks, the production-equivalent paywall screenshot, upload, selection, and submission remain controller gates. Older build references below are retained only as dated audit history and are not current instructions.
+The API `main` branch and production deployment are already current for this release state; this documentation update does not imply another API deploy.
 
-No runtime-1.3 OTA has been published. Neither artifact has been installed from TestFlight or Play Internal. Keep these states explicit until the exact distribution and first-launch evidence is recorded.
+Do not reuse or decrease either build number, and do not substitute a newer or “latest” build implicitly. Static inspection confirms the expected package/bundle identity, versions, runtime, update gate, privacy/permission boundary, and Vella branding in these exact artifacts. It does not prove TestFlight/Play Internal installation, purchase lifecycle, first-launch OTA behavior, or physical-device behavior. Exact-binary store-account checks, the production-equivalent paywall screenshot, iOS TestFlight QA/build selection/App Review submission, and Android Play release remain controller gates. Older build references below are retained only as dated audit history and are not current instructions.
 
-The runtime-1.3 custom lifecycle events are present in candidate source but are not yet production-shipped or observed from an installed store artifact. The attribution API is deployed, but `APPLE_ADS_ORG_ID` is not configured in production, so iOS Apple Ads exchange remains intentionally fail-closed/retryable until the real organization ID is configured. No paid campaign is active: the historical Google campaign is ended/inactive, and any Google replacement or Apple campaign must remain uncreated or paused until its gates pass.
+- **iOS:** EAS submission `d897fd82-bd2d-42a4-acb9-63f0a4c3c96a` successfully uploaded the exact iOS build to App Store Connect. App Store Connect/TestFlight email evidence confirms it completed App Store Connect processing at `2026-08-25T06:27:47Z` and became available to test in TestFlight at `2026-08-25T06:30Z`. It is not installed from TestFlight and is not selected or submitted for App Review.
+- **Android:** build `460d034c-b51f-494a-9281-4a9fe07471b3` targeted Google Play Internal. Android Publisher API is enabled on the verified Google Cloud project `vella-faith-2026` (`15173925854`), but retry submission `8160f454-f502-4e31-8697-4b528421d582` failed because `vella-expo-push@vella-faith-2026.iam.gserviceaccount.com` lacks Vella app permissions in Play Console. No Android release was created.
+- **OTA:** the authoritative production runtime-1.3 update group is `83e563c4-20c1-4250-9612-b19e1f98920e`, from source commit `d8259d77a3aa6a4299f71149ad1d13cb5ebe631a`, with iOS update `01a037a2-d739-7d8c-8fc0-d0505924afbc` and Android update `01a037a2-d739-706b-8802-42177a13019d`. Direct update-server probes prove that the production channel at runtime `1.3` serves that exact final group; runtime `1.2` remains on the prior `a670fc29…` group. Two earlier runtime-1.3 groups are superseded, and the final group above is authoritative. Exact first-launch installed-client proof remains open.
+
+The runtime-1.3 custom lifecycle events are present in the signed artifacts and authoritative production OTA, but are not yet proven or observed from an exact installed store artifact. The attribution API is deployed, but `APPLE_ADS_ORG_ID` is not configured in production, so iOS Apple Ads exchange remains intentionally fail-closed/retryable until the real organization ID is configured. No paid campaign is active: the historical Google campaign is ended/inactive, and any Google replacement or Apple campaign must remain uncreated or paused until its gates pass.
 
 ## Historical release context — 2026-07-31 (superseded)
 
@@ -349,7 +353,11 @@ Do not show weekly recaps, family seats, shared plans/progress, or any screen th
 
 - [ ] Close every P0 above.
 - [x] Build and statically inspect runtime 1.3 iOS build 23 and Android version code 25; retain the exact EAS IDs and artifact hashes recorded above.
-- [ ] Submit those exact EAS build IDs, confirm them in the respective store consoles, then install and verify those exact store-distributed artifacts.
+- [x] Upload exact iOS build 23 through EAS submission `d897fd82-bd2d-42a4-acb9-63f0a4c3c96a`; processing completed at `2026-08-25T06:27:47Z`, and it became available in TestFlight at `2026-08-25T06:30Z`.
+- [ ] Install exact build 23 from TestFlight, verify it, select it, attach both subscriptions, and submit it for App Review.
+- [ ] Grant the existing service account the required Vella app Play permissions, retry exact Android version code 25 to Play Internal, and verify that the release is created before installing it.
+- [x] Record and directly probe authoritative production runtime-1.3 update group `83e563c4-20c1-4250-9612-b19e1f98920e` and its exact platform update IDs.
+- [ ] Prove on first launch that each exact installed runtime-1.3 store client receives the authoritative final group; update-server probes alone do not close this gate.
 - [ ] Test clean install, onboarding, sign-up, sign-in, paywall, both purchases, restore, renewal state, lapsed state, legal links, deletion, notifications, photo selection, Feed EULA, report, block, and sign-out on physical iOS and Android devices.
 - [ ] Confirm the exact uploaded builds point to HTTPS production API and live legal URLs.
 - [ ] Make `support@vella.one` and `privacy@vella.one` receive and send mail.
