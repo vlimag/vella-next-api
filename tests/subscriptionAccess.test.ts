@@ -13,6 +13,7 @@ vi.mock('../lib/entitlements', () => ({ userHasActivePremium }));
 import { requireActiveSubscription } from '../lib/subscriptionAccess';
 
 const AUTH_ONLY_ROUTES = new Set([
+  'attribution/install/link',
   'billing/checkout-session',
   'iap/client-event',
   'iap/validate-receipt',
@@ -35,6 +36,10 @@ const PUBLIC_ANALYTICS_ROUTES = new Set([
 
 const PUBLIC_ONBOARDING_ROUTES = new Set([
   'onboarding/moment',
+]);
+
+const PUBLIC_ATTRIBUTION_ROUTES = new Set([
+  'attribution/install',
 ]);
 
 const OPERATOR_ROUTES = new Set([
@@ -123,6 +128,7 @@ describe('subscription-only access', () => {
           PUBLIC_CALLBACK_ROUTES.has(route) ||
           PUBLIC_ANALYTICS_ROUTES.has(route) ||
           PUBLIC_ONBOARDING_ROUTES.has(route) ||
+          PUBLIC_ATTRIBUTION_ROUTES.has(route) ||
           OPERATOR_ROUTES.has(route)
         ) {
           return false;
@@ -145,6 +151,21 @@ describe('subscription-only access', () => {
         const source = fs.readFileSync(file, 'utf8');
         const ingestionChecks = source.match(/await ingestGrowthEvents\(req\)/g)?.length ?? 0;
         return handlerCount(source) === 0 || ingestionChecks !== handlerCount(source);
+      })
+      .map((file) => path.relative(apiRoot, file));
+
+    expect(unsafe).toEqual([]);
+  });
+
+  it('keeps anonymous attribution capture behind its strict bounded boundary', () => {
+    const apiRoot = path.resolve(process.cwd(), 'app/api/v1');
+    const unsafe = collectRouteFiles(apiRoot)
+      .filter((file) => {
+        const route = path.relative(apiRoot, path.dirname(file));
+        if (!PUBLIC_ATTRIBUTION_ROUTES.has(route)) return false;
+        const source = fs.readFileSync(file, 'utf8');
+        const boundaryChecks = source.match(/return handleInstallAttributionRequest\(request\)/g)?.length ?? 0;
+        return handlerCount(source) === 0 || boundaryChecks !== handlerCount(source);
       })
       .map((file) => path.relative(apiRoot, file));
 

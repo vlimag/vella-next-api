@@ -44,6 +44,7 @@ const USER_ROW_DELETE_TARGETS = [
   { table: 'user_settings', column: 'user_id' },
   { table: 'entitlements', column: 'user_id' },
   { table: 'subscriptions', column: 'user_id' },
+  { table: 'growth_install_profile_links', column: 'user_id' },
   { table: 'profiles', column: 'id' },
 ] as const;
 
@@ -54,11 +55,12 @@ const USER_ROW_SET_NULL_TARGETS = [
   { table: 'iap_client_events', column: 'user_id' },
 ] as const;
 
-function transitionTableIsNotInstalled(
+function optionalMigrationTableIsNotInstalled(
   error: { code?: string; message?: string } | null,
+  table: 'subscription_marketing_transitions' | 'growth_install_profile_links',
 ): boolean {
   const message = error?.message ?? '';
-  const target = 'faith_harbor.subscription_marketing_transitions';
+  const target = `faith_harbor.${table}`;
   if (!message.includes(target)) return false;
   if (error?.code === 'PGRST205') {
     return message.includes('Could not find the table') && message.includes('schema cache');
@@ -171,7 +173,7 @@ export async function deleteUserApplicationData(
     if (
       error &&
       target.table === 'subscription_marketing_transitions' &&
-      transitionTableIsNotInstalled(error)
+      optionalMigrationTableIsNotInstalled(error, 'subscription_marketing_transitions')
     ) {
       continue;
     }
@@ -180,12 +182,22 @@ export async function deleteUserApplicationData(
     }
   }
 
+  // The database BEFORE DELETE trigger on growth_install_profile_links
+  // atomically seals retained installs and erases their profile-derived
+  // digests before the current associations are removed.
   for (const target of USER_ROW_DELETE_TARGETS) {
     const { error } = await supabase
       .from(target.table)
       .delete()
       .eq(target.column, userId);
 
+    if (
+      error &&
+      target.table === 'growth_install_profile_links' &&
+      optionalMigrationTableIsNotInstalled(error, 'growth_install_profile_links')
+    ) {
+      continue;
+    }
     if (error) {
       return { error: `Could not delete ${target.table}.${target.column}: ${error.message}` };
     }

@@ -119,15 +119,60 @@ funnel diagnostics. They are **not** revenue truth. The operator report derives
 its authoritative subscription section only from store-verified subscription
 rows and webhook processing state.
 
-## Attribution limitation
+## Native acquisition attribution
 
-Website visits and Play Store clicks can be attributed with normalized UTM
-codes. A mobile `first_open` has acquisition attribution only if those codes are
-available to the app at first launch. Android Play Install Referrer is not yet
-implemented, and the website installation UUID is not linked to the app UUID,
-so do not interpret an unattributed first open as organic with certainty. Until
-Install Referrer is added, use Play Console campaign/install reporting beside
-Vella's on-site CTA metrics.
+Runtime 1.3 clients can call `POST /api/v1/attribution/install` with at most
+8 KiB of JSON. Android sends the random first-party installation UUID plus only
+the closed `source`, `medium`, `campaign`, and `creative_code` values projected
+from Play Install Referrer. iOS sends that UUID plus a transient AdServices
+token. The API exchanges the token directly with Apple's documented endpoint,
+requires the configured `APPLE_ADS_ORG_ID`, then discards the token and Apple
+response body. Apple numeric IDs must be positive JavaScript-safe integers;
+out-of-range payloads fail closed rather than being rounded. The stored
+`conversion_type` distinguishes Download, Redownload, and PreOrder, so the
+metric is described as an attributed app conversion rather than always as a
+new install.
+
+`POST /api/v1/attribution/install/link` is bearer-authenticated and accepts only
+the installation UUID and platform. It verifies that the current shared Auth
+identity already has a `faith_harbor.profiles` row, then links that server user;
+the client cannot choose a `user_id`. Capture and link are order-independent:
+either operation creates the same neutral pending install row. A transient
+Apple failure stays pending, a documented `200 attribution:false` becomes
+resolved-unattributed, and replay after either resolved outcome returns
+idempotent success without another Apple call. Pending rows never count as
+organic, unattributed, or source-qualified reporting.
+
+For iOS, the resolved attribution row, Apple fetch-lease release, and global
+circuit-breaker success reset are committed by one database function. A crash
+or lost HTTP response after that commit therefore replays as already resolved;
+it cannot leave a successful exchange recorded while a stale failure streak
+remains armed. The generic resolved-record function is Android-only so Apple
+truth cannot bypass this atomic boundary.
+
+The service-only database keeps capped permanent account-switch truth. One
+installation linked to two distinct Vella profiles is permanently ambiguous,
+even if a profile is later deleted. Deletion removes the current profile link,
+seals every affected install as permanently ambiguous, and erases the
+deterministic profile derivative; the retained row contains only the capped
+anti-reattribution marker. Inactive, never-linked attribution rows that are
+more than 93 days old are removed in bounded, locked batches; any row that has
+ever carried profile/ambiguity truth is retained so deletion cannot enable
+later re-attribution. A subscription transition is source-qualified
+only when exactly one non-ambiguous install matches its store provider/platform,
+was captured no later than and no more than 30 days before the production
+transition, and meets the closed source registry. The current approved Android
+registry entry is `google` / `cpc` /
+`vella_br_android_202608_prayerdaily`; other syntactically safe Play values are
+retained only as directional diagnostics and cannot join spend/conversion truth.
+Zero or multiple eligible sources remain `platform_blended`.
+
+This is directional first-party measurement, not app attestation. Random UUID
+per-install limits deter ordinary retry storms but can be forged, so the atomic
+fixed global database breaker is the authoritative server-capacity backstop.
+Configure a platform-edge/WAF rate rule for this endpoint before paid traffic;
+the API deliberately does not collect IP addresses or device fingerprints to
+simulate an abuse-proof identity.
 
 ## Operator report
 

@@ -125,6 +125,7 @@ describe('account media deletion', () => {
     expect(result).toEqual({});
     expect(deleteCalls).toEqual(
       expect.arrayContaining([
+        { table: 'growth_install_profile_links', column: 'user_id', value: userId },
         { table: 'profiles', column: 'id', value: userId },
         { table: 'social_posts', column: 'author_user_id', value: userId },
         { table: 'user_settings', column: 'user_id', value: userId },
@@ -132,6 +133,7 @@ describe('account media deletion', () => {
         { table: 'subscriptions', column: 'user_id', value: userId },
       ]),
     );
+    expect(deleteCalls.some(({ table }) => table === 'growth_install_attribution')).toBe(false);
     expect(updateCalls).toEqual(
       expect.arrayContaining([
         { table: 'in_app_purchase_receipts', column: 'user_id', value: userId, values: { user_id: null } },
@@ -163,6 +165,19 @@ describe('account media deletion', () => {
       expect(deleteCalls).toContainEqual({ table: 'subscriptions', column: 'user_id', value: userId });
     },
   );
+
+  it('keeps account deletion available before the attribution migration is installed', async () => {
+    const userId = '11111111-1111-1111-1111-111111111111';
+    const { client, deleteCalls } = mockClient([], null, {
+      growth_install_profile_links: {
+        code: 'PGRST205',
+        message: "Could not find the table 'faith_harbor.growth_install_profile_links' in the schema cache",
+      },
+    });
+
+    await expect(deleteUserApplicationData(client as never, userId)).resolves.toEqual({});
+    expect(deleteCalls).toContainEqual({ table: 'profiles', column: 'id', value: userId });
+  });
 
   it.each([
     ['PGRST205', "Could not find the table 'faith_harbor.another_table' in the schema cache"],
