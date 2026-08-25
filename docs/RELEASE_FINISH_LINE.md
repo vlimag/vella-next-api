@@ -1,6 +1,6 @@
 # Vella release finish line
 
-Last source verification: **2026-08-25**. This is the operational source of truth for the runtime-1.3 Vella release. Store copy and localized subscription names live in [`store-metadata.json`](./store-metadata.json); detailed questionnaire guidance lives in [`STORE_SUBMISSION_PACKAGE.md`](./STORE_SUBMISSION_PACKAGE.md). Exact store-console state and finished signed build IDs must be read live immediately before release actions; configured next values in this document do not prove an artifact exists.
+Last source verification: **2026-08-25**. This is the operational source of truth for the runtime-1.3 Vella release. Store copy and localized subscription names live in [`store-metadata.json`](./store-metadata.json); detailed questionnaire guidance lives in [`STORE_SUBMISSION_PACKAGE.md`](./STORE_SUBMISSION_PACKAGE.md). Exact store-console state must still be read live immediately before release actions; a finished EAS artifact does not prove store processing, installation, or device QA.
 
 ## 1. Current status
 
@@ -20,17 +20,19 @@ Last source verification: **2026-08-25**. This is the operational source of trut
 - On 2026-07-31, `https://vella.one/api/v1/health` returned `apple_iap: true`, `google_iap: true`, `google_webhook: true`, and `database_schema: true`.
 - Account deletion removes database data and uploaded Feed media. Feed post/comment owner deletion and operator moderation endpoints are implemented.
 - iOS privacy manifest, production notification entitlement, Sign in with Apple entitlement, selected-photo-only access, and Expo Updates production channel are present in source/native configuration.
-- Runtime `1.3` is the native release target for iOS and Android. The configured next values are app version `1.0.1`, next iOS build `23`, and next Android version code `25`; signed EAS build IDs remain pending. Never reuse or decrease those identifiers.
+- Runtime `1.3` signed EAS artifacts are finished and inspected for app version `1.0.1`, iOS build `23`, and Android version code `25`. The exact iOS build is `8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f`; the exact Android build is `460d034c-b51f-494a-9281-4a9fe07471b3`. Never reuse, decrease, or implicitly replace those identifiers.
 - The native update launch wait is `5000 ms`: keep the branded splash visible while checking/downloading, then reload a compatible newly downloaded update on the same first launch. Do not publish a runtime-1.3 OTA until signed runtime-1.3 artifacts exist.
 - Runtime 1.3 includes privacy-safe native attribution: Google Play Install Referrer on Android and Apple AdServices on iOS. Only coarse, bounded campaign fields persist; raw referrer/token/upstream response data is discarded. There is no IDFA, AAID, ATT prompt, fingerprinting, or cross-app tracking.
 - The reviewed attribution API and database boundary are deployed. `APPLE_ADS_ORG_ID` is not configured in production as of 2026-08-25, so iOS attribution remains intentionally fail-closed/retryable until the real Apple Ads organization ID is supplied; never substitute a sample value.
-- Runtime-1.3 custom lifecycle events exist in candidate source but are not yet production-shipped or observed from an installed store artifact. Do not import or optimize to them yet.
+- Runtime-1.3 custom lifecycle events exist in the inspected signed artifacts but are not yet production-shipped through an installed store artifact or OTA, and have not been observed in production. Do not import or optimize to them yet.
 
-No signed runtime-1.3 EAS build exists yet, and no runtime-1.3 `.ipa` or `.aab` is claimed as inspected. Treat configured build numbers, source, and future build-service completion as separate facts; only the installed exact artifact can close device QA.
+Both signed EAS artifacts were archived from source commit `39157ccf5c34ad01b74897ee87e279929bca8bab` and are finished and inspected: iOS IPA SHA-256 `36295217084dc5dbb15ca925d4212e07c52a8804b991feb1790f46612f68088c` and Android AAB SHA-256 `145fd5ce504f7ab5c4ccc508b0d9b3a0a993fef08a1c2ca2a32b87890447981d`. They are not yet store-distributed. Static artifact inspection and source-equivalent simulator QA do not close TestFlight, Play Internal, physical-device, commerce, or first-launch OTA QA.
+
+No runtime-1.3 OTA has been published. Neither artifact has been installed from TestFlight or Play Internal.
 
 ### Release gates still open
 
-- Create runtime-1.3 EAS builds with iOS build 23 and Android version code 25, record their signed build IDs, confirm them in the stores, install those exact artifacts, and retain the evidence.
+- Submit only EAS builds `8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f` and `460d034c-b51f-494a-9281-4a9fe07471b3`, confirm them in the stores, install those exact store-distributed artifacts, and retain the evidence.
 - Complete or update both store version records with current localized metadata and exact-runtime screenshots, App Privacy/Data safety, age/content-rights, legal/trader/contact data, reviewer access, exact build selection, subscription attachment, and submission.
 - Configure the real `APPLE_ADS_ORG_ID`, prove one safe iOS attribution exchange, and keep Apple Ads paused. Never use a documentation/sample identifier.
 - Prove monitored inbound and reply mail for `support@vella.one` and `privacy@vella.one` rather than inferring it from published pages.
@@ -85,7 +87,7 @@ Open the Vella app record: `https://appstoreconnect.apple.com/apps/6790616297`.
 ### D. Complete the App Store version
 
 1. Open iOS version `1.0.1`.
-2. After the EAS build finishes and uploads, select runtime-1.3 build **`1.0.1 (23)`**. Verify its processing/compliance state in the console; configured source numbers alone are not proof.
+2. Submit EAS build **`8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f`**, then select runtime-1.3 build **`1.0.1 (23)`**. Verify its processing/compliance state in the console; a finished EAS build alone is not proof of App Store processing.
 3. Use [`store-metadata.json`](./store-metadata.json) as the copy source for name, subtitle, promotional text, keywords, description, and release notes in all eight locales.
 4. Set or verify:
    - Primary category: `Lifestyle`
@@ -116,11 +118,11 @@ Open the Vella app record: `https://appstoreconnect.apple.com/apps/6790616297`.
 
 ## 4. Google Play — exact runtime-1.3 release pending
 
-Current configured target: Android app version `1.0.1`, runtime `1.3`, Android version code `25`; signed EAS build ID pending. Read the actual Play review/rollout state in the authenticated console before acting.
+Current signed candidate: Android app version `1.0.1`, runtime `1.3`, Android version code `25`, EAS build `460d034c-b51f-494a-9281-4a9fe07471b3`. Read the actual Play processing, review, and rollout state in the authenticated console before acting.
 
 Do not create a duplicate release or upload an older local path. Instead:
 
-1. Build Android version code 25 in EAS, record the signed build ID, and confirm that exact artifact in Play Console; do not substitute or reuse an older artifact.
+1. Submit EAS build `460d034c-b51f-494a-9281-4a9fe07471b3` and confirm that exact version-code-25 artifact in Play Console; do not substitute another or use `--latest`.
 2. Verify package `io.vella.app`, app version `1.0.1`, version code `25`, runtime `1.3`, rollout countries, managed/pending rollout choice, and release notes in Play Console.
 3. Confirm the store listing, privacy policy, account-deletion URL, App access, Data safety, target audience, content rating, content rights, ads, news, financial-feature, and health declarations reflect the submitted build.
 4. Confirm both subscriptions and the annual offer remain active in intended regions.
@@ -184,4 +186,4 @@ The first public release is complete only when all of these are true:
 - Reviewer credentials work without OTP and the staffed moderation process is active.
 - Production health remains green.
 
-Until then, the accurate statement is: **iOS build 23 and Android version code 25 are the configured next runtime-1.3 targets; signed EAS build IDs, exact-artifact QA, and store-review evidence remain open; campaigns remain inactive.**
+Until then, the accurate statement is: **the signed EAS artifacts for iOS build 23 and Android version code 25 are finished and inspected but not yet store-distributed; exact store-install/device QA and store-review evidence remain open; campaigns remain inactive.**

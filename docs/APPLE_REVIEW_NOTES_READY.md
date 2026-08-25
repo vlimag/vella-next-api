@@ -1,6 +1,6 @@
 # Apple App Review notes — Vella 1.0.1
 
-Status on **2026-08-25**: iOS version `1.0.1`, runtime `1.3`, next build `23` is the configured target. Build 23 was inferred as the next value after an exhaustive EAS-history check; it is not a signed artifact. No signed runtime-1.3 EAS build exists yet. Paste these notes only after build 23 finishes, is installed, and every described path passes exact-artifact QA. Metadata, screenshots, App Privacy, legal/trader/contact fields, reviewer access, subscription attachment, and final submission are not completed by this file.
+Status on **2026-08-25**: signed EAS build `8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f` is finished and its iOS version `1.0.1` build `23`, runtime `1.3`, signature/entitlements, privacy boundary, native attribution linkage, and embedded Vella bundle were statically inspected. It is not yet installed from TestFlight or selected/submitted in App Store Connect. Paste these notes only after that exact build is store-processed, installed, and every described path passes exact-artifact QA. Metadata, screenshots, App Privacy, legal/trader/contact fields, reviewer access, subscription attachment, and final submission are not completed by this file.
 
 Paste the block below after entering the dedicated reviewer email and password in App Store Connect. Do not place credentials in this repository or in the notes field.
 

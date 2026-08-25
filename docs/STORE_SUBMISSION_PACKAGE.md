@@ -6,17 +6,20 @@ The current release plan was reconciled against repository source and separately
 
 ## Current release candidate — 2026-08-25
 
-**Runtime 1.3 is the current native release target. The next configured build values are iOS build 23 and Android version code 25. No signed runtime-1.3 EAS build exists yet.** Use these values for current local release review and controller verification:
+**Both signed runtime-1.3 EAS production artifacts are finished and inspected. They are not yet submitted or store-distributed.** Use these immutable artifacts for the remaining store and device gates:
 
 - Runtime: `1.3`.
-- Android: version `1.0.1`, next version code `25`; signed EAS build ID pending.
-- iOS: version `1.0.1`, next build `23`; signed EAS build ID pending.
+- Archived source commit for both artifacts: `39157ccf5c34ad01b74897ee87e279929bca8bab`.
+- Android: version `1.0.1`, version code `25`; EAS build `460d034c-b51f-494a-9281-4a9fe07471b3`; inspected AAB SHA-256 `145fd5ce504f7ab5c4ccc508b0d9b3a0a993fef08a1c2ca2a32b87890447981d`.
+- iOS: version `1.0.1`, build `23`; EAS build `8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f`; inspected IPA SHA-256 `36295217084dc5dbb15ca925d4212e07c52a8804b991feb1790f46612f68088c`.
 - Updates: hold the branded splash while checking/downloading for up to the `5000 ms` native launch wait, then reload a newly downloaded compatible update on that first launch.
-- Production build auto-increment: disabled; explicitly set and verify these next values before building so they cannot drift.
+- Production build auto-increment: disabled; verify the fixed values above before any rebuild so they cannot drift or collide.
 
-Do not reuse or decrease either build number. Build 23 was selected from the exhaustive iOS EAS history and version code 25 from the live Play record, but neither is evidence of a completed runtime-1.3 artifact. No local runtime-1.3 `.ipa` or `.aab` is claimed as inspected. Signed-build IDs, lifecycle proof, exact-binary store-account checks, the production-equivalent paywall screenshot, upload, selection, and submission remain controller gates. Older build references below are retained only as dated audit history and are not current instructions.
+Do not reuse or decrease either build number, and do not substitute a newer or “latest” build implicitly. Static inspection confirms the expected package/bundle identity, versions, runtime, update gate, privacy/permission boundary, and Vella branding in these exact artifacts. It does not prove TestFlight/Play Internal installation, store processing, purchase lifecycle, first-launch OTA behavior, or physical-device behavior. Those exact-binary store-account checks, the production-equivalent paywall screenshot, upload, selection, and submission remain controller gates. Older build references below are retained only as dated audit history and are not current instructions.
 
-The runtime-1.3 custom lifecycle events are present in candidate source but are not yet production-shipped or observed from an installed store artifact. The attribution API is deployed, but production currently has no configured `APPLE_ADS_ORG_ID`, so iOS Apple Ads exchange remains intentionally fail-closed/retryable until the real organization ID is configured. No paid campaign is active: the historical Google campaign is ended/inactive, and any Google replacement or Apple campaign must remain uncreated or paused until its gates pass.
+No runtime-1.3 OTA has been published. Neither artifact has been installed from TestFlight or Play Internal. Keep these states explicit until the exact distribution and first-launch evidence is recorded.
+
+The runtime-1.3 custom lifecycle events are present in candidate source but are not yet production-shipped or observed from an installed store artifact. The attribution API is deployed, but `APPLE_ADS_ORG_ID` is not configured in production, so iOS Apple Ads exchange remains intentionally fail-closed/retryable until the real organization ID is configured. No paid campaign is active: the historical Google campaign is ended/inactive, and any Google replacement or Apple campaign must remain uncreated or paused until its gates pass.
 
 ## Historical release context — 2026-07-31 (superseded)
 
@@ -345,7 +348,8 @@ Do not show weekly recaps, family seats, shared plans/progress, or any screen th
 ## Final submission checklist
 
 - [ ] Close every P0 above.
-- [ ] Build runtime 1.3 with iOS build 23 and Android version code 25; record the resulting signed EAS build IDs, confirm them in the respective store consoles, then install and verify those exact artifacts.
+- [x] Build and statically inspect runtime 1.3 iOS build 23 and Android version code 25; retain the exact EAS IDs and artifact hashes recorded above.
+- [ ] Submit those exact EAS build IDs, confirm them in the respective store consoles, then install and verify those exact store-distributed artifacts.
 - [ ] Test clean install, onboarding, sign-up, sign-in, paywall, both purchases, restore, renewal state, lapsed state, legal links, deletion, notifications, photo selection, Feed EULA, report, block, and sign-out on physical iOS and Android devices.
 - [ ] Confirm the exact uploaded builds point to HTTPS production API and live legal URLs.
 - [ ] Make `support@vella.one` and `privacy@vella.one` receive and send mail.

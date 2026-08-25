@@ -823,7 +823,7 @@ describe('Vella localized website', () => {
     expect(unbranded.title).toBe('A private prayer journal for everyday life');
   });
 
-  it('keeps runtime 1.3 build numbers explicit without claiming nonexistent EAS artifacts', () => {
+  it('records the exact inspected runtime 1.3 artifacts without claiming store-distributed QA', () => {
     const currentCandidate = markdownSection(
       storeSubmissionPackage,
       '## Current release candidate — 2026-08-25',
@@ -839,16 +839,28 @@ describe('Vella localized website', () => {
       '## Final submission checklist',
       '## Official references',
     );
+    const releaseCurrentStatus = markdownSection(
+      releaseFinishLine,
+      '## 1. Current status',
+      '## 2. Commercial configuration — configured, still test end to end',
+    );
 
     expect(currentCandidate.includes('Runtime: `1.3`.')).toBe(true);
-    expect(currentCandidate.includes('Android: version `1.0.1`, next version code `25`; signed EAS build ID pending.')).toBe(true);
-    expect(currentCandidate.includes('iOS: version `1.0.1`, next build `23`; signed EAS build ID pending.')).toBe(true);
+    expect(currentCandidate).toContain('- Archived source commit for both artifacts: `39157ccf5c34ad01b74897ee87e279929bca8bab`.');
+    expect(currentCandidate).toContain('- Android: version `1.0.1`, version code `25`; EAS build `460d034c-b51f-494a-9281-4a9fe07471b3`; inspected AAB SHA-256 `145fd5ce504f7ab5c4ccc508b0d9b3a0a993fef08a1c2ca2a32b87890447981d`.');
+    expect(currentCandidate).toContain('- iOS: version `1.0.1`, build `23`; EAS build `8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f`; inspected IPA SHA-256 `36295217084dc5dbb15ca925d4212e07c52a8804b991feb1790f46612f68088c`.');
+    expect(currentCandidate).toContain('Both signed runtime-1.3 EAS production artifacts are finished and inspected');
+    expect(currentCandidate).toContain('not yet submitted or store-distributed');
+    expect(currentCandidate).toContain('No runtime-1.3 OTA has been published');
+    expect(currentCandidate).toContain('Neither artifact has been installed from TestFlight or Play Internal');
+    expect(currentCandidate).toContain('`APPLE_ADS_ORG_ID`');
+    expect(currentCandidate).toContain('not configured');
+    expect(currentCandidate).toContain('No paid campaign is active');
     expect(currentCandidate.includes('`5000 ms` native launch wait')).toBe(true);
     expect(currentCandidate.includes('branded splash')).toBe(true);
     expect(currentCandidate.includes('Do not reuse or decrease either build number')).toBe(true);
-    expect(currentCandidate.includes('No signed runtime-1.3 EAS build exists yet')).toBe(true);
-    expect(currentCandidate.includes('Live EAS records identify')).toBe(false);
-    expect(currentCandidate.includes('current signed candidate')).toBe(false);
+    expect(currentCandidate.includes('No signed runtime-1.3 EAS build exists yet')).toBe(false);
+    expect(currentCandidate.includes('signed EAS build ID pending')).toBe(false);
     expect(currentCandidate.includes('`1.0.0 (13)`')).toBe(false);
     expect(currentCandidate.includes('`1.0.0 (15)`')).toBe(false);
     expect(historicalContext.includes('Android build `1.0.0 (13)`')).toBe(true);
@@ -858,11 +870,20 @@ describe('Vella localized website', () => {
     expect(finalChecklist.includes('build 15')).toBe(false);
     expect(finalChecklist.includes('build 13')).toBe(false);
     expect(releaseFinishLine).toContain('Runtime `1.3`');
-    expect(releaseFinishLine).toContain('next iOS build `23`');
-    expect(releaseFinishLine).toContain('next Android version code `25`');
-    expect(releaseFinishLine).toContain('No signed runtime-1.3 EAS build exists yet');
-    expect(releaseFinishLine).not.toContain('current signed candidates');
+    expect(releaseFinishLine).toContain('iOS build `23`');
+    expect(releaseFinishLine).toContain('Android version code `25`');
+    expect(releaseFinishLine).toContain('`8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f`');
+    expect(releaseFinishLine).toContain('`460d034c-b51f-494a-9281-4a9fe07471b3`');
+    expect(releaseFinishLine).toContain('signed EAS artifacts are finished and inspected');
+    expect(releaseFinishLine).toContain('not yet store-distributed');
+    expect(releaseFinishLine).not.toContain('No signed runtime-1.3 EAS build exists yet');
     expect(releaseFinishLine).toContain('5000 ms');
+    expect(releaseCurrentStatus).toContain('No runtime-1.3 OTA has been published');
+    expect(releaseCurrentStatus).toContain('Neither artifact has been installed from TestFlight or Play Internal');
+    expect(releaseCurrentStatus).toContain('`APPLE_ADS_ORG_ID` is not configured');
+    expect(releaseCurrentStatus).toContain('Keep every paid campaign inactive');
+    expect(releaseCurrentStatus).not.toContain('runtime-1.3 OTA is live');
+    expect(releaseCurrentStatus).not.toContain('installed from TestFlight and Play Internal');
   });
 
   it('keeps Apple and Play privacy answers form-ready for optional voice transcription', () => {
@@ -968,6 +989,8 @@ describe('Vella localized website', () => {
   });
 
   it('keeps reviewer guidance aligned with compact onboarding and shared-profile auth', () => {
+    expect(appleReviewNotes).toContain('`8c14f38c-e50d-4d1f-a168-fc67ffd9ba6f`');
+    expect(appleReviewNotes).toContain('not yet installed from TestFlight');
     expect(appleReviewNotes).toContain('compact onboarding');
     expect(appleReviewNotes).toContain('one anonymous first Vella moment');
     expect(appleReviewNotes).toContain('Continue with Apple, Continue with Google, or email');
