@@ -32,6 +32,11 @@ function orderedReportBlocks() {
     ordered_funnel: [],
     diagnostic_totals: {
       source_of_truth: 'independent_client_events',
+      vella_profile_initialized: {
+        unique_installs: 0,
+        event_count: 0,
+        source_of_truth: 'vella_profile_initialized',
+      },
       funnel: [],
       daily: [],
       cohorts: [],
@@ -105,6 +110,11 @@ describe('growth operator routes', () => {
         contains_ip_or_raw_content: false,
         contains_account_identifier: false,
         client_subscription_events_are_authoritative: false,
+        ordered_by_occurred_at: true,
+        minimum_release_installs: 20,
+        minimum_transition_subscriptions: 20,
+        small_release_cohorts_omitted: true,
+        small_transition_segments_omitted: true,
       },
     };
     const rpc = vi.fn().mockResolvedValue({ data: report, error: null });
@@ -239,6 +249,11 @@ describe('growth operator routes', () => {
         contains_ip_or_raw_content: false,
         contains_account_identifier: false,
         client_subscription_events_are_authoritative: false,
+        ordered_by_occurred_at: false,
+        minimum_release_installs: 19,
+        minimum_transition_subscriptions: 19,
+        small_release_cohorts_omitted: false,
+        small_transition_segments_omitted: false,
       },
       ordered_funnel: [
         { funnel_variant: 'legacy_v1', event_name: 'first_open', stage_order: 1, unique_installs: 21 },
@@ -253,6 +268,11 @@ describe('growth operator routes', () => {
       ],
       diagnostic_totals: {
         source_of_truth: 'independent_client_events',
+        vella_profile_initialized: {
+          unique_installs: 20,
+          event_count: 21,
+          source_of_truth: 'vella_profile_initialized',
+        },
         funnel: [{ event_name: 'first_open', unique_installs: 21, event_count: 22 }],
         daily: [], cohorts: [], campaigns: [],
         authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
@@ -261,11 +281,13 @@ describe('growth operator routes', () => {
       release_cohorts: [
         {
           app_version: '1.2.0', build_number: '20', runtime_version: '1.2',
+          platform: 'ios', cohort_day: '2026-07-01',
           funnel_variant: 'legacy_v1', event_name: 'checkout_started', stage_order: 9,
           cohort_installations: 20, unique_installs: 1,
         },
         {
           app_version: '1.2.0', build_number: '19', runtime_version: '1.2',
+          platform: 'android', cohort_day: '2026-07-02',
           funnel_variant: 'legacy_v1', event_name: 'first_open', stage_order: 1,
           cohort_installations: 19, unique_installs: 19,
         },
@@ -303,9 +325,22 @@ describe('growth operator routes', () => {
       { funnel_variant: 'compact_v2', event_name: 'paywall_viewed', stage_order: 6, unique_installs: 2 },
     ]);
     expect(body.data.diagnostic_totals.source_of_truth).toBe('independent_client_events');
+    expect(body.data.diagnostic_totals.vella_profile_initialized).toEqual({
+      unique_installs: 20,
+      event_count: 21,
+      source_of_truth: 'vella_profile_initialized',
+    });
     expect(body.data.privacy.minimum_breakdown_installs).toBe(20);
+    expect(body.data.privacy).toMatchObject({
+      ordered_by_occurred_at: true,
+      minimum_release_installs: 20,
+      minimum_transition_subscriptions: 20,
+      small_release_cohorts_omitted: true,
+      small_transition_segments_omitted: true,
+    });
     expect(body.data.release_cohorts).toEqual([expect.objectContaining({
-      build_number: '20', cohort_installations: 20, unique_installs: 1,
+      build_number: '20', platform: 'ios', cohort_day: '2026-07-01',
+      cohort_installations: 20, unique_installs: 1,
     })]);
     expect(body.data.authoritative_transitions).toEqual({
       trial_started: 0,
@@ -373,6 +408,63 @@ describe('growth operator routes', () => {
   it('fails closed instead of zero-filling a malformed authoritative transition block', async () => {
     const blocks = orderedReportBlocks() as Record<string, any>;
     blocks.authoritative_transitions.by_provider_plan = 'malformed';
+    const report = {
+      ...blocks,
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const { from } = mockSummaryClient(report);
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(503);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('fails closed instead of inventing a missing Vella profile acquisition metric', async () => {
+    const blocks = orderedReportBlocks() as Record<string, any>;
+    blocks.diagnostic_totals.vella_profile_initialized = {
+      unique_installs: 1,
+      event_count: -1,
+      source_of_truth: 'vella_profile_initialized',
+    };
+    const report = {
+      ...blocks,
+      window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+      funnel: [], daily: [], cohorts: [], campaigns: [],
+      authoritative_subscriptions: { source_of_truth: 'verified_store_subscriptions' },
+      webhook_health: {}, privacy: {},
+    };
+    const { from } = mockSummaryClient(report);
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(503);
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a release cohort lacks exact native platform/day privacy dimensions', async () => {
+    const blocks = orderedReportBlocks() as Record<string, any>;
+    blocks.release_cohorts = [{
+      app_version: '2.0.0',
+      build_number: '200',
+      runtime_version: '2.0',
+      platform: 'web',
+      cohort_day: 'not-a-day',
+      funnel_variant: 'compact_v2',
+      event_name: 'first_open',
+      stage_order: 1,
+      cohort_installations: 20,
+      unique_installs: 21,
+    }];
     const report = {
       ...blocks,
       window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
@@ -629,6 +721,11 @@ describe('growth operator routes', () => {
       contains_ip_or_raw_content: false,
       contains_account_identifier: false,
       client_subscription_events_are_authoritative: false,
+      ordered_by_occurred_at: true,
+      minimum_release_installs: 20,
+      minimum_transition_subscriptions: 20,
+      small_release_cohorts_omitted: true,
+      small_transition_segments_omitted: true,
     });
     const serializedResponse = JSON.stringify(body);
     const serializedLogs = JSON.stringify(consoleError.mock.calls);

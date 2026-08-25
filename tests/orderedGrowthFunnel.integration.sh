@@ -10,6 +10,12 @@ if [[ ${#TASK5_MIGRATIONS[@]} -ne 1 ]]; then
   exit 2
 fi
 MIGRATION_PATH=${TASK5_MIGRATIONS[0]}
+TASK5_INDEX_MIGRATIONS=("$WORKSPACE_ROOT"/supabase/migrations/*_ordered_growth_funnel_index.sql)
+if [[ ${#TASK5_INDEX_MIGRATIONS[@]} -ne 1 ]]; then
+  echo "expected exactly one ordered growth funnel index migration, found ${#TASK5_INDEX_MIGRATIONS[@]}" >&2
+  exit 2
+fi
+INDEX_MIGRATION_PATH=${TASK5_INDEX_MIGRATIONS[0]}
 
 TASK5_PG_ROOT=$(mktemp -d)
 TASK5_PG_DATA="$TASK5_PG_ROOT/data"
@@ -172,6 +178,7 @@ grant execute on function faith_harbor.growth_analytics_summary(date, date, inte
 SQL
 
 task5_psql -f "$MIGRATION_PATH" >/dev/null
+task5_psql -1 -f "$INDEX_MIGRATION_PATH" >/dev/null
 
 task5_psql >/dev/null <<'SQL'
 create function faith_harbor.task5_event(
@@ -184,7 +191,8 @@ create function faith_harbor.task5_event(
   p_properties jsonb default '{}'::jsonb,
   p_app_version text default '1.2.0',
   p_build_number text default '100',
-  p_runtime_version text default '1.2'
+  p_runtime_version text default '1.2',
+  p_platform text default 'android'
 )
 returns void
 language sql
@@ -194,7 +202,7 @@ as $$
     platform, app_version, build_number, runtime_version, funnel_variant, properties
   ) values (
     gen_random_uuid(), p_installation_id, p_actor_type, p_event_name,
-    p_occurred_at, p_received_at, 'android', p_app_version, p_build_number,
+    p_occurred_at, p_received_at, p_platform, p_app_version, p_build_number,
     p_runtime_version, p_funnel_variant, p_properties
   );
 $$;
@@ -232,6 +240,24 @@ with stages(event_name, occurred_offset) as (
 )
 select faith_harbor.task5_event(
   '10000000-0000-4000-8000-000000000002', event_name,
+  '2026-07-02 00:00:00+00'::timestamptz + occurred_offset,
+  '2026-07-02 12:00:00+00'::timestamptz + occurred_offset,
+  'legacy_v1'
+)
+from stages;
+
+-- A non-terminal inversion has stage occurrence times 1,2,4,3,5. Stage 4
+-- breaks the prefix; later stage 5 must not re-enter the qualified funnel.
+with stages(event_name, occurred_offset) as (
+  values
+    ('first_open'::text, interval '1 hour'),
+    ('onboarding_started', interval '2 hours'),
+    ('onboarding_completed', interval '4 hours'),
+    ('first_experience_viewed', interval '3 hours'),
+    ('first_experience_completed', interval '5 hours')
+)
+select faith_harbor.task5_event(
+  '10000000-0000-4000-8000-000000000003', event_name,
   '2026-07-02 00:00:00+00'::timestamptz + occurred_offset,
   '2026-07-02 12:00:00+00'::timestamptz + occurred_offset,
   'legacy_v1'
@@ -306,6 +332,24 @@ select faith_harbor.task5_event(
   '40000000-0000-4000-8000-000000000001', 'trial_started',
   '2026-07-06 01:00:00+00', '2026-07-06 01:00:00+00', 'legacy_v1'
 );
+
+-- Profile initialization is the insert-winner acquisition truth. It is an
+-- explicit diagnostic metric, not a mandatory ordered-funnel predecessor.
+select faith_harbor.task5_event(
+  '41000000-0000-4000-8000-000000000001', 'vella_profile_initialized',
+  '2026-07-06 03:00:00+00', '2026-07-06 03:00:00+00', 'legacy_v1',
+  'authenticated'
+);
+select faith_harbor.task5_event(
+  '41000000-0000-4000-8000-000000000001', 'vella_profile_initialized',
+  '2026-07-06 04:00:00+00', '2026-07-06 04:00:00+00', 'legacy_v1',
+  'authenticated'
+);
+select faith_harbor.task5_event(
+  '41000000-0000-4000-8000-000000000002', 'vella_profile_initialized',
+  '2026-07-06 05:00:00+00', '2026-07-06 05:00:00+00', 'legacy_v1',
+  'anonymous'
+);
 select faith_harbor.task5_event(
   '40000000-0000-4000-8000-000000000001', 'trial_started',
   '2026-07-06 02:00:00+00', '2026-07-06 02:00:00+00', 'legacy_v1'
@@ -331,6 +375,45 @@ select faith_harbor.task5_event(
   'anonymous', '{}'::jsonb, '3.0.0', '19', '3.0'
 )
 from generate_series(1, 19) series;
+
+-- Platform is part of the privacy cohort. Combining 19 iOS with 19 Android
+-- must not manufacture a reportable 38-install release row.
+select faith_harbor.task5_event(
+  md5('platform-ios-19-' || series)::uuid, 'first_open',
+  '2026-07-12 00:00:00+00', '2026-07-12 00:00:00+00', 'compact_v2',
+  'anonymous', '{}'::jsonb, '4.0.0', '38', '4.0', 'ios'
+)
+from generate_series(1, 19) series;
+select faith_harbor.task5_event(
+  md5('platform-android-19-' || series)::uuid, 'first_open',
+  '2026-07-12 00:00:00+00', '2026-07-12 00:00:00+00', 'compact_v2',
+  'anonymous', '{}'::jsonb, '4.0.0', '38', '4.0', 'android'
+)
+from generate_series(1, 19) series;
+
+-- First-open day is also part of the release cohort. Ten installs on each of
+-- two days remain two suppressed cohorts instead of one reportable group.
+select faith_harbor.task5_event(
+  md5('day-split-a-' || series)::uuid, 'first_open',
+  '2026-07-13 00:00:00+00', '2026-07-13 00:00:00+00', 'compact_v2',
+  'anonymous', '{}'::jsonb, '4.1.0', '20d', '4.1', 'android'
+)
+from generate_series(1, 10) series;
+select faith_harbor.task5_event(
+  md5('day-split-b-' || series)::uuid, 'first_open',
+  '2026-07-14 00:00:00+00', '2026-07-14 00:00:00+00', 'compact_v2',
+  'anonymous', '{}'::jsonb, '4.1.0', '20d', '4.1', 'android'
+)
+from generate_series(1, 10) series;
+
+-- Cohort day is UTC, not the caller/session timezone. In São Paulo this UTC
+-- instant is still the prior local calendar day.
+select faith_harbor.task5_event(
+  md5('utc-boundary-' || series)::uuid, 'first_open',
+  '2026-07-15 00:30:00+00', '2026-07-15 00:30:00+00', 'compact_v2',
+  'anonymous', '{}'::jsonb, '4.2.0', 'tz20', '4.2', 'ios'
+)
+from generate_series(1, 20) series;
 SQL
 
 task5_psql >/dev/null <<'SQL'
@@ -339,6 +422,7 @@ declare
   summary jsonb;
 begin
   set local role service_role;
+  perform set_config('TimeZone', 'America/Sao_Paulo', true);
   summary := faith_harbor.growth_analytics_summary('2026-07-01', '2026-07-31', 14);
 
   if (select (item ->> 'unique_installs')::integer from jsonb_array_elements(summary -> 'ordered_funnel') item
@@ -346,13 +430,19 @@ begin
     raise exception 'legacy checkout occurrence ordering invariant failed';
   end if;
   if (select (item ->> 'unique_installs')::integer from jsonb_array_elements(summary -> 'ordered_funnel') item
+      where item ->> 'funnel_variant' = 'legacy_v1' and item ->> 'event_name' = 'first_experience_viewed') <> 2
+     or (select (item ->> 'unique_installs')::integer from jsonb_array_elements(summary -> 'ordered_funnel') item
+      where item ->> 'funnel_variant' = 'legacy_v1' and item ->> 'event_name' = 'first_experience_completed') <> 2 then
+    raise exception 'non-terminal inversion re-entered the ordered prefix';
+  end if;
+  if (select (item ->> 'unique_installs')::integer from jsonb_array_elements(summary -> 'ordered_funnel') item
       where item ->> 'funnel_variant' = 'compact_v2' and item ->> 'event_name' = 'checkout_started') <> 1 then
     raise exception 'compact pre-auth offer ordering invariant failed';
   end if;
   if (select (item ->> 'unique_installs')::integer from jsonb_array_elements(summary -> 'ordered_funnel') item
-      where item ->> 'funnel_variant' = 'legacy_v1' and item ->> 'event_name' = 'first_open') <> 5
+      where item ->> 'funnel_variant' = 'legacy_v1' and item ->> 'event_name' = 'first_open') <> 6
      or (select (item ->> 'unique_installs')::integer from jsonb_array_elements(summary -> 'ordered_funnel') item
-      where item ->> 'funnel_variant' = 'compact_v2' and item ->> 'event_name' = 'first_open') <> 42 then
+      where item ->> 'funnel_variant' = 'compact_v2' and item ->> 'event_name' = 'first_open') <> 120 then
     raise exception 'dual-variant installation anchor invariant failed';
   end if;
   if (select sum((item ->> 'unique_installs')::integer) from jsonb_array_elements(summary -> 'ordered_funnel') item
@@ -367,6 +457,11 @@ begin
       where item ->> 'event_name' = 'trial_started') <> 2 then
     raise exception 'duplicate client trial diagnostic invariant failed';
   end if;
+  if (summary #>> '{diagnostic_totals,vella_profile_initialized,event_count}')::integer <> 2
+     or (summary #>> '{diagnostic_totals,vella_profile_initialized,unique_installs}')::integer <> 1
+     or summary #>> '{diagnostic_totals,vella_profile_initialized,source_of_truth}' <> 'vella_profile_initialized' then
+    raise exception 'Vella profile initialization acquisition metric failed';
+  end if;
   if not (summary ?& array[
     'window', 'funnel', 'daily', 'cohorts', 'campaigns',
     'authoritative_subscriptions', 'webhook_health', 'privacy',
@@ -376,18 +471,30 @@ begin
   end if;
   if exists (
     select 1 from jsonb_array_elements(summary -> 'release_cohorts') item
-    where item ->> 'build_number' = '19'
+    where item ->> 'build_number' in ('19', '38', '20d')
   ) then
-    raise exception '19-install release was not suppressed';
+    raise exception 'release platform/day minimum-20 boundary failed';
   end if;
   if not exists (
     select 1 from jsonb_array_elements(summary -> 'release_cohorts') item
     where item ->> 'build_number' = '20'
       and (item ->> 'cohort_installations')::integer = 20
+      and item ->> 'platform' = 'android'
+      and item ->> 'cohort_day' = '2026-07-08'
       and item ->> 'event_name' = 'first_open'
       and (item ->> 'unique_installs')::integer = 20
   ) then
     raise exception '20-install release was not reported';
+  end if;
+  if not exists (
+    select 1 from jsonb_array_elements(summary -> 'release_cohorts') item
+    where item ->> 'build_number' = 'tz20'
+      and item ->> 'platform' = 'ios'
+      and item ->> 'cohort_day' = '2026-07-15'
+      and item ->> 'event_name' = 'first_open'
+      and (item ->> 'cohort_installations')::integer = 20
+  ) then
+    raise exception 'release cohort day was not fixed to UTC';
   end if;
   if summary::text ~ 'installation_id|subscription_id|user_id|30000000-0000-4000-8000-000000000001' then
     raise exception 'aggregate response exposed an identifier';
@@ -471,12 +578,17 @@ begin
   end if;
   if not exists (
     select 1
-    from pg_indexes
-    where schemaname = 'faith_harbor'
-      and indexname = 'idx_growth_analytics_installation_occurred_event'
-      and indexdef like '%(installation_id, occurred_at, event_name)%'
+    from pg_index index_state
+    join pg_class index_relation on index_relation.oid = index_state.indexrelid
+    join pg_namespace index_namespace on index_namespace.oid = index_relation.relnamespace
+    where index_namespace.nspname = 'faith_harbor'
+      and index_relation.relname = 'idx_growth_analytics_installation_occurred_event'
+      and index_state.indisvalid
+      and index_state.indisready
+      and pg_get_indexdef(index_state.indexrelid)
+        like '%(installation_id, occurred_at, event_name)%'
   ) then
-    raise exception 'ordered event index missing';
+    raise exception 'ordered event index missing, invalid, not ready, or malformed';
   end if;
 end;
 $$;

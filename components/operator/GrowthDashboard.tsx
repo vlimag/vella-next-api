@@ -19,6 +19,8 @@ type ReleaseCohortRow = OrderedFunnelRow & {
   app_version: string;
   build_number: string;
   runtime_version: string;
+  platform: 'ios' | 'android';
+  cohort_day: string;
   cohort_installations: number;
 };
 
@@ -95,6 +97,11 @@ type GrowthSummary = {
   ordered_funnel: OrderedFunnelRow[];
   diagnostic_totals: {
     source_of_truth: string;
+    vella_profile_initialized: {
+      unique_installs: number;
+      event_count: number;
+      source_of_truth: string;
+    };
     funnel: FunnelRow[];
     daily: DailyRow[];
     cohorts: CohortRow[];
@@ -181,7 +188,8 @@ const FUNNEL_LABELS: Record<string, string> = {
   first_open: 'First opens',
   onboarding_started: 'Onboarding starts',
   onboarding_completed: 'Onboarding completed',
-  account_created: 'Accounts created',
+  account_created: 'Legacy account events',
+  vella_profile_initialized: 'Vella profiles initialized',
   paywall_viewed: 'Paywall views',
   checkout_started: 'Checkout starts',
   trial_started: 'Client-observed trials',
@@ -309,7 +317,7 @@ export function GrowthDashboard() {
   const orderedTotal = (eventName: string) => summary?.ordered_funnel
     .filter((item) => item.event_name === eventName)
     .reduce((sum, item) => sum + item.unique_installs, 0) ?? 0;
-  const firstOpens = orderedTotal('first_open');
+  const cohortMemberships = orderedTotal('first_open');
   const onboardingStarts = orderedTotal('onboarding_started');
   const meaningful = orderedTotal('first_experience_completed');
   const maxFunnel = Math.max(1, ...(summary?.ordered_funnel.map((item) => item.unique_installs) ?? [1]));
@@ -407,10 +415,11 @@ export function GrowthDashboard() {
         <>
           <section className="growth-stat-grid" aria-label="Key metrics">
             <article><span>Spend</span><strong>{money(totalSpend)}</strong><small>{summary.window.from} → {summary.window.to}</small></article>
-            <article><span>First opens</span><strong>{firstOpens.toLocaleString()}</strong><small>Unique anonymous installs</small></article>
-            <article><span>First value</span><strong>{meaningful.toLocaleString()}</strong><small>Ordered first-experience completions · {percentage(meaningful, firstOpens)}</small></article>
+            <article><span>Install-variant cohort memberships</span><strong>{cohortMemberships.toLocaleString()}</strong><small>An upgraded install may belong to both closed variants</small></article>
+            <article><span>Vella profiles initialized</span><strong>{summary.diagnostic_totals.vella_profile_initialized.event_count.toLocaleString()}</strong><small>Profile-insert winners · {summary.diagnostic_totals.vella_profile_initialized.unique_installs.toLocaleString()} installations</small></article>
+            <article><span>First value</span><strong>{meaningful.toLocaleString()}</strong><small>Ordered first-experience completions · {percentage(meaningful, cohortMemberships)}</small></article>
             <article><span>Paid transitions</span><strong>{paidStarts.toLocaleString()}</strong><small>Authoritative production subscription truth</small></article>
-            <article><span>Blended authoritative CAC</span><strong>{paidStarts ? money(Math.round(totalSpend / paidStarts)) : '—'}</strong><small>All spend / paid transitions</small></article>
+            <article><span>Period spend per authoritative paid transition</span><strong>{paidStarts ? money(Math.round(totalSpend / paidStarts)) : '—'}</strong><small>Period-window ratio · observation only; cannot authorize spend. Paid campaigns remain paused.</small></article>
             <article><span>Active now</span><strong>{summary.authoritative_subscriptions.active_now.toLocaleString()}</strong><small>{summary.authoritative_subscriptions.auto_renew_off_now.toLocaleString()} with auto-renew off</small></article>
           </section>
 
@@ -601,10 +610,10 @@ export function GrowthDashboard() {
             {summary.release_cohorts.length ? (
               <div className="growth-table-wrap">
                 <table className="growth-table">
-                  <thead><tr><th>App / build / runtime / variant</th><th>Ordered stage</th><th>Cohort installs</th><th>Qualified installs</th></tr></thead>
+                  <thead><tr><th>App / build / runtime / platform / first-open day / variant</th><th>Ordered stage</th><th>Cohort installs</th><th>Qualified installs</th></tr></thead>
                   <tbody>{summary.release_cohorts.map((row) => (
-                    <tr key={`${row.app_version}:${row.build_number}:${row.runtime_version}:${row.funnel_variant}:${row.event_name}`}>
-                      <td><strong>{row.app_version} · {row.build_number}</strong><small>runtime {row.runtime_version} · {humanize(row.funnel_variant)}</small></td>
+                    <tr key={`${row.app_version}:${row.build_number}:${row.runtime_version}:${row.platform}:${row.cohort_day}:${row.funnel_variant}:${row.event_name}`}>
+                      <td><strong>{row.app_version} · {row.build_number}</strong><small>runtime {row.runtime_version} · {humanize(row.platform)} · {row.cohort_day} · {humanize(row.funnel_variant)}</small></td>
                       <td>{FUNNEL_LABELS[row.event_name] ?? humanize(row.event_name)} <small>stage {row.stage_order}</small></td>
                       <td>{row.cohort_installations}</td>
                       <td>{row.unique_installs} <small>{percentage(row.unique_installs, row.cohort_installations)}</small></td>
@@ -617,8 +626,8 @@ export function GrowthDashboard() {
 
           <section className="growth-panel">
             <div className="growth-panel-heading">
-              <div><p className="growth-kicker">Source-qualified directional economics</p><h2>Campaign signal, separate from blended CAC</h2></div>
-              <p>Campaign costs use client-observed source events and are not authoritative CAC. Subscription transitions are intentionally not joined through shared Auth; use the blended authoritative CAC above and Google Ads/Play Console for source reconciliation.</p>
+              <div><p className="growth-kicker">Source-qualified directional economics</p><h2>Campaign signal, separate from the period ratio</h2></div>
+              <p>Campaign costs use client-observed source events and are not authoritative CAC. Subscription transitions are intentionally not joined through shared Auth. The period spend per authoritative paid transition above is observation only and cannot authorize spend. Paid campaigns remain paused; use Google Ads/Play Console for source reconciliation.</p>
             </div>
             <div className="growth-table-wrap">
               <table className="growth-table">
@@ -646,7 +655,7 @@ export function GrowthDashboard() {
             <div className="growth-panel-heading"><div><p className="growth-kicker">Diagnostic mature cohorts</p><h2>Independent activation and retention totals</h2></div><p>These raw totals are not ordered conversions. Cohorts below 20 installs are suppressed by both SQL and the API.</p></div>
             <div className="growth-table-wrap">
               <table className="growth-table">
-                <thead><tr><th>Cohort</th><th>Installs</th><th>Onboarded</th><th>Accounts</th><th>Trials</th><th>Paid</th><th>Activated 24h</th><th>D1</th><th>D7</th></tr></thead>
+                <thead><tr><th>Cohort</th><th>Installs</th><th>Onboarded</th><th>Legacy account events</th><th>Trials</th><th>Paid</th><th>Activated 24h</th><th>D1</th><th>D7</th></tr></thead>
                 <tbody>
                   {summary.cohorts.length ? summary.cohorts.map((row) => (
                     <tr key={row.cohort_day}>

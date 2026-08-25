@@ -125,6 +125,7 @@ const GROWTH_FUNNEL_EVENTS = new Set([
   'onboarding_started',
   'onboarding_completed',
   'account_created',
+  'vella_profile_initialized',
   'paywall_viewed',
   'checkout_started',
   'trial_started',
@@ -151,6 +152,7 @@ const REPORT_CURRENCIES = new Set(['BRL']);
 const SUBSCRIPTION_TRUTH_SOURCES = new Set(['verified_store_subscriptions']);
 const TRANSITION_TRUTH_SOURCES = new Set(['subscription_marketing_transitions']);
 const DIAGNOSTIC_TRUTH_SOURCES = new Set(['independent_client_events']);
+const PROFILE_INITIALIZATION_TRUTH_SOURCES = new Set(['vella_profile_initialized']);
 const FUNNEL_VARIANTS = new Set(['legacy_v1', 'compact_v2']);
 const ORDERED_STAGE_ORDERS: Record<string, ReadonlyMap<string, number>> = {
   legacy_v1: new Map([
@@ -423,16 +425,23 @@ function hasOrderedSummaryBlocks(raw: unknown) {
   if (report === null) return false;
   const diagnostics = diagnosticRow(report.diagnostic_totals);
   const transitions = diagnosticRow(report.authoritative_transitions);
+  const profileInitialized = diagnosticRow(diagnostics?.vella_profile_initialized);
   return Array.isArray(report.ordered_funnel) &&
     diagnostics !== null &&
     diagnostics.source_of_truth === 'independent_client_events' &&
+    profileInitialized !== null &&
+    Number.isSafeInteger(profileInitialized.unique_installs) &&
+    Number(profileInitialized.unique_installs) >= 0 &&
+    Number.isSafeInteger(profileInitialized.event_count) &&
+    Number(profileInitialized.event_count) >= 0 &&
+    profileInitialized.source_of_truth === 'vella_profile_initialized' &&
     Array.isArray(diagnostics.funnel) &&
     Array.isArray(diagnostics.daily) &&
     Array.isArray(diagnostics.cohorts) &&
     Array.isArray(diagnostics.campaigns) &&
     diagnosticRow(diagnostics.authoritative_subscriptions) !== null &&
     diagnosticRow(diagnostics.webhook_health) !== null &&
-    Array.isArray(report.release_cohorts) &&
+    hasValidReleaseCohorts(report.release_cohorts) &&
     transitions !== null &&
     Number.isSafeInteger(transitions.trial_started) &&
     Number(transitions.trial_started) >= 0 &&
@@ -441,6 +450,25 @@ function hasOrderedSummaryBlocks(raw: unknown) {
     Array.isArray(transitions.by_day) &&
     Array.isArray(transitions.by_provider_plan) &&
     transitions.source_of_truth === 'subscription_marketing_transitions';
+}
+
+function hasValidReleaseCohorts(value: unknown) {
+  if (!Array.isArray(value)) return false;
+  return value.every((entry) => {
+    const row = diagnosticRow(entry);
+    if (row === null || typeof row.funnel_variant !== 'string' ||
+      typeof row.event_name !== 'string') return false;
+    const expectedOrder = ORDERED_STAGE_ORDERS[row.funnel_variant]?.get(row.event_name);
+    const cohortInstallations = row.cohort_installations;
+    const uniqueInstalls = row.unique_installs;
+    return typeof row.platform === 'string' && IAP_PLATFORMS.has(row.platform) &&
+      typeof row.cohort_day === 'string' && dateSchema.safeParse(row.cohort_day).success &&
+      expectedOrder !== undefined && row.stage_order === expectedOrder &&
+      typeof cohortInstallations === 'number' && Number.isSafeInteger(cohortInstallations) &&
+      cohortInstallations >= 0 &&
+      typeof uniqueInstalls === 'number' && Number.isSafeInteger(uniqueInstalls) &&
+      uniqueInstalls >= 0 && uniqueInstalls <= cohortInstallations;
+  });
 }
 
 function projectOrderedRows(value: unknown) {
@@ -466,16 +494,35 @@ function projectGrowthSummary(
   const legacy = projectDiagnosticSummary(report, requestedWindow);
   const diagnosticTotalsRaw = diagnosticRow(report.diagnostic_totals) ?? {};
   const diagnosticTotals = projectDiagnosticSummary(diagnosticTotalsRaw, requestedWindow);
+  const profileInitialized = diagnosticRow(
+    diagnosticTotalsRaw.vella_profile_initialized,
+  ) ?? {};
   const transitions = diagnosticRow(report.authoritative_transitions) ?? {};
 
   return {
     ...legacy,
+    privacy: {
+      ...legacy.privacy,
+      ordered_by_occurred_at: true,
+      minimum_release_installs: MINIMUM_BREAKDOWN_INSTALLS,
+      minimum_transition_subscriptions: MINIMUM_BREAKDOWN_INSTALLS,
+      small_release_cohorts_omitted: true,
+      small_transition_segments_omitted: true,
+    },
     ordered_funnel: projectOrderedRows(report.ordered_funnel),
     diagnostic_totals: {
       source_of_truth: safeDimension(
         diagnosticTotalsRaw.source_of_truth,
         DIAGNOSTIC_TRUTH_SOURCES,
       ),
+      vella_profile_initialized: {
+        unique_installs: safeNonnegativeInteger(profileInitialized.unique_installs),
+        event_count: safeNonnegativeInteger(profileInitialized.event_count),
+        source_of_truth: safeDimension(
+          profileInitialized.source_of_truth,
+          PROFILE_INITIALIZATION_TRUTH_SOURCES,
+        ),
+      },
       funnel: diagnosticTotals.funnel,
       daily: diagnosticTotals.daily,
       cohorts: diagnosticTotals.cohorts,
@@ -492,6 +539,8 @@ function projectGrowthSummary(
         app_version: safeReleaseDimension(row.app_version, 32),
         build_number: safeReleaseDimension(row.build_number, 24),
         runtime_version: safeReleaseDimension(row.runtime_version, 32),
+        platform: safeDimension(row.platform, IAP_PLATFORMS),
+        cohort_day: safeDateDimension(row.cohort_day),
         ...ordered[0],
         cohort_installations: cohortInstallations,
       }];

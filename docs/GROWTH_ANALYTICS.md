@@ -89,7 +89,8 @@ accept exactly their listed properties and no attribution fields.
 | `onboarding_completed` | anonymous | coarse duration bucket and goal/focus counts; empty legacy payload remains accepted |
 | `auth_started` | anonymous | optional `entry_point: post_onboarding\|post_first_experience\|premium\|tabs\|direct` |
 | `auth_attempt` | anonymous | `mode`, `method`, `stage`, and coarse `outcome`; never provider errors or identity |
-| `account_created` | bearer | `method: email\|apple\|google` |
+| `account_created` | bearer | legacy diagnostic only: `method: email\|apple\|google`; never Vella acquisition truth |
+| `vella_profile_initialized` | bearer | truthful Vella acquisition signal from the profile-insert winner: `provider_class: email\|google\|apple` |
 | `paywall_viewed` | bearer | none |
 | `trial_terms_viewed` | bearer | `plan: yearly`, `trial_days_bucket: 14_days\|other` |
 | `subscription_management_opened` | bearer | `source: paywall\|settings`, `result: opened\|failed` |
@@ -148,10 +149,15 @@ counts become zero and invalid nullable campaign metrics become `null`.
 - `diagnostic_totals`: independent raw `funnel`, `daily`, `cohorts`,
   `campaigns`, subscription-state, and webhook aggregates. These are useful
   for telemetry health and directional diagnosis but are not ordered
-  conversion truth;
+  conversion truth. Its explicit **Vella profiles initialized**
+  (`vella_profile_initialized`) metric reports profile-insert winners as
+  Vella's truthful acquisition boundary. It is not a
+  mandatory predecessor in either ordered funnel. Legacy `account_created`
+  counts remain diagnostic only;
 - `release_cohorts`: the ordered graph split by app version, build, runtime,
-  and closed funnel variant, anchored to first open. A release appears only at
-  20 distinct installations;
+  platform, first-open `cohort_day`, and closed funnel variant, anchored to
+  first open. Each exact combination appears only at 20 distinct
+  installations; sub-threshold iOS, Android, or day buckets are never merged;
 - `authoritative_transitions`: overall production `trial_started` and
   `paid_started` totals from `subscription_marketing_transitions` only.
   Daily and provider/plan/phase segments require at least 20 distinct
@@ -204,6 +210,11 @@ silently hidden. Subscription provider/product groups below 20 are also
 omitted. Overall authoritative transition totals remain visible, while every
 transition day/provider/plan segment requires 20 distinct subscriptions.
 
+The dashboard's **Install-variant cohort memberships** value is the sum of
+the two closed variant cohorts. An upgraded installation can belong once to
+each variant, so this value must never be described as globally unique
+installations.
+
 An active-subscriber bypass is a closed outcome only for an exact
 `route_resolved` event whose stored `actor_type` is `authenticated` and
 whose allowlisted properties say `destination=app`,
@@ -211,11 +222,32 @@ whose allowlisted properties say `destination=app`,
 or anonymous event cannot create this outcome. Reporting never joins analytics
 installations or subscription transitions to shared Auth users.
 
-The dashboard labels all-spend divided by authoritative paid transitions as
-**blended authoritative CAC**. Campaign-level source-qualified costs remain
-directional client-event metrics and are labeled separately; without a
-privacy-approved install-referrer bridge, they must not be presented as
-authoritative source-qualified CAC.
+The dashboard labels all spend in the selected period divided by authoritative
+paid transitions in that independently selected period as **Period spend per authoritative paid transition**. This is an observation only ratio, is not
+cohort-aligned CAC, and cannot authorize spend. Campaign-level source-qualified
+costs remain directional client-event metrics; without a privacy-approved
+install-referrer bridge, they must not be presented as authoritative
+source-qualified CAC. **Paid campaigns remain paused** until a separate,
+explicit decision uses reconciled store/ad-platform evidence.
+
+Task 5 database rollout uses two project-scoped, transaction-safe artifacts.
+Use Supabase MCP `apply_migration` for the summary migration first. List remote
+migrations, record its authoritative version, and rename the unchanged local
+summary file to that version. Use the same project-scoped MCP operation for the
+index migration second; list remote migrations again and rename the unchanged
+local index file to its authoritative version. The index artifact sets local
+`lock_timeout = '2s'` and `statement_timeout = '30s'` before a plain
+`CREATE INDEX`, with no `IF NOT EXISTS`. The measured live table is only 4,180
+rows / about 2.3 MB total: the lock must be acquired promptly and the build is
+bounded, or the atomic migration fails and rolls back without leaving a queued
+deployment.
+
+Before deploying the API, require both authoritative migration-history rows
+in order and verify the exact index definition plus
+`pg_index.indisvalid = true` and `pg_index.indisready = true`. Any migration,
+history, timeout, name-conflict, definition, validity, or readiness failure
+keeps the API undeployed while the database state is inspected. Do not use an
+untracked CLI or SQL execution path for either artifact.
 
 ## Campaign spend input
 
