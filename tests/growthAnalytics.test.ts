@@ -22,6 +22,87 @@ const INSTALL_ID = '11111111-1111-4111-8111-111111111111';
 const EVENT_ID = '22222222-2222-4222-8222-222222222222';
 const USER_ID = '33333333-3333-4333-8333-333333333333';
 
+const RHYTHMS_EVENT_PROPERTIES = {
+  rhythms_hub_viewed: { source_surface: 'rhythms_hub' },
+  journey_catalog_viewed: { source_surface: 'rhythms_hub' },
+  journey_detail_viewed: {
+    catalog_code: 'hope-in-seven', source_surface: 'journey_catalog', journey_length_bucket: '2_7_days',
+  },
+  journey_started: {
+    catalog_code: 'hope-in-seven', source_surface: 'journey_detail', journey_length_bucket: '2_7_days',
+  },
+  practice_catalog_viewed: { source_surface: 'rhythms_hub' },
+  practice_selected: {
+    catalog_code: 'guided_prayer', source_surface: 'practice_catalog', session_kind: 'guided_prayer',
+  },
+  weekly_rhythm_saved: { catalog_code: 'guided_prayer', session_kind: 'guided_prayer' },
+  gathering_viewed: {
+    catalog_code: 'weekly-rest', source_surface: 'rhythms_hub', session_length_bucket: '10_19m',
+  },
+  journey_session_started: {
+    catalog_code: 'hope-in-seven', source_surface: 'home', session_kind: 'journey',
+    journey_length_bucket: '2_7_days', cache_state: 'fresh',
+  },
+  journey_step_completed: {
+    catalog_code: 'hope-in-seven', step_index: 1, step_type: 'verse', elapsed_bucket: 'under_30s',
+  },
+  journey_session_completed: {
+    catalog_code: 'hope-in-seven', completion_reason: 'completed', elapsed_bucket: '2_4m',
+  },
+  journey_resumed: { catalog_code: 'hope-in-seven', source_surface: 'home', step_index: 1 },
+  practice_session_started: {
+    catalog_code: 'scripture', source_surface: 'weekly_rhythm', session_kind: 'scripture', network_state: 'online',
+  },
+  practice_session_completed: {
+    catalog_code: 'scripture', session_kind: 'scripture', completion_reason: 'completed', elapsed_bucket: '5_14m',
+  },
+  practice_session_abandoned: {
+    catalog_code: 'silence', session_kind: 'silence', abandonment_reason: 'user_exit', elapsed_bucket: '30_119s',
+  },
+  gathering_started: {
+    catalog_code: 'weekly-rest', source_surface: 'gathering', session_kind: 'gathering',
+    session_length_bucket: '10_19m',
+  },
+  gathering_step_completed: {
+    catalog_code: 'weekly-rest', step_index: 1, step_type: 'arrival', elapsed_bucket: 'under_30s',
+  },
+  gathering_resumed: { catalog_code: 'weekly-rest', source_surface: 'gathering', step_index: 2 },
+  gathering_completed: {
+    catalog_code: 'weekly-rest', completion_reason: 'idempotent_replay', elapsed_bucket: '15m_plus',
+  },
+  journey_completed: {
+    catalog_code: 'hope-in-seven', completion_reason: 'target_reached', journey_length_bucket: '2_7_days',
+  },
+  journey_completion_viewed: { catalog_code: 'hope-in-seven', source_surface: 'journey_completion' },
+  journey_next_selected: { catalog_code: 'weekly-rest', source_surface: 'journey_completion' },
+  weekly_rhythm_completed: {
+    catalog_code: 'gratitude', session_kind: 'gratitude', completion_reason: 'target_reached',
+  },
+  weekly_rhythm_returned: {
+    catalog_code: 'gratitude', source_surface: 'weekly_rhythm', session_kind: 'gratitude',
+  },
+  milestone_earned: { catalog_code: 'journey_finisher' },
+  milestone_revealed: { catalog_code: 'streak_3', source_surface: 'milestones' },
+  milestone_featured: { catalog_code: 'streak_7', source_surface: 'profile' },
+  milestone_unfeatured: { catalog_code: 'streak_7', source_surface: 'profile' },
+  milestone_shared: { catalog_code: 'journey_finisher', source_surface: 'milestones' },
+  rhythms_load_failed: {
+    source_surface: 'rhythms_hub', error_stage: 'summary_load', error_code: 'network_unavailable',
+    network_state: 'offline', cache_state: 'miss', schema_version: 1, capability: 'journey_v2',
+  },
+  rhythms_mutation_failed: {
+    source_surface: 'weekly_rhythm', error_stage: 'weekly_save', error_code: 'server_unavailable',
+    network_state: 'degraded', cache_state: 'stale', schema_version: 1, capability: 'practices',
+  },
+  session_completion_conflict: {
+    session_kind: 'gathering', error_stage: 'session_complete', error_code: 'conflict',
+  },
+  rhythms_asset_fallback_used: {
+    catalog_code: 'flame.spark', source_surface: 'milestones', error_stage: 'asset_load',
+    error_code: 'asset_unavailable', cache_state: 'fallback',
+  },
+} as const;
+
 function event(overrides: Record<string, unknown> = {}) {
   return {
     event_id: EVENT_ID,
@@ -655,13 +736,23 @@ describe('growth analytics ingestion', () => {
       '../supabase/migrations',
       profileMigrationName!,
     ), 'utf8');
-    const eventConstraint = profileMigration.match(
-      /growth_analytics_events_event_name_check check \(event_name in \(([\s\S]*?)\n  \)\) not valid;/,
+    const telemetryMigrationName = fs.readdirSync(path.resolve(process.cwd(), '../supabase/migrations'))
+      .find((name) => name.endsWith('_vella_rhythms_telemetry.sql'));
+    expect(telemetryMigrationName).toBeDefined();
+    const telemetryMigration = fs.readFileSync(path.resolve(
+      process.cwd(),
+      '../supabase/migrations',
+      telemetryMigrationName!,
+    ), 'utf8');
+    const eventConstraint = telemetryMigration.match(
+      /growth_analytics_events_event_name_v8_check check \(event_name in \(([\s\S]*?)\n  \)\) not valid;/,
     )?.[1] ?? '';
     const databaseEventNames = [...eventConstraint.matchAll(/'([^']+)'/g)]
       .map((match) => match[1]);
     expect([...databaseEventNames].sort()).toEqual([...GROWTH_EVENT_NAMES].sort());
     expect(new Set(databaseEventNames).size).toBe(databaseEventNames.length);
+    expect(telemetryMigration).toContain('growth_event_properties_are_safe_v8');
+    expect(telemetryMigration).toContain('growth_event_properties_are_safe_v7(p_event_name, p_properties)');
     expect(profileMigration).toContain('growth_event_properties_are_safe_v4');
     expect(profileMigration).toMatch(
       /growth_analytics_properties_check check \(\s*faith_harbor\.growth_event_properties_are_safe_v4\(event_name, properties\)\s*\) not valid;/,
@@ -845,5 +936,102 @@ describe('growth analytics ingestion', () => {
     expect(purgeFunction).toMatch(/limit greatest\(1, least\(coalesce\(p_limit, 50000\), 50000\)\)/);
     expect(migration).toMatch(/revoke all on function faith_harbor\.purge_expired_subscription_marketing_transitions\(integer\) from public, anon, authenticated;/);
     expect(migration).toMatch(/grant execute on function faith_harbor\.purge_expired_subscription_marketing_transitions\(integer\) to service_role;/);
+  });
+
+  it('accepts every exact Rhythms event contract without attribution inheritance', () => {
+    for (const [eventName, properties] of Object.entries(RHYTHMS_EVENT_PROPERTIES)) {
+      expect(GROWTH_EVENT_NAMES).toContain(eventName);
+      expect(growthEventSchema.safeParse(event({ event_name: eventName, properties })).success).toBe(true);
+      for (const [key, value] of [
+        ['source', 'google'],
+        ['campaign', 'launch'],
+        ['user_id', USER_ID],
+        ['reflection_text', 'private devotional content'],
+        ['raw_error', `database row ${USER_ID} failed`],
+      ]) {
+        expect(growthEventSchema.safeParse(event({
+          event_name: eventName,
+          properties: { ...properties, [key]: value },
+        })).success).toBe(false);
+      }
+    }
+  });
+
+  it('rejects arbitrary Rhythms catalogs, finite dimensions, indexes, buckets, and schema versions', () => {
+    const invalidCases: Array<[keyof typeof RHYTHMS_EVENT_PROPERTIES, string, unknown]> = [
+      ['journey_started', 'catalog_code', '11111111-1111-4111-8111-111111111111'],
+      ['practice_selected', 'catalog_code', 'my-custom-practice'],
+      ['milestone_featured', 'catalog_code', 'user_badge_slug'],
+      ['journey_session_started', 'source_surface', 'custom_screen'],
+      ['journey_session_started', 'session_kind', 'custom_session'],
+      ['journey_session_started', 'journey_length_bucket', '7_exact_days'],
+      ['journey_session_started', 'cache_state', 'disk_cache'],
+      ['journey_step_completed', 'step_type', 'private_reflection'],
+      ['journey_step_completed', 'elapsed_bucket', '37_seconds'],
+      ['practice_session_completed', 'completion_reason', 'api_message'],
+      ['practice_session_abandoned', 'abandonment_reason', 'free-form reason'],
+      ['practice_session_started', 'network_state', '5g'],
+      ['rhythms_load_failed', 'capability', 'experimental_capability'],
+      ['rhythms_load_failed', 'error_stage', 'database_table_name'],
+      ['rhythms_load_failed', 'error_code', 'PostgrestError: account 123'],
+      ['rhythms_load_failed', 'schema_version', 2],
+    ];
+    for (const [eventName, field, value] of invalidCases) {
+      expect(growthEventSchema.safeParse(event({
+        event_name: eventName,
+        properties: { ...RHYTHMS_EVENT_PROPERTIES[eventName], [field]: value },
+      })).success).toBe(false);
+    }
+    for (const step_index of [0, 33, 1.5]) {
+      expect(growthEventSchema.safeParse(event({
+        event_name: 'gathering_step_completed',
+        properties: { ...RHYTHMS_EVENT_PROPERTIES.gathering_step_completed, step_index },
+      })).success).toBe(false);
+    }
+  });
+
+  it('accepts Rhythms minimum and maximum indexes and bucket catalog values', () => {
+    for (const properties of [
+      RHYTHMS_EVENT_PROPERTIES.journey_step_completed,
+      {
+        ...RHYTHMS_EVENT_PROPERTIES.journey_step_completed,
+        step_index: 32, step_type: 'gratitude', elapsed_bucket: '15m_plus',
+      },
+    ]) {
+      expect(growthEventSchema.safeParse(event({
+        event_name: 'journey_step_completed', properties,
+      })).success).toBe(true);
+    }
+    expect(growthEventSchema.safeParse(event({
+      event_name: 'journey_session_started',
+      properties: {
+        ...RHYTHMS_EVENT_PROPERTIES.journey_session_started,
+        journey_length_bucket: '31_plus_days', cache_state: 'fallback',
+      },
+    })).success).toBe(true);
+    expect(growthEventSchema.safeParse(event({
+      event_name: 'gathering_started',
+      properties: {
+        ...RHYTHMS_EVENT_PROPERTIES.gathering_started,
+        session_length_bucket: '20m_plus',
+      },
+    })).success).toBe(true);
+  });
+
+  it('requires authenticated ingestion for Rhythms completion telemetry and never forwards account identity', async () => {
+    const unauthenticated = serviceClient();
+    mocks.createServiceClient.mockReturnValueOnce(unauthenticated);
+    const completion = event({
+      event_name: 'practice_session_completed',
+      properties: RHYTHMS_EVENT_PROPERTIES.practice_session_completed,
+    });
+    const rejected = await ingestGrowthEvents(request([completion]));
+    expect('response' in rejected && rejected.response.status).toBe(401);
+
+    const authenticated = serviceClient({ user: { id: USER_ID } });
+    mocks.createServiceClient.mockReturnValueOnce(authenticated);
+    const accepted = await ingestGrowthEvents(request([completion], 'Bearer valid-token'));
+    expect('data' in accepted).toBe(true);
+    expect(JSON.stringify(authenticated.rpc.mock.calls)).not.toContain(USER_ID);
   });
 });

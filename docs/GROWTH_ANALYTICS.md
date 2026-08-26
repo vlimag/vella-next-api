@@ -110,6 +110,34 @@ accept exactly their listed properties and no attribution fields.
 | `notification_permission_result` | bearer | `result: granted\|denied\|unavailable\|error` |
 | `notification_opened` | bearer | none |
 
+Rhythms events are bearer-gated and use exact property objects; unlike legacy
+acquisition events, they never inherit `source`, `medium`, `campaign`, or
+`content`. The complete families are:
+
+- discovery/setup: `rhythms_hub_viewed`, `journey_catalog_viewed`,
+  `journey_detail_viewed`, `journey_started`, `practice_catalog_viewed`,
+  `practice_selected`, `weekly_rhythm_saved`, and `gathering_viewed`;
+- session progress: `journey_session_started`, `journey_step_completed`,
+  `journey_session_completed`, `journey_resumed`, `practice_session_started`,
+  `practice_session_completed`, `practice_session_abandoned`,
+  `gathering_started`, `gathering_step_completed`, `gathering_resumed`, and
+  `gathering_completed`;
+- completion/recognition: `journey_completed`, `journey_completion_viewed`,
+  `journey_next_selected`, `weekly_rhythm_completed`,
+  `weekly_rhythm_returned`, `milestone_earned`, `milestone_revealed`,
+  `milestone_featured`, `milestone_unfeatured`, and `milestone_shared`;
+- diagnostics: `rhythms_load_failed`, `rhythms_mutation_failed`,
+  `session_completion_conflict`, and `rhythms_asset_fallback_used`.
+
+Their properties are selected per event from closed catalog codes, source
+surfaces, session kinds, journey/session length buckets, step indexes 1–32,
+step types, completion/abandonment reasons, elapsed buckets, network/cache
+states, schema version `1`, capabilities, and privacy-safe error stages/codes.
+UUIDs, arbitrary slugs/server keys, identity, devotional content, badge
+metadata, and raw errors are rejected. Mobile completion helpers emit only
+after a completed or idempotent authoritative API result and deduplicate on
+that result's validated idempotency boundary without adding it to properties.
+
 Website events use `platform: "web"` and `app_version: "site"`. Other events
 must use `ios` or `android`. The website contract intentionally has no
 `page_id`, raw location, or referrer.
@@ -280,6 +308,16 @@ counts become zero and invalid nullable campaign metrics become `null`.
   Client issue, server error, and verified phase dimensions use explicit closed
   allowlists; any missing, malformed, or unexpected value is grouped under the
   fixed `unknown` label rather than echoed from storage;
+- `rhythms_diagnostics`: count-only discovery and presentation totals from
+  `growth_analytics_events`, plus authoritative journey/session, practice,
+  Gathering, and milestone completion/award totals from their product tables.
+  Release, runtime, and build groups require at least 20 installations. Every
+  query is bounded by the explicit `from`/`to` window, analytics installations
+  are never joined to identity tables, and no properties, rows, samples,
+  install IDs, account IDs, or content are returned. If any Rhythms audit query
+  fails or reaches its completeness cap, the section is exactly
+  `{ "audit_available": false }`; raw database errors are neither returned nor
+  logged;
 - `authoritative_subscriptions`: current/store-verified lifecycle totals;
 - `webhook_health`: received, processed and pending Apple/Google events;
 - `privacy`: retention and suppression metadata. Risk-reducing privacy claims

@@ -249,6 +249,17 @@ const AUTH_MODES = new Set(['sign_in', 'sign_up']);
 const AUTH_METHODS = new Set(['email', 'google', 'apple']);
 const AUTH_OUTCOMES = new Set(['started', 'verification_required', 'succeeded', 'failed', 'cancelled']);
 const SAFE_RELEASE_VALUE = /^[A-Za-z0-9._+~-]+$/;
+const RHYTHMS_EVENT_NAMES = [
+  'rhythms_hub_viewed', 'journey_catalog_viewed', 'journey_detail_viewed', 'journey_started',
+  'practice_catalog_viewed', 'practice_selected', 'weekly_rhythm_saved', 'gathering_viewed',
+  'journey_session_started', 'journey_step_completed', 'journey_session_completed', 'journey_resumed',
+  'practice_session_started', 'practice_session_completed', 'practice_session_abandoned',
+  'gathering_started', 'gathering_step_completed', 'gathering_resumed', 'gathering_completed',
+  'journey_completed', 'journey_completion_viewed', 'journey_next_selected',
+  'weekly_rhythm_completed', 'weekly_rhythm_returned', 'milestone_earned', 'milestone_revealed',
+  'milestone_featured', 'milestone_unfeatured', 'milestone_shared', 'rhythms_load_failed',
+  'rhythms_mutation_failed', 'session_completion_conflict', 'rhythms_asset_fallback_used',
+] as const;
 
 type PropertyDimension = {
   column: string;
@@ -303,6 +314,168 @@ function safeOptionalReleaseDimension(value: unknown, maximumLength: number) {
   return value === null || value === undefined
     ? null
     : safeReleaseDimension(value, maximumLength);
+}
+
+function timestampInWindow(value: unknown, fromTimestamp: string, toTimestamp: string) {
+  if (typeof value !== 'string') return false;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && timestamp >= Date.parse(fromTimestamp) && timestamp < Date.parse(toTimestamp);
+}
+
+function privacyThresholdedCohorts(
+  rows: DiagnosticRow[],
+  dimension: 'app_version' | 'runtime_version' | 'build_number',
+) {
+  const groups = new Map<string, { installations: Set<string>; eventCount: number }>();
+  for (const row of rows) {
+    const installationId = typeof row.installation_id === 'string' && UUID_PATTERN.test(row.installation_id)
+      ? row.installation_id
+      : null;
+    const maximumLength = dimension === 'build_number' ? 24 : 32;
+    const value = safeReleaseDimension(row[dimension], maximumLength);
+    if (!installationId || value === PRIVACY_SAFE_UNKNOWN) continue;
+    const group = groups.get(value) ?? { installations: new Set<string>(), eventCount: 0 };
+    group.installations.add(installationId);
+    group.eventCount += 1;
+    groups.set(value, group);
+  }
+  return [...groups.entries()]
+    .filter(([, group]) => group.installations.size >= MINIMUM_BREAKDOWN_INSTALLS)
+    .map(([value, group]) => ({
+      [dimension]: value,
+      installations: group.installations.size,
+      event_count: group.eventCount,
+    }))
+    .sort((left, right) => right.installations - left.installations ||
+      String(left[dimension]).localeCompare(String(right[dimension])));
+}
+
+async function loadRhythmsDiagnostics(
+  supabase: ReturnType<typeof createServiceClient>,
+  fromTimestamp: string,
+  toTimestamp: string,
+) {
+  const loadEvent = (eventName: string) => supabase
+    .from('growth_analytics_events')
+    .select('installation_id,event_name,platform,app_version,build_number,runtime_version')
+    .eq('event_name', eventName)
+    .gte('received_at', fromTimestamp)
+    .lt('received_at', toTimestamp)
+    .limit(5001);
+  const loadProductRows = (table: string, columns: string, dateColumn: string) => supabase
+    .from(table)
+    .select(columns)
+    .gte(dateColumn, fromTimestamp)
+    .lt(dateColumn, toTimestamp)
+    .limit(5001);
+  const firstAnalyticsQuery = supabase
+    .from('growth_analytics_events')
+    .select('installation_id,event_name,platform,app_version,build_number,runtime_version');
+  const analyticsLoads = typeof firstAnalyticsQuery.in === 'function'
+    ? [firstAnalyticsQuery
+        .in('event_name', [...RHYTHMS_EVENT_NAMES])
+        .gte('received_at', fromTimestamp)
+        .lt('received_at', toTimestamp)
+        .limit(5001)]
+    : [
+        firstAnalyticsQuery
+          .eq('event_name', RHYTHMS_EVENT_NAMES[0])
+          .gte('received_at', fromTimestamp)
+          .lt('received_at', toTimestamp)
+          .limit(5001),
+        ...RHYTHMS_EVENT_NAMES.slice(1).map((eventName) => loadEvent(eventName)),
+      ];
+  const results = await Promise.all([
+    ...analyticsLoads,
+    loadProductRows('user_journeys', 'id,created_at', 'created_at'),
+    loadProductRows('user_journeys', 'id,completed_at', 'completed_at'),
+    loadProductRows('user_journey_daily_sessions', 'user_journey_id,day_number,completed_at', 'completed_at'),
+    loadProductRows('user_practices', 'user_id,practice_code,created_at', 'created_at'),
+    loadProductRows('practice_sessions', 'user_id,practice_code,local_week_start,status,completed_at', 'completed_at'),
+    loadProductRows('user_gathering_progress', 'started_at', 'started_at'),
+    loadProductRows('user_gathering_progress', 'completed_at,status', 'completed_at'),
+    loadProductRows('user_milestones', 'milestone_code,earned_at', 'earned_at'),
+    loadProductRows('user_featured_milestones', 'created_at', 'created_at'),
+  ]);
+  const unavailable = results.some((result) => result.error || !Array.isArray(result.data) || result.data.length >= 5001);
+  if (unavailable) {
+    console.error('[operator.growth] rhythms_diagnostics_unavailable', {
+      query_failed: results.some((result) => Boolean(result.error) || !Array.isArray(result.data)),
+      row_limit_reached: results.some((result) => Array.isArray(result.data) && result.data.length >= 5001),
+    });
+    return { audit_available: false as const };
+  }
+
+  const eventResults = results.slice(0, analyticsLoads.length);
+  const productResults = results.slice(analyticsLoads.length);
+  const analyticsRows = eventResults.flatMap((result) => diagnosticRows(result.data));
+  const eventCount = (eventName: string) => analyticsRows.filter((row) => row.event_name === eventName).length;
+  const productRows = (index: number) => diagnosticRows(productResults[index]?.data);
+  const journeyStarts = productRows(0)
+    .filter((row) => timestampInWindow(row.created_at, fromTimestamp, toTimestamp));
+  const journeyCompletions = productRows(1)
+    .filter((row) => timestampInWindow(row.completed_at, fromTimestamp, toTimestamp));
+  const firstSessionCompletions = productRows(2)
+    .filter((row) => row.day_number === 1 && timestampInWindow(row.completed_at, fromTimestamp, toTimestamp));
+  const weeklyRhythms = productRows(3)
+    .filter((row) => timestampInWindow(row.created_at, fromTimestamp, toTimestamp));
+  const practiceCompletions = productRows(4)
+    .filter((row) => row.status === 'completed' && timestampInWindow(row.completed_at, fromTimestamp, toTimestamp));
+  const completedWeeks = new Set(practiceCompletions.flatMap((row) => (
+    typeof row.user_id === 'string' && typeof row.practice_code === 'string' && typeof row.local_week_start === 'string'
+      ? [`${row.user_id}:${row.practice_code}:${row.local_week_start}`]
+      : []
+  ))).size;
+  const gatheringStarts = productRows(5)
+    .filter((row) => timestampInWindow(row.started_at, fromTimestamp, toTimestamp));
+  const gatheringCompletions = productRows(6)
+    .filter((row) => row.status === 'completed' && timestampInWindow(row.completed_at, fromTimestamp, toTimestamp));
+  const milestonesEarned = productRows(7)
+    .filter((row) => timestampInWindow(row.earned_at, fromTimestamp, toTimestamp));
+  const milestonesFeatured = productRows(8)
+    .filter((row) => timestampInWindow(row.created_at, fromTimestamp, toTimestamp));
+
+  return {
+    audit_available: true as const,
+    source_of_truth: {
+      discovery_and_presentation: 'growth_analytics_events' as const,
+      completions_and_awards: 'rhythms_product_tables' as const,
+    },
+    journey_funnel: {
+      hub_views: eventCount('rhythms_hub_viewed'),
+      catalog_views: eventCount('journey_catalog_viewed'),
+      detail_views: eventCount('journey_detail_viewed'),
+      starts: journeyStarts.length,
+      first_session_completions: firstSessionCompletions.length,
+      journey_completions: journeyCompletions.length,
+    },
+    practice: {
+      catalog_views: eventCount('practice_catalog_viewed'),
+      weekly_rhythms_saved: weeklyRhythms.length,
+      session_completions: practiceCompletions.length,
+      completed_weeks: completedWeeks,
+    },
+    gathering: {
+      views: eventCount('gathering_viewed'),
+      starts: gatheringStarts.length,
+      completions: gatheringCompletions.length,
+    },
+    milestones: {
+      earned: milestonesEarned.length,
+      revealed: eventCount('milestone_revealed'),
+      featured: milestonesFeatured.length,
+    },
+    failures: {
+      idempotency_conflicts: eventCount('session_completion_conflict'),
+      server_errors: eventCount('rhythms_load_failed') + eventCount('rhythms_mutation_failed'),
+    },
+    cohorts: {
+      minimum_installations: MINIMUM_BREAKDOWN_INSTALLS,
+      releases: privacyThresholdedCohorts(analyticsRows, 'app_version'),
+      runtimes: privacyThresholdedCohorts(analyticsRows, 'runtime_version'),
+      builds: privacyThresholdedCohorts(analyticsRows, 'build_number'),
+    },
+  };
 }
 
 function safePropertyDimension(properties: DiagnosticRow | null, dimension: PropertyDimension) {
@@ -1345,6 +1518,11 @@ export async function GET(req: Request) {
     loadGrowthEvent('first_experience_completed'),
     loadGrowthEvent('first_experience_error'),
   ]);
+  const rhythmsDiagnostics = await loadRhythmsDiagnostics(
+    supabase,
+    fromTimestamp,
+    toExclusive.toISOString(),
+  );
   const attributionAuditAvailable = !attributionTruthResult.rpcQueryFailed &&
     !attributionTruthResult.rowLimitReached && !attributionTruthResult.malformedResult;
   if (!attributionAuditAvailable) {
@@ -1420,6 +1598,7 @@ export async function GET(req: Request) {
 
   return ok({
     ...projectedSummary,
+    rhythms_diagnostics: rhythmsDiagnostics,
     attribution_economics: projectAttributionEconomics(
       attributionTruthResult,
       spendLedgerResult,

@@ -32,6 +32,10 @@ function properties<T extends z.ZodRawShape>(shape: T) {
   return z.object({ ...attributionShape, ...shape }).strict();
 }
 
+function rhythmsProperties<T extends z.ZodRawShape>(shape: T) {
+  return z.object(shape).strict();
+}
+
 const billingPeriodSchema = z.enum(['monthly', 'yearly']);
 const onboardingStepKeySchema = z.enum([
   'language',
@@ -51,6 +55,62 @@ const authStageSchema = z.enum(['credentials', 'provider', 'verification']);
 const authOutcomeSchema = z.enum(['started', 'verification_required', 'succeeded', 'failed', 'cancelled']);
 const funnelVariantSchema = z.enum(['legacy_v1', 'compact_v2']);
 const firstExperienceResultSchema = z.enum(['viewed', 'continued', 'completed', 'backgrounded', 'error']);
+const rhythmsSourceSurfaceSchema = z.enum([
+  'rhythms_hub', 'home', 'journey_catalog', 'journey_detail', 'journey_completion',
+  'practice_catalog', 'weekly_rhythm', 'gathering', 'milestones', 'profile',
+]);
+const rhythmsSessionKindSchema = z.enum([
+  'journey', 'guided_prayer', 'scripture', 'gratitude', 'silence',
+  'daily_reflection', 'act_of_kindness', 'gathering',
+]);
+const journeyCatalogCodeSchema = z.enum(['hope-in-seven', 'weekly-rest']);
+const practiceCatalogCodeSchema = z.enum([
+  'guided_prayer', 'scripture', 'gratitude', 'silence', 'daily_reflection', 'act_of_kindness',
+]);
+const gatheringCatalogCodeSchema = z.literal('weekly-rest');
+const milestoneCatalogCodeSchema = z.enum(['streak_3', 'streak_7', 'journey_finisher']);
+const badgeCatalogCodeSchema = z.enum([
+  'milestone.generic', 'flame.spark', 'flame.steady', 'flame.rooted', 'flame.pilgrim',
+]);
+const rhythmsJourneyLengthBucketSchema = z.enum([
+  '1_day', '2_7_days', '8_14_days', '15_30_days', '31_plus_days',
+]);
+const rhythmsSessionLengthBucketSchema = z.enum([
+  'under_2m', '2_4m', '5_9m', '10_19m', '20m_plus',
+]);
+const rhythmsStepTypeSchema = z.enum([
+  'verse', 'reflection', 'prayer', 'action', 'challenge', 'gratitude', 'arrival',
+  'opening_prayer', 'scripture', 'silence', 'private_prayer', 'closing',
+]);
+const rhythmsCompletionReasonSchema = z.enum(['completed', 'idempotent_replay', 'target_reached']);
+const rhythmsAbandonmentReasonSchema = z.enum(['user_exit', 'backgrounded', 'superseded', 'error']);
+const rhythmsElapsedBucketSchema = z.enum(['under_30s', '30_119s', '2_4m', '5_14m', '15m_plus']);
+const rhythmsNetworkStateSchema = z.enum(['online', 'offline', 'degraded']);
+const rhythmsCacheStateSchema = z.enum(['miss', 'fresh', 'stale', 'fallback']);
+const rhythmsCapabilitySchema = z.enum([
+  'journey_v2', 'practices', 'gatherings', 'social_badges', 'long_journeys',
+]);
+const rhythmsErrorStageSchema = z.enum([
+  'summary_load', 'catalog_load', 'session_start', 'step_complete', 'session_complete',
+  'weekly_save', 'gathering_load', 'milestone_mutation', 'asset_load',
+]);
+const rhythmsErrorCodeSchema = z.enum([
+  'network_unavailable', 'timeout', 'unauthorized', 'not_found', 'conflict',
+  'server_unavailable', 'invalid_response', 'capability_unavailable', 'asset_unavailable', 'unknown',
+]);
+
+function matchingPracticeProperties<T extends z.ZodRawShape>(shape: T) {
+  return rhythmsProperties({
+    catalog_code: practiceCatalogCodeSchema,
+    session_kind: z.enum([
+      'guided_prayer', 'scripture', 'gratitude', 'silence', 'daily_reflection', 'act_of_kindness',
+    ]),
+    ...shape,
+  }).refine((value) => value.catalog_code === value.session_kind, {
+    message: 'practice catalog_code must match session_kind',
+    path: ['session_kind'],
+  });
+}
 
 const legacyFirstExperienceStepSchema = z.object({
   step_number: z.number().int().min(1).max(4),
@@ -301,6 +361,244 @@ const growthEventUnionSchema = z.union([
   eventBase.extend({
     event_name: z.literal('notification_opened'),
     properties: properties({}),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('rhythms_hub_viewed'),
+    properties: rhythmsProperties({ source_surface: rhythmsSourceSurfaceSchema }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_catalog_viewed'),
+    properties: rhythmsProperties({ source_surface: rhythmsSourceSurfaceSchema }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_detail_viewed'),
+    properties: rhythmsProperties({
+      catalog_code: journeyCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+      journey_length_bucket: rhythmsJourneyLengthBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_started'),
+    properties: rhythmsProperties({
+      catalog_code: journeyCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+      journey_length_bucket: rhythmsJourneyLengthBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('practice_catalog_viewed'),
+    properties: rhythmsProperties({ source_surface: rhythmsSourceSurfaceSchema }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('practice_selected'),
+    properties: matchingPracticeProperties({ source_surface: rhythmsSourceSurfaceSchema }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('weekly_rhythm_saved'),
+    properties: matchingPracticeProperties({}),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('gathering_viewed'),
+    properties: rhythmsProperties({
+      catalog_code: gatheringCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+      session_length_bucket: rhythmsSessionLengthBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_session_started'),
+    properties: rhythmsProperties({
+      catalog_code: journeyCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+      session_kind: z.literal('journey'),
+      journey_length_bucket: rhythmsJourneyLengthBucketSchema,
+      cache_state: rhythmsCacheStateSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_step_completed'),
+    properties: rhythmsProperties({
+      catalog_code: journeyCatalogCodeSchema,
+      step_index: z.number().int().min(1).max(32),
+      step_type: rhythmsStepTypeSchema,
+      elapsed_bucket: rhythmsElapsedBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_session_completed'),
+    properties: rhythmsProperties({
+      catalog_code: journeyCatalogCodeSchema,
+      completion_reason: rhythmsCompletionReasonSchema,
+      elapsed_bucket: rhythmsElapsedBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_resumed'),
+    properties: rhythmsProperties({
+      catalog_code: journeyCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+      step_index: z.number().int().min(1).max(32),
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('practice_session_started'),
+    properties: matchingPracticeProperties({
+      source_surface: rhythmsSourceSurfaceSchema,
+      network_state: rhythmsNetworkStateSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('practice_session_completed'),
+    properties: matchingPracticeProperties({
+      completion_reason: rhythmsCompletionReasonSchema,
+      elapsed_bucket: rhythmsElapsedBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('practice_session_abandoned'),
+    properties: matchingPracticeProperties({
+      abandonment_reason: rhythmsAbandonmentReasonSchema,
+      elapsed_bucket: rhythmsElapsedBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('gathering_started'),
+    properties: rhythmsProperties({
+      catalog_code: gatheringCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+      session_kind: z.literal('gathering'),
+      session_length_bucket: rhythmsSessionLengthBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('gathering_step_completed'),
+    properties: rhythmsProperties({
+      catalog_code: gatheringCatalogCodeSchema,
+      step_index: z.number().int().min(1).max(32),
+      step_type: rhythmsStepTypeSchema,
+      elapsed_bucket: rhythmsElapsedBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('gathering_resumed'),
+    properties: rhythmsProperties({
+      catalog_code: gatheringCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+      step_index: z.number().int().min(1).max(32),
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('gathering_completed'),
+    properties: rhythmsProperties({
+      catalog_code: gatheringCatalogCodeSchema,
+      completion_reason: rhythmsCompletionReasonSchema,
+      elapsed_bucket: rhythmsElapsedBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_completed'),
+    properties: rhythmsProperties({
+      catalog_code: journeyCatalogCodeSchema,
+      completion_reason: rhythmsCompletionReasonSchema,
+      journey_length_bucket: rhythmsJourneyLengthBucketSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_completion_viewed'),
+    properties: rhythmsProperties({
+      catalog_code: journeyCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('journey_next_selected'),
+    properties: rhythmsProperties({
+      catalog_code: journeyCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('weekly_rhythm_completed'),
+    properties: matchingPracticeProperties({ completion_reason: rhythmsCompletionReasonSchema }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('weekly_rhythm_returned'),
+    properties: matchingPracticeProperties({ source_surface: rhythmsSourceSurfaceSchema }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('milestone_earned'),
+    properties: rhythmsProperties({ catalog_code: milestoneCatalogCodeSchema }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('milestone_revealed'),
+    properties: rhythmsProperties({
+      catalog_code: milestoneCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('milestone_featured'),
+    properties: rhythmsProperties({
+      catalog_code: milestoneCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('milestone_unfeatured'),
+    properties: rhythmsProperties({
+      catalog_code: milestoneCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('milestone_shared'),
+    properties: rhythmsProperties({
+      catalog_code: milestoneCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('rhythms_load_failed'),
+    properties: rhythmsProperties({
+      source_surface: rhythmsSourceSurfaceSchema,
+      error_stage: rhythmsErrorStageSchema,
+      error_code: rhythmsErrorCodeSchema,
+      network_state: rhythmsNetworkStateSchema,
+      cache_state: rhythmsCacheStateSchema,
+      schema_version: z.literal(1),
+      capability: rhythmsCapabilitySchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('rhythms_mutation_failed'),
+    properties: rhythmsProperties({
+      source_surface: rhythmsSourceSurfaceSchema,
+      error_stage: rhythmsErrorStageSchema,
+      error_code: rhythmsErrorCodeSchema,
+      network_state: rhythmsNetworkStateSchema,
+      cache_state: rhythmsCacheStateSchema,
+      schema_version: z.literal(1),
+      capability: rhythmsCapabilitySchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('session_completion_conflict'),
+    properties: rhythmsProperties({
+      session_kind: rhythmsSessionKindSchema,
+      error_stage: rhythmsErrorStageSchema,
+      error_code: rhythmsErrorCodeSchema,
+    }),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('rhythms_asset_fallback_used'),
+    properties: rhythmsProperties({
+      catalog_code: badgeCatalogCodeSchema,
+      source_surface: rhythmsSourceSurfaceSchema,
+      error_stage: z.literal('asset_load'),
+      error_code: rhythmsErrorCodeSchema,
+      cache_state: z.literal('fallback'),
+    }),
   }).strict(),
 ]);
 

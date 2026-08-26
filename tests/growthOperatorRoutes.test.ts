@@ -185,6 +185,83 @@ function mockTableQueries(
   return { from, buildersByTable };
 }
 
+type RecordedOperatorQuery = {
+  table: string;
+  filters: Array<{ method: string; column: string; value: unknown }>;
+};
+
+function rhythmsOperatorReport() {
+  return {
+    ...orderedReportBlocks(),
+    window: { from: '2026-07-01', to: '2026-07-31', cohort_days: 14 },
+    funnel: [],
+    daily: [],
+    cohorts: [],
+    campaigns: [],
+    authoritative_subscriptions: {
+      verified_starts: 0,
+      active_now: 0,
+      auto_renew_off_now: 0,
+      ended_updates: 0,
+      by_provider_product: [],
+      source_of_truth: 'verified_store_subscriptions',
+    },
+    webhook_health: { received: 0, processed: 0, pending: 0, by_provider: [] },
+    privacy: {
+      raw_retention_days: 90,
+      minimum_breakdown_installs: 20,
+      small_cohorts_omitted: true,
+      small_campaign_metrics_suppressed: true,
+      small_subscription_product_groups_omitted: true,
+      contains_ip_or_raw_content: false,
+      contains_account_identifier: false,
+      client_subscription_events_are_authoritative: false,
+    },
+  };
+}
+
+function mockRhythmsOperatorClient(
+  resolve: (query: RecordedOperatorQuery) => MockTableQueryResult,
+) {
+  const { rpc } = mockGrowthRpcs(rhythmsOperatorReport());
+  const queries: RecordedOperatorQuery[] = [];
+  const from = vi.fn((table: string) => {
+    const query: RecordedOperatorQuery = { table, filters: [] };
+    queries.push(query);
+    const builder: Record<string, ReturnType<typeof vi.fn>> = {};
+    builder.select = vi.fn(() => builder);
+    for (const method of ['eq', 'gte', 'gt', 'lte', 'lt', 'in', 'order']) {
+      builder[method] = vi.fn((column: string, value: unknown) => {
+        query.filters.push({ method, column, value });
+        return builder;
+      });
+    }
+    builder.limit = vi.fn(async (maximum?: number) => {
+      const result = resolve(query);
+      return {
+        data: Array.isArray(result.data) && typeof maximum === 'number'
+          ? result.data.slice(0, maximum)
+          : result.data,
+        error: result.error,
+        count: result.count,
+      };
+    });
+    builder.range = vi.fn(async (fromIndex: number, toIndex: number) => {
+      const result = resolve(query);
+      return {
+        data: Array.isArray(result.data) ? result.data.slice(fromIndex, toIndex + 1) : result.data,
+        error: result.error,
+        count: result.count === undefined
+          ? Array.isArray(result.data) ? result.data.length : null
+          : result.count,
+      };
+    });
+    return builder;
+  });
+  mocks.createServiceClient.mockReturnValue({ rpc, from });
+  return { queries };
+}
+
 function pagedQuery(limit: ReturnType<typeof vi.fn>) {
   const builder: Record<string, ReturnType<typeof vi.fn>> = {};
   builder.limit = limit;
@@ -290,6 +367,26 @@ describe('growth operator routes', () => {
       },
       onboarding_steps: [],
       onboarding_step_results: [],
+      rhythms_diagnostics: {
+        audit_available: true,
+        source_of_truth: {
+          discovery_and_presentation: 'growth_analytics_events',
+          completions_and_awards: 'rhythms_product_tables',
+        },
+        journey_funnel: {
+          hub_views: 0,
+          catalog_views: 0,
+          detail_views: 0,
+          starts: 0,
+          first_session_completions: 0,
+          journey_completions: 0,
+        },
+        practice: { catalog_views: 0, weekly_rhythms_saved: 0, session_completions: 0, completed_weeks: 0 },
+        gathering: { views: 0, starts: 0, completions: 0 },
+        milestones: { earned: 0, revealed: 0, featured: 0 },
+        failures: { idempotency_conflicts: 0, server_errors: 0 },
+        cohorts: { minimum_installations: 20, releases: [], runtimes: [], builds: [] },
+      },
       onboarding_diagnostics: {
         audit_available: true,
         by_step_duration: [],
@@ -344,7 +441,7 @@ describe('growth operator routes', () => {
       p_to: '2026-07-31',
       p_cohort_days: 14,
     });
-    expect(from).toHaveBeenCalledTimes(18);
+    expect(from).toHaveBeenCalledTimes(60);
   });
 
   it('projects ordered truth and independently enforces every 20-unit privacy threshold', async () => {
@@ -2459,5 +2556,193 @@ describe('growth operator routes', () => {
     ));
     expect(unauthorized.status).toBe(401);
     expect(mocks.createServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('returns count-only Rhythms funnels from product truth and privacy-thresholded analytics cohorts', async () => {
+    const privateInstall = '11111111-1111-4111-8111-111111111111';
+    const privateAccount = '22222222-2222-4222-8222-222222222222';
+    const privateContent = 'private devotional reflection';
+    const releaseRows = (count: number, appVersion: string, buildNumber: string, runtimeVersion: string) =>
+      Array.from({ length: count }, (_, index) => ({
+        installation_id: `${String(index).padStart(8, '0')}-1111-4111-8111-111111111111`,
+        event_name: 'rhythms_hub_viewed',
+        platform: 'android',
+        app_version: appVersion,
+        build_number: buildNumber,
+        runtime_version: runtimeVersion,
+        properties: index === 0 ? { reflection_text: privateContent } : {},
+      }));
+    const analyticsRows = [
+      ...releaseRows(20, '2.0.0', '200', '2.0'),
+      ...releaseRows(19, '1.9.0', '190', '1.9'),
+      {
+        installation_id: privateInstall,
+        event_name: 'journey_catalog_viewed',
+        platform: 'android', app_version: '2.0.0', build_number: '200', runtime_version: '2.0', properties: {},
+      },
+      {
+        installation_id: privateInstall,
+        event_name: 'journey_detail_viewed',
+        platform: 'android', app_version: '2.0.0', build_number: '200', runtime_version: '2.0', properties: {},
+      },
+      {
+        installation_id: privateInstall,
+        event_name: 'practice_catalog_viewed',
+        platform: 'android', app_version: '2.0.0', build_number: '200', runtime_version: '2.0', properties: {},
+      },
+      {
+        installation_id: privateInstall,
+        event_name: 'gathering_viewed',
+        platform: 'android', app_version: '2.0.0', build_number: '200', runtime_version: '2.0', properties: {},
+      },
+      {
+        installation_id: privateInstall,
+        event_name: 'milestone_revealed',
+        platform: 'android', app_version: '2.0.0', build_number: '200', runtime_version: '2.0', properties: {},
+      },
+      {
+        installation_id: privateInstall,
+        event_name: 'session_completion_conflict',
+        platform: 'android', app_version: '2.0.0', build_number: '200', runtime_version: '2.0', properties: {},
+      },
+      {
+        installation_id: privateInstall,
+        event_name: 'rhythms_mutation_failed',
+        platform: 'android', app_version: '2.0.0', build_number: '200', runtime_version: '2.0',
+        properties: { error_stage: 'session_complete', error_code: 'server_unavailable' },
+      },
+    ];
+    const tableRows: Record<string, unknown[]> = {
+      growth_analytics_events: analyticsRows,
+      user_journeys: [
+        { id: 'journey-1', user_id: privateAccount, created_at: '2026-07-02T00:00:00Z', completed_at: null },
+        { id: 'journey-2', user_id: 'account-2', created_at: '2026-07-03T00:00:00Z', completed_at: '2026-07-20T00:00:00Z' },
+      ],
+      user_journey_daily_sessions: [
+        { user_journey_id: 'journey-1', day_number: 1, completed_at: '2026-07-04T00:00:00Z' },
+        { user_journey_id: 'journey-2', day_number: 1, completed_at: '2026-07-05T00:00:00Z' },
+      ],
+      user_practices: [
+        { user_id: privateAccount, practice_code: 'scripture', created_at: '2026-07-02T00:00:00Z' },
+      ],
+      practice_sessions: [
+        {
+          user_id: privateAccount, practice_code: 'scripture', local_week_start: '2026-07-06',
+          completed_at: '2026-07-07T00:00:00Z', status: 'completed',
+        },
+        {
+          user_id: privateAccount, practice_code: 'scripture', local_week_start: '2026-07-06',
+          completed_at: '2026-07-08T00:00:00Z', status: 'completed',
+        },
+      ],
+      user_gathering_progress: [
+        {
+          user_id: privateAccount, started_at: '2026-07-09T00:00:00Z',
+          completed_at: '2026-07-10T00:00:00Z', status: 'completed',
+        },
+      ],
+      user_milestones: [
+        { user_id: privateAccount, milestone_code: 'journey_finisher', earned_at: '2026-07-11T00:00:00Z' },
+      ],
+      user_featured_milestones: [
+        { user_id: privateAccount, created_at: '2026-07-12T00:00:00Z' },
+      ],
+    };
+    mockRhythmsOperatorClient((query) => {
+      const eventName = query.filters.find((filter) =>
+        filter.method === 'eq' && filter.column === 'event_name')?.value;
+      const isRhythmsAnalytics = query.table === 'growth_analytics_events' && typeof eventName === 'string' &&
+        /^(?:rhythms_|journey_|practice_|weekly_|gathering_|milestone_|session_completion_)/.test(eventName);
+      return {
+        data: isRhythmsAnalytics
+          ? analyticsRows.filter((row) => row.event_name === eventName)
+          : tableRows[query.table] ?? [],
+        error: null,
+      };
+    });
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics).toEqual({
+      audit_available: true,
+      source_of_truth: {
+        discovery_and_presentation: 'growth_analytics_events',
+        completions_and_awards: 'rhythms_product_tables',
+      },
+      journey_funnel: {
+        hub_views: 39,
+        catalog_views: 1,
+        detail_views: 1,
+        starts: 2,
+        first_session_completions: 2,
+        journey_completions: 1,
+      },
+      practice: { catalog_views: 1, weekly_rhythms_saved: 1, session_completions: 2, completed_weeks: 1 },
+      gathering: { views: 1, starts: 1, completions: 1 },
+      milestones: { earned: 1, revealed: 1, featured: 1 },
+      failures: { idempotency_conflicts: 1, server_errors: 1 },
+      cohorts: {
+        minimum_installations: 20,
+        releases: [{ app_version: '2.0.0', installations: 21, event_count: 27 }],
+        runtimes: [{ runtime_version: '2.0', installations: 21, event_count: 27 }],
+        builds: [{ build_number: '200', installations: 21, event_count: 27 }],
+      },
+    });
+    const serialized = JSON.stringify(body.data.rhythms_diagnostics);
+    for (const forbidden of [privateInstall, privateAccount, privateContent, 'installation_id', 'user_id', 'properties']) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it('returns only unavailable Rhythms status on any audit query failure without raw error leakage', async () => {
+    const rawError = 'database row 11111111-1111-4111-8111-111111111111 failed';
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockRhythmsOperatorClient((query) => ({
+      data: [],
+      error: query.table === 'practice_sessions' ? { message: rawError, details: rawError } : null,
+    }));
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics).toEqual({ audit_available: false });
+    expect(JSON.stringify(body)).not.toContain(rawError);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(rawError);
+    consoleError.mockRestore();
+  });
+
+  it('date-bounds every Rhythms audit query to the explicit inclusive report window', async () => {
+    const { queries } = mockRhythmsOperatorClient(() => ({ data: [], error: null }));
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    expect(response.status).toBe(200);
+    const rhythmsTables = new Set([
+      'growth_analytics_events', 'user_journeys', 'user_journey_daily_sessions', 'user_practices',
+      'practice_sessions', 'user_gathering_progress', 'user_milestones', 'user_featured_milestones',
+    ]);
+    const rhythmsQueries = queries.filter((query) => rhythmsTables.has(query.table) && (
+      query.table !== 'growth_analytics_events' ||
+      query.filters.some((filter) => filter.column === 'event_name' && (
+        filter.method === 'in' || filter.method === 'eq' && typeof filter.value === 'string' &&
+        /^(?:rhythms_|journey_|practice_|weekly_|gathering_|milestone_|session_completion_)/.test(filter.value)
+      ))
+    ));
+    expect(rhythmsQueries.length).toBeGreaterThanOrEqual(8);
+    for (const query of rhythmsQueries) {
+      expect(query.filters).toEqual(expect.arrayContaining([
+        expect.objectContaining({ method: 'gte', value: '2026-07-01T00:00:00.000Z' }),
+        expect.objectContaining({ method: 'lt', value: '2026-08-01T00:00:00.000Z' }),
+      ]));
+    }
   });
 });
