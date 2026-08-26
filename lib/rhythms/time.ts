@@ -3,6 +3,7 @@ const DATE_PART_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
   month: '2-digit',
   day: '2-digit',
 };
+const FIXED_OFFSET_TIME_ZONE = /^[+-]\d{2}:\d{2}$/;
 
 export function normalizeTimeZone(value: unknown): string {
   if (typeof value !== 'string') return 'UTC';
@@ -10,7 +11,9 @@ export function normalizeTimeZone(value: unknown): string {
   if (!candidate) return 'UTC';
 
   try {
-    return new Intl.DateTimeFormat('en-US', { timeZone: candidate }).resolvedOptions().timeZone;
+    const resolved = new Intl.DateTimeFormat('en-US', { timeZone: candidate }).resolvedOptions().timeZone;
+    if (FIXED_OFFSET_TIME_ZONE.test(candidate) || FIXED_OFFSET_TIME_ZONE.test(resolved)) return 'UTC';
+    return resolved;
   } catch {
     return 'UTC';
   }

@@ -493,6 +493,52 @@ describe('journey completion typed RPC boundary', () => {
     });
   });
 
+  it.each([
+    ['+01:00', '2026-01-04T23:30:00.000Z', '2026-01-04', '2025-12-29'],
+    ['-12:00', '2026-01-05T00:30:00.000Z', '2026-01-05', '2026-01-05'],
+  ])('sends fixed offset %s to the RPC as a UTC completion boundary', async (
+    timezoneName,
+    instant,
+    expectedDay,
+    expectedWeek,
+  ) => {
+    vi.setSystemTime(new Date(instant));
+    const client = clientWithRpc();
+    mocks.createServiceClient.mockReturnValue(client);
+
+    const { response } = await post({
+      journey_id: JOURNEY_ID,
+      timezone_name: timezoneName,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(client.rpc).toHaveBeenCalledWith('complete_journey_session_v2', expect.objectContaining({
+      p_timezone_name: 'UTC',
+      p_local_day: expectedDay,
+      p_local_week_start: expectedWeek,
+    }));
+  });
+
+  it('keeps Etc/GMT+12 as a valid route timezone', async () => {
+    vi.setSystemTime(new Date('2026-01-01T10:30:00.000Z'));
+    const client = clientWithRpc();
+    mocks.createServiceClient.mockReturnValue(client);
+
+    const { response } = await post({
+      journey_id: JOURNEY_ID,
+      timezone_name: 'Etc/GMT+12',
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(client.rpc).toHaveBeenCalledWith('complete_journey_session_v2', expect.objectContaining({
+      p_timezone_name: 'Etc/GMT+12',
+      p_local_day: '2025-12-31',
+      p_local_week_start: '2025-12-29',
+    }));
+  });
+
   it('rejects a malformed idempotency key without invoking the database', async () => {
     const client = clientWithRpc();
     mocks.createServiceClient.mockReturnValue(client);

@@ -40,6 +40,26 @@ describe('Rhythms local time semantics', () => {
     expect(normalizeTimeZone('Etc/GMT+12')).toBe('Etc/GMT+12');
   });
 
+  it.each([
+    ['+01:00', '2026-01-04T23:30:00.000Z', '2026-01-04', '2025-12-29'],
+    ['-12:00', '2026-01-05T00:30:00.000Z', '2026-01-05', '2026-01-05'],
+  ])('rejects fixed offset %s and derives its calendar boundary in UTC', async (
+    timezone,
+    instant,
+    expectedDay,
+    expectedWeek,
+  ) => {
+    const module = await loadTimeModule();
+    const normalizeTimeZone = requireFunction(module.normalizeTimeZone);
+    const localDateKey = requireFunction(module.localDateKey);
+    const localWeekStart = requireFunction(module.localWeekStart);
+    const now = new Date(instant);
+
+    expect(normalizeTimeZone(timezone)).toBe('UTC');
+    expect(localDateKey(now, timezone)).toBe(expectedDay);
+    expect(localWeekStart(now, timezone)).toBe(expectedWeek);
+  });
+
   it('distinguishes UTC-12 and UTC+14 across a year boundary', async () => {
     const module = await loadTimeModule();
     const localDateKey = requireFunction(module.localDateKey);
