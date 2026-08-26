@@ -321,6 +321,38 @@ describe('growth analytics ingestion', () => {
       event_name: 'subscription_management_opened',
       properties: { source: 'paywall', result: 'opened' },
     })).success).toBe(true);
+    const diagnostics = [
+      ['app_error', {
+        surface: 'react_render', stage: 'render', error_code: 'unexpected_error',
+        severity: 'recoverable', fingerprint: 'a'.repeat(64),
+      }],
+      ['startup_update_result', { outcome: 'current', duration_bucket: 'under_1s' }],
+      ['data_operation_failed', { operation: 'query', domain: 'home', error_code: 'network_unavailable' }],
+      ['paywall_catalog_result', { outcome: 'loaded', product_count: 2, duration_bucket: '1_4s' }],
+      ['paywall_cta_tapped', { plan: 'yearly', auth_state: 'anonymous', offer_kind: 'annual_trial' }],
+      ['pending_checkout_result', { stage: 'save', outcome: 'succeeded', plan: 'yearly' }],
+      ['subscription_ownership_flow', { stage: 'conflict_presented', outcome: 'shown' }],
+      ['profile_initialization_result', { outcome: 'existing', provider_class: 'google' }],
+      ['attribution_install_result', { outcome: 'pending', reason: 'provider_not_ready' }],
+    ] as const;
+    for (const [eventName, properties] of diagnostics) {
+      expect(growthEventSchema.safeParse(event({ event_name: eventName, properties })).success).toBe(true);
+      for (const forbiddenKey of [
+        'raw_error',
+        'message',
+        'stack',
+        'url',
+        'content',
+        'user_id',
+        'receipt',
+        'purchase_token',
+      ]) {
+        expect(growthEventSchema.safeParse(event({
+          event_name: eventName,
+          properties: { ...properties, [forbiddenKey]: 'must-reject' },
+        })).success).toBe(false);
+      }
+    }
     expect(growthEventSchema.safeParse(event({
       event_name: 'store_cta_clicked',
       platform: 'web',
@@ -333,6 +365,259 @@ describe('growth analytics ingestion', () => {
         campaign: 'Launch_BR',
       },
     })).success).toBe(true);
+  });
+
+  it('isolates a contract-invalid database event without blocking valid neighbors', async () => {
+    const supabase = serviceClient();
+    supabase.rpc.mockImplementation(async (_name: string, input: { p_events: Array<Record<string, unknown>> }) => {
+      const containsRejected = input.p_events.some((candidate) => candidate.event_name === 'app_session_started');
+      if (containsRejected) return { data: null, error: { code: '23514', message: 'check violation' } };
+      return {
+        data: {
+          accepted: input.p_events.length,
+          inserted: input.p_events.length,
+          duplicates: 0,
+          retention_policy: 'raw_90_days',
+        },
+        error: null,
+      };
+    });
+    mocks.createServiceClient.mockReturnValue(supabase);
+
+    const result = await ingestGrowthEvents(request([
+      event({ event_id: '44444444-4444-4444-8444-444444444444' }),
+      event({
+        event_id: '55555555-5555-4555-8555-555555555555',
+        event_name: 'app_session_started',
+      }),
+      event({
+        event_id: '66666666-6666-4666-8666-666666666666',
+        event_name: 'onboarding_started',
+      }),
+    ]));
+
+    expect(result).toEqual({
+      data: {
+        accepted: 2,
+        inserted: 2,
+        duplicates: 0,
+        rejected: 1,
+        rejection_codes: { contract_mismatch: 1 },
+        retention_policy: 'raw_90_days',
+      },
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(5);
+  });
+
+  it('consumes every contract-invalid event when the whole batch is incompatible', async () => {
+    const supabase = serviceClient();
+    supabase.rpc.mockResolvedValue({
+      data: null,
+      error: { code: '23514', message: 'check violation' },
+    });
+    mocks.createServiceClient.mockReturnValue(supabase);
+
+    const result = await ingestGrowthEvents(request([
+      event({ event_id: '44444444-4444-4444-8444-444444444444' }),
+      event({
+        event_id: '55555555-5555-4555-8555-555555555555',
+        event_name: 'app_session_started',
+      }),
+      event({
+        event_id: '66666666-6666-4666-8666-666666666666',
+        event_name: 'onboarding_started',
+      }),
+    ]));
+
+    expect(result).toEqual({
+      data: {
+        accepted: 0,
+        inserted: 0,
+        duplicates: 0,
+        rejected: 3,
+        rejection_codes: { contract_mismatch: 3 },
+        retention_policy: 'raw_90_days',
+      },
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(5);
+  });
+
+  it('aggregates inserted and duplicate counts across a split path', async () => {
+    const supabase = serviceClient();
+    supabase.rpc.mockImplementation(async (_name: string, input: { p_events: Array<Record<string, unknown>> }) => {
+      if (input.p_events.some((candidate) => candidate.event_name === 'app_session_started')) {
+        return { data: null, error: { code: '23514', message: 'check violation' } };
+      }
+      const duplicates = input.p_events.filter(
+        (candidate) => candidate.event_name === 'onboarding_started',
+      ).length;
+      return {
+        data: {
+          accepted: input.p_events.length,
+          inserted: input.p_events.length - duplicates,
+          duplicates,
+          retention_policy: 'raw_90_days',
+        },
+        error: null,
+      };
+    });
+    mocks.createServiceClient.mockReturnValue(supabase);
+
+    const result = await ingestGrowthEvents(request([
+      event({ event_id: '44444444-4444-4444-8444-444444444444' }),
+      event({
+        event_id: '55555555-5555-4555-8555-555555555555',
+        event_name: 'app_session_started',
+      }),
+      event({
+        event_id: '66666666-6666-4666-8666-666666666666',
+        event_name: 'onboarding_started',
+      }),
+    ]));
+
+    expect(result).toEqual({
+      data: {
+        accepted: 2,
+        inserted: 1,
+        duplicates: 1,
+        rejected: 1,
+        rejection_codes: { contract_mismatch: 1 },
+        retention_policy: 'raw_90_days',
+      },
+    });
+    expect(supabase.rpc).toHaveBeenCalledTimes(5);
+  });
+
+  it('does not split a batch for a non-contract database failure', async () => {
+    const supabase = serviceClient({
+      rpcError: { code: '08006', message: 'connection_failure_with_private_context' },
+    });
+    mocks.createServiceClient.mockReturnValue(supabase);
+
+    const result = await ingestGrowthEvents(request([
+      event({ event_id: '44444444-4444-4444-8444-444444444444' }),
+      event({
+        event_id: '55555555-5555-4555-8555-555555555555',
+        event_name: 'app_session_started',
+      }),
+    ]));
+
+    expect('response' in result && result.response.status).toBe(503);
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not split rate-limited or capacity-limited batches', async () => {
+    const events = [
+      event({ event_id: '44444444-4444-4444-8444-444444444444' }),
+      event({
+        event_id: '55555555-5555-4555-8555-555555555555',
+        event_name: 'app_session_started',
+      }),
+    ];
+    const rateLimited = serviceClient({
+      rpcError: { code: 'P0001', message: 'growth_rate_limit_exceeded' },
+    });
+    mocks.createServiceClient.mockReturnValue(rateLimited);
+    const rateResult = await ingestGrowthEvents(request(events));
+
+    expect('response' in rateResult && rateResult.response.status).toBe(429);
+    expect(rateLimited.rpc).toHaveBeenCalledTimes(1);
+
+    const capacityLimited = serviceClient({
+      rpcError: { code: 'P0001', message: 'growth_global_circuit_breaker_open' },
+    });
+    mocks.createServiceClient.mockReturnValue(capacityLimited);
+    const capacityResult = await ingestGrowthEvents(request(events));
+
+    expect('response' in capacityResult && capacityResult.response.status).toBe(503);
+    if ('response' in capacityResult) {
+      await expect(capacityResult.response.json()).resolves.toMatchObject({
+        error: { details: { code: 'analytics_capacity_limited' } },
+      });
+    }
+    expect(capacityLimited.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not split a malformed successful RPC result', async () => {
+    const supabase = serviceClient({
+      rpcData: { accepted: 2, inserted: 2, retention_policy: 'raw_90_days' },
+    });
+    mocks.createServiceClient.mockReturnValue(supabase);
+
+    const result = await ingestGrowthEvents(request([
+      event({ event_id: '44444444-4444-4444-8444-444444444444' }),
+      event({
+        event_id: '55555555-5555-4555-8555-555555555555',
+        event_name: 'app_session_started',
+      }),
+    ]));
+
+    expect('response' in result && result.response.status).toBe(503);
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs only finite release dimensions and the safe contract code', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const supabase = serviceClient({
+      rpcError: {
+        code: '23514',
+        message: `check failed for ${EVENT_ID} ${USER_ID} receipt-secret purchase-token-secret`,
+      },
+    });
+    mocks.createServiceClient.mockReturnValue(supabase);
+    const fingerprint = 'b'.repeat(64);
+
+    try {
+      const result = await ingestGrowthEvents(request([event({
+        event_name: 'app_error',
+        app_version: '1.3.0',
+        build_number: '842',
+        runtime_version: '1.3.0',
+        funnel_variant: 'compact_v2',
+        properties: {
+          surface: 'react_render',
+          stage: 'render',
+          error_code: 'unexpected_error',
+          severity: 'recoverable',
+          fingerprint,
+        },
+      })]));
+
+      expect(result).toEqual({
+        data: {
+          accepted: 0,
+          inserted: 0,
+          duplicates: 0,
+          rejected: 1,
+          rejection_codes: { contract_mismatch: 1 },
+          retention_policy: 'raw_90_days',
+        },
+      });
+      expect(errorSpy).toHaveBeenCalledTimes(1);
+      expect(errorSpy).toHaveBeenCalledWith('[growth-analytics] contract_event_rejected', {
+        errorCode: '23514',
+        eventName: 'app_error',
+        platform: 'ios',
+        appVersion: '1.3.0',
+        buildNumber: '842',
+        runtimeVersion: '1.3.0',
+        funnelVariant: 'compact_v2',
+      });
+      const serializedLog = JSON.stringify(errorSpy.mock.calls);
+      for (const forbiddenValue of [
+        EVENT_ID,
+        INSTALL_ID,
+        USER_ID,
+        fingerprint,
+        'receipt-secret',
+        'purchase-token-secret',
+        'check failed',
+      ]) {
+        expect(serializedLog).not.toContain(forbiddenValue);
+      }
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 
   it('rejects arbitrary, nested, content-bearing, and invalid canonical properties', () => {
@@ -491,12 +776,108 @@ describe('growth analytics ingestion', () => {
 
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({
-      data: { accepted: 1, inserted: 1, duplicates: 0, retention_policy: 'raw_90_days' },
+      data: {
+        accepted: 1,
+        inserted: 1,
+        duplicates: 0,
+        rejected: 0,
+        rejection_codes: { contract_mismatch: 0 },
+        retention_policy: 'raw_90_days',
+      },
     });
     expect(supabase.auth.getUser).not.toHaveBeenCalled();
     expect(supabase.rpc).toHaveBeenCalledWith('ingest_growth_analytics_events', {
       p_events: [expect.objectContaining({ install_id: INSTALL_ID, event_name: 'first_open' })],
       p_authenticated: false,
+    });
+  });
+
+  it('preserves the diagnostic anonymous and authenticated event boundaries', async () => {
+    const anonymousEvents = [
+      event({
+        event_id: '00000000-0000-4000-8000-000000000001',
+        event_name: 'app_error',
+        properties: {
+          surface: 'global_js',
+          stage: 'bootstrap',
+          error_code: 'unexpected_error',
+          severity: 'fatal',
+          fingerprint: 'a'.repeat(64),
+        },
+      }),
+      event({
+        event_id: '00000000-0000-4000-8000-000000000002',
+        event_name: 'startup_update_result',
+        properties: { outcome: 'current', duration_bucket: 'under_1s' },
+      }),
+      event({
+        event_id: '00000000-0000-4000-8000-000000000003',
+        event_name: 'data_operation_failed',
+        properties: { operation: 'query', domain: 'home', error_code: 'network_unavailable' },
+      }),
+      event({
+        event_id: '00000000-0000-4000-8000-000000000004',
+        event_name: 'paywall_catalog_result',
+        properties: { outcome: 'loaded', product_count: 2, duration_bucket: '1_4s' },
+      }),
+      event({
+        event_id: '00000000-0000-4000-8000-000000000005',
+        event_name: 'paywall_cta_tapped',
+        properties: { plan: 'yearly', auth_state: 'anonymous', offer_kind: 'annual_trial' },
+      }),
+      event({
+        event_id: '00000000-0000-4000-8000-000000000006',
+        event_name: 'pending_checkout_result',
+        properties: { stage: 'save', outcome: 'succeeded', plan: 'yearly' },
+      }),
+      event({
+        event_id: '00000000-0000-4000-8000-000000000007',
+        event_name: 'attribution_install_result',
+        properties: { outcome: 'pending', reason: 'provider_not_ready' },
+      }),
+    ];
+    const anonymousClient = serviceClient({
+      rpcData: { accepted: 7, inserted: 7, duplicates: 0, retention_policy: 'raw_90_days' },
+    });
+    mocks.createServiceClient.mockReturnValue(anonymousClient);
+
+    const anonymousResult = await ingestGrowthEvents(request(anonymousEvents));
+
+    expect('data' in anonymousResult).toBe(true);
+    expect(anonymousClient.auth.getUser).not.toHaveBeenCalled();
+    expect(anonymousClient.rpc).toHaveBeenCalledWith('ingest_growth_analytics_events', {
+      p_events: anonymousEvents,
+      p_authenticated: false,
+    });
+
+    const authenticatedEvents = [
+      event({
+        event_id: '00000000-0000-4000-8000-000000000008',
+        event_name: 'profile_initialization_result',
+        properties: { outcome: 'existing', provider_class: 'google' },
+      }),
+      event({
+        event_id: '00000000-0000-4000-8000-000000000009',
+        event_name: 'subscription_ownership_flow',
+        properties: { stage: 'conflict_presented', outcome: 'shown' },
+      }),
+    ];
+    const unauthenticatedResult = await ingestGrowthEvents(request(authenticatedEvents));
+    expect('response' in unauthenticatedResult && unauthenticatedResult.response.status).toBe(401);
+    expect(anonymousClient.rpc).toHaveBeenCalledTimes(1);
+
+    const authenticatedClient = serviceClient({
+      user: { id: USER_ID },
+      rpcData: { accepted: 2, inserted: 2, duplicates: 0, retention_policy: 'raw_90_days' },
+    });
+    mocks.createServiceClient.mockReturnValue(authenticatedClient);
+    const authenticatedResult = await ingestGrowthEvents(request(authenticatedEvents, 'Bearer valid-token'));
+
+    expect('data' in authenticatedResult).toBe(true);
+    expect(authenticatedClient.auth.getUser).toHaveBeenCalledWith('valid-token');
+    expect(authenticatedClient.rpc).toHaveBeenCalledWith('ingest_growth_analytics_events', {
+      p_events: authenticatedEvents,
+      p_authenticated: true,
     });
   });
 
@@ -660,6 +1041,18 @@ describe('growth analytics ingestion', () => {
     expect('response' in mismatch && mismatch.response.status).toBe(400);
   });
 
+  it('keeps the request batch bounded at twenty events', async () => {
+    const events = Array.from({ length: 21 }, (_, index) => event({
+      event_id: `00000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+    }));
+
+    const atLimit = await parseGrowthEventRequest(request(events.slice(0, 20)));
+    expect('events' in atLimit && atLimit.events).toHaveLength(20);
+
+    const overLimit = await parseGrowthEventRequest(request(events));
+    expect('response' in overLimit && overLimit.response.status).toBe(400);
+  });
+
   it('maps database rate limits and preserves idempotent duplicate counts', async () => {
     const rateLimited = serviceClient({
       rpcError: { code: 'P0001', message: 'growth_rate_limit_exceeded' },
@@ -686,7 +1079,14 @@ describe('growth analytics ingestion', () => {
     mocks.createServiceClient.mockReturnValue(duplicate);
     const replay = await ingestGrowthEvents(request([event()]));
     expect(replay).toEqual({
-      data: { accepted: 1, inserted: 0, duplicates: 1, retention_policy: 'raw_90_days' },
+      data: {
+        accepted: 1,
+        inserted: 0,
+        duplicates: 1,
+        rejected: 0,
+        rejection_codes: { contract_mismatch: 0 },
+        retention_policy: 'raw_90_days',
+      },
     });
   });
 
@@ -736,9 +1136,17 @@ describe('growth analytics ingestion', () => {
       '../supabase/migrations',
       profileMigrationName!,
     ), 'utf8');
+    const observabilityMigrationName = fs.readdirSync(path.resolve(process.cwd(), '../supabase/migrations'))
+      .find((name) => name.endsWith('_observability_diagnostic_contracts.sql'));
+    expect(observabilityMigrationName).toBe('20260825222459_observability_diagnostic_contracts.sql');
+    const observabilityMigration = fs.readFileSync(path.resolve(
+      process.cwd(),
+      '../supabase/migrations',
+      observabilityMigrationName!,
+    ), 'utf8');
     const telemetryMigrationName = fs.readdirSync(path.resolve(process.cwd(), '../supabase/migrations'))
       .find((name) => name.endsWith('_vella_rhythms_telemetry.sql'));
-    expect(telemetryMigrationName).toBeDefined();
+    expect(telemetryMigrationName).toBe('20260826042116_vella_rhythms_telemetry.sql');
     const telemetryMigration = fs.readFileSync(path.resolve(
       process.cwd(),
       '../supabase/migrations',
@@ -749,8 +1157,16 @@ describe('growth analytics ingestion', () => {
     )?.[1] ?? '';
     const databaseEventNames = [...eventConstraint.matchAll(/'([^']+)'/g)]
       .map((match) => match[1]);
+    const rhythmsEventNames = new Set(Object.keys(RHYTHMS_EVENT_PROPERTIES));
+    expect(GROWTH_EVENT_NAMES).toHaveLength(72);
+    expect(rhythmsEventNames.size).toBe(33);
+    expect(GROWTH_EVENT_NAMES.filter((eventName) => !rhythmsEventNames.has(eventName))).toHaveLength(39);
     expect([...databaseEventNames].sort()).toEqual([...GROWTH_EVENT_NAMES].sort());
     expect(new Set(databaseEventNames).size).toBe(databaseEventNames.length);
+    expect(observabilityMigration).toContain('growth_event_properties_are_safe_v7');
+    expect(observabilityMigration).toContain('select count(*) from jsonb_object_keys(p_properties)');
+    expect(observabilityMigration).not.toContain('jsonb_object_length');
+    expect(observabilityMigration).not.toMatch(/raw_error|stack_trace|email_address|user_id|receipt|purchase_token/i);
     expect(telemetryMigration).toContain('growth_event_properties_are_safe_v8');
     expect(telemetryMigration).toContain('growth_event_properties_are_safe_v7(p_event_name, p_properties)');
     expect(profileMigration).toContain('growth_event_properties_are_safe_v4');

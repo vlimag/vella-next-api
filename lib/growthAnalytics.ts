@@ -55,6 +55,16 @@ const authStageSchema = z.enum(['credentials', 'provider', 'verification']);
 const authOutcomeSchema = z.enum(['started', 'verification_required', 'succeeded', 'failed', 'cancelled']);
 const funnelVariantSchema = z.enum(['legacy_v1', 'compact_v2']);
 const firstExperienceResultSchema = z.enum(['viewed', 'continued', 'completed', 'backgrounded', 'error']);
+const diagnosticDurationBucketSchema = z.enum(['under_1s', '1_4s', '5_9s', '10s_plus']);
+const diagnosticErrorCodeSchema = z.enum([
+  'network_unavailable',
+  'timeout',
+  'persistence_failed',
+  'unauthorized',
+  'server_unavailable',
+  'unexpected_error',
+  'unknown',
+]);
 const rhythmsSourceSurfaceSchema = z.enum([
   'rhythms_hub', 'home', 'journey_catalog', 'journey_detail', 'journey_completion',
   'practice_catalog', 'weekly_rhythm', 'gathering', 'milestones', 'profile',
@@ -182,6 +192,34 @@ const growthEventUnionSchema = z.union([
     properties: properties({}),
   }).strict(),
   eventBase.extend({
+    event_name: z.literal('app_error'),
+    properties: z.object({
+      surface: z.enum(['global_js', 'unhandled_promise', 'react_render']),
+      stage: z.enum(['bootstrap', 'render', 'background_task', 'unknown']),
+      error_code: diagnosticErrorCodeSchema,
+      severity: z.enum(['fatal', 'recoverable']),
+      fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('startup_update_result'),
+    properties: z.object({
+      outcome: z.enum(['disabled', 'current', 'reloading', 'failed', 'timed_out']),
+      duration_bucket: diagnosticDurationBucketSchema,
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('data_operation_failed'),
+    properties: z.object({
+      operation: z.enum(['query', 'mutation']),
+      domain: z.enum([
+        'home', 'feed', 'profile', 'plans', 'prayer', 'search', 'settings', 'auth',
+        'subscription', 'attribution', 'unknown',
+      ]),
+      error_code: diagnosticErrorCodeSchema,
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
     event_name: z.literal('route_resolved'),
     properties: properties({
       destination: z.enum(['onboarding', 'first-experience', 'offer', 'authentication', 'subscription-verification', 'paywall', 'app']),
@@ -304,8 +342,56 @@ const growthEventUnionSchema = z.union([
     }).strict(),
   }).strict(),
   eventBase.extend({
+    event_name: z.literal('profile_initialization_result'),
+    properties: z.object({
+      outcome: z.enum(['created', 'existing', 'failed', 'provider_unknown']),
+      provider_class: z.enum(['email', 'apple', 'google']).optional(),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
     event_name: z.literal('paywall_viewed'),
     properties: z.object({}).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('paywall_catalog_result'),
+    properties: z.object({
+      outcome: z.enum(['loaded', 'empty', 'failed']),
+      product_count: z.number().int().min(0).max(2),
+      duration_bucket: diagnosticDurationBucketSchema,
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('paywall_cta_tapped'),
+    properties: z.object({
+      plan: billingPeriodSchema,
+      auth_state: z.enum(['anonymous', 'authenticated']),
+      offer_kind: z.enum(['annual_trial', 'monthly', 'unavailable']),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('pending_checkout_result'),
+    properties: z.object({
+      stage: z.enum(['save', 'resume', 'clear']),
+      outcome: z.enum(['succeeded', 'empty', 'failed', 'expired']),
+      plan: billingPeriodSchema,
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('subscription_ownership_flow'),
+    properties: z.object({
+      stage: z.enum(['conflict_presented', 'sign_in_requested', 'transfer_requested']),
+      outcome: z.enum(['shown', 'opened', 'failed']),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('attribution_install_result'),
+    properties: z.object({
+      outcome: z.enum(['succeeded', 'pending', 'failed']),
+      reason: z.enum([
+        'captured', 'provider_not_ready', 'network_unavailable', 'server_unavailable',
+        'unsupported', 'unknown',
+      ]),
+    }).strict(),
   }).strict(),
   eventBase.extend({
     event_name: z.literal('trial_terms_viewed'),
@@ -647,6 +733,9 @@ export const ANONYMOUS_GROWTH_EVENTS = new Set<GrowthEvent['event_name']>([
   'store_cta_clicked',
   'first_open',
   'app_session_started',
+  'app_error',
+  'startup_update_result',
+  'data_operation_failed',
   'route_resolved',
   'first_experience_viewed',
   'first_experience_step',
@@ -661,6 +750,10 @@ export const ANONYMOUS_GROWTH_EVENTS = new Set<GrowthEvent['event_name']>([
   'auth_started',
   'auth_attempt',
   'paywall_viewed',
+  'paywall_catalog_result',
+  'paywall_cta_tapped',
+  'pending_checkout_result',
+  'attribution_install_result',
   'trial_terms_viewed',
   'plan_selected',
 ]);
@@ -751,8 +844,86 @@ type IngestionResult = {
   accepted: number;
   inserted: number;
   duplicates: number;
+  rejected: number;
+  rejection_codes: { contract_mismatch: number };
   retention_policy: 'raw_90_days';
 };
+
+type RpcIngestionResult = Omit<IngestionResult, 'rejected' | 'rejection_codes'>;
+
+function isRpcIngestionResult(value: unknown): value is RpcIngestionResult {
+  if (!value || typeof value !== 'object') return false;
+  const result = value as Partial<RpcIngestionResult>;
+  return typeof result.accepted === 'number' && typeof result.inserted === 'number' &&
+    typeof result.duplicates === 'number';
+}
+
+function mergeIngestionResults(left: IngestionResult, right: IngestionResult): IngestionResult {
+  return {
+    accepted: left.accepted + right.accepted,
+    inserted: left.inserted + right.inserted,
+    duplicates: left.duplicates + right.duplicates,
+    rejected: left.rejected + right.rejected,
+    rejection_codes: {
+      contract_mismatch: left.rejection_codes.contract_mismatch + right.rejection_codes.contract_mismatch,
+    },
+    retention_policy: 'raw_90_days',
+  };
+}
+
+async function ingestValidatedBatch(
+  supabase: ReturnType<typeof createServiceClient>,
+  events: GrowthEvent[],
+  authenticated: boolean,
+): Promise<{ data: IngestionResult } | { error: unknown }> {
+  const { data, error } = await supabase.rpc('ingest_growth_analytics_events', {
+    p_events: events,
+    p_authenticated: authenticated,
+  });
+  if (!error && isRpcIngestionResult(data)) {
+    return {
+      data: {
+        accepted: data.accepted,
+        inserted: data.inserted,
+        duplicates: data.duplicates,
+        rejected: 0,
+        rejection_codes: { contract_mismatch: 0 },
+        retention_policy: 'raw_90_days',
+      },
+    };
+  }
+  if (!error) return { error: { code: 'invalid_rpc_result', message: 'invalid_rpc_result' } };
+  const code = typeof error.code === 'string' ? error.code : 'unknown';
+  if (code !== '23514') return { error };
+  if (events.length === 1) {
+    const rejected = events[0]!;
+    console.error('[growth-analytics] contract_event_rejected', {
+      errorCode: '23514',
+      eventName: rejected.event_name,
+      platform: rejected.platform,
+      appVersion: rejected.app_version,
+      buildNumber: rejected.build_number ?? 'unknown',
+      runtimeVersion: rejected.runtime_version ?? 'unknown',
+      funnelVariant: rejected.funnel_variant ?? 'unknown',
+    });
+    return {
+      data: {
+        accepted: 0,
+        inserted: 0,
+        duplicates: 0,
+        rejected: 1,
+        rejection_codes: { contract_mismatch: 1 },
+        retention_policy: 'raw_90_days',
+      },
+    };
+  }
+  const midpoint = Math.floor(events.length / 2);
+  const left = await ingestValidatedBatch(supabase, events.slice(0, midpoint), authenticated);
+  if ('error' in left) return left;
+  const right = await ingestValidatedBatch(supabase, events.slice(midpoint), authenticated);
+  if ('error' in right) return right;
+  return { data: mergeIngestionResults(left.data, right.data) };
+}
 
 export async function ingestGrowthEvents(request: Request): Promise<
   | { data: IngestionResult }
@@ -774,21 +945,19 @@ export async function ingestGrowthEvents(request: Request): Promise<
     }) };
   }
 
-  const { data, error } = await supabase.rpc('ingest_growth_analytics_events', {
-    p_events: parsed.events,
-    p_authenticated: identity.authenticated,
-  });
+  const ingestion = await ingestValidatedBatch(supabase, parsed.events, identity.authenticated);
 
-  if (error) {
-    const errorCode = typeof error.code === 'string' ? error.code : 'unknown';
+  if ('error' in ingestion) {
+    const error = ingestion.error as { code?: unknown; message?: unknown } | null;
+    const errorCode = typeof error?.code === 'string' ? error.code : 'unknown';
     console.error('[growth-analytics] ingest_failed', {
       errorCode,
       eventCount: parsed.events.length,
     });
-    if (error.message === 'growth_rate_limit_exceeded') {
+    if (error?.message === 'growth_rate_limit_exceeded') {
       return { response: fail('Too many analytics events', 429, { code: 'analytics_rate_limited' }) };
     }
-    if (error.message === 'growth_global_circuit_breaker_open') {
+    if (error?.message === 'growth_global_circuit_breaker_open') {
       return { response: fail('Analytics ingestion is temporarily at capacity', 503, {
         code: 'analytics_capacity_limited',
       }) };
@@ -798,24 +967,5 @@ export async function ingestGrowthEvents(request: Request): Promise<
     }) };
   }
 
-  const result = data as Partial<IngestionResult> | null;
-  if (
-    !result ||
-    typeof result.accepted !== 'number' ||
-    typeof result.inserted !== 'number' ||
-    typeof result.duplicates !== 'number'
-  ) {
-    return { response: fail('Could not record analytics events', 503, {
-      code: 'analytics_ingestion_unavailable',
-    }) };
-  }
-
-  return {
-    data: {
-      accepted: result.accepted,
-      inserted: result.inserted,
-      duplicates: result.duplicates,
-      retention_policy: 'raw_90_days',
-    },
-  };
+  return { data: ingestion.data };
 }
