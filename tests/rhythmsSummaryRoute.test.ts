@@ -16,10 +16,27 @@ vi.mock('../lib/subscriptionAccess', () => ({
 
 import { GET } from '../app/api/v1/rhythms/summary/route';
 import { resolveRhythmsCapabilities } from '../lib/rhythms/capabilities';
-import { isBadgeAssetKey, isMilestoneCode, isStableSlug } from '../lib/rhythms/contracts';
+import {
+  isBadgeAssetKey,
+  isMilestoneCode,
+  isStableSlug,
+  type RhythmsSummary,
+} from '../lib/rhythms/contracts';
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const PRIVATE_UUID = '22222222-2222-4222-8222-222222222222';
+
+const FUTURE_SCHEMA_V1_SUMMARY: RhythmsSummary = {
+  schema_version: 1,
+  capabilities: {
+    journey_v2: true,
+    practices: true,
+    gatherings: true,
+    social_badges: true,
+    long_journeys: true,
+  },
+  unrevealed_milestones: [{ code: 'journey_finisher', asset_key: 'flame.spark' }],
+};
 
 type TableResult = { data: unknown; error: unknown } | Error;
 
@@ -274,9 +291,19 @@ describe('Vella Rhythms summary capability boundary', () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain(USER_ID);
   });
 
-  it('uses the featured-milestones availability probe without fabricating unrevealed badges', async () => {
+  it('uses a position-only featured-milestones availability probe without fabricating unrevealed badges', async () => {
     vi.stubEnv('VELLA_RHYTHMS_PHASE', 'social_badges');
-    const from = vi.fn((table: string) => summaryClient({ user_featured_milestones: { data: [], error: null } }).from(table));
+    const selectCalls: Array<{ table: string; fields: unknown }> = [];
+    const client = summaryClient({ user_featured_milestones: { data: [], error: null } });
+    const from = vi.fn((table: string) => {
+      const query = client.from(table) as Record<string, unknown>;
+      const select = query.select as ReturnType<typeof vi.fn>;
+      query.select = vi.fn((fields: unknown) => {
+        selectCalls.push({ table, fields });
+        return select(fields);
+      });
+      return query;
+    });
     mocks.client = { from };
 
     const { response, json } = await get();
@@ -286,6 +313,20 @@ describe('Vella Rhythms summary capability boundary', () => {
     expect(json.data.capabilities.social_badges).toBe(true);
     expect(json.data).not.toHaveProperty('unrevealed_milestones');
     expect(from).toHaveBeenCalledWith('user_featured_milestones');
+    expect(selectCalls.filter(({ table }) => table === 'user_featured_milestones')).toEqual([
+      { table: 'user_featured_milestones', fields: 'position' },
+    ]);
+  });
+
+  it('keeps future schema-v1 milestone data assignable while current responses omit it', async () => {
+    expect(FUTURE_SCHEMA_V1_SUMMARY.unrevealed_milestones).toEqual([
+      { code: 'journey_finisher', asset_key: 'flame.spark' },
+    ]);
+
+    const { response, json } = await get();
+
+    expect(response.status).toBe(200);
+    expect(json.data).not.toHaveProperty('unrevealed_milestones');
   });
 
   it('accepts contextual catalog keys while rejecting UUID-shaped stable keys', () => {

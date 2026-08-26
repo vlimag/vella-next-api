@@ -22,6 +22,10 @@ export type RhythmsSummary = {
     current_step: number;
     status: 'not_started' | 'in_progress' | 'completed' | 'abandoned';
   };
+  unrevealed_milestones?: Array<{
+    code: string;
+    asset_key: string;
+  }>;
   next_action?: {
     kind: 'continue_journey' | 'choose_journey';
     target_key: string;
