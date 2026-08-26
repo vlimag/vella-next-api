@@ -173,6 +173,112 @@ describe('journey completion typed RPC boundary', () => {
     expect(JSON.stringify(result)).not.toContain(USER_ID);
   });
 
+  it.each([
+    {
+      name: 'a non-leap February 29 local day',
+      data: { ...rpcProjection, local_day: '2026-02-29' },
+    },
+    {
+      name: 'an impossible journey last-completed day',
+      data: {
+        ...rpcProjection,
+        journey: { ...rpcProjection.journey, last_completed_on: '2026-04-31' },
+      },
+    },
+    {
+      name: 'a null consistency score',
+      data: {
+        ...rpcProjection,
+        journey: { ...rpcProjection.journey, consistency_score: null },
+      },
+    },
+    {
+      name: 'a numeric-string consistency score',
+      data: {
+        ...rpcProjection,
+        journey: { ...rpcProjection.journey, consistency_score: '50' },
+      },
+    },
+    {
+      name: 'a NaN consistency score',
+      data: {
+        ...rpcProjection,
+        journey: { ...rpcProjection.journey, consistency_score: Number.NaN },
+      },
+    },
+    {
+      name: 'an infinite consistency score',
+      data: {
+        ...rpcProjection,
+        journey: { ...rpcProjection.journey, consistency_score: Number.POSITIVE_INFINITY },
+      },
+    },
+    {
+      name: 'a negative consistency score',
+      data: {
+        ...rpcProjection,
+        journey: { ...rpcProjection.journey, consistency_score: -1 },
+      },
+    },
+    {
+      name: 'an above-range consistency score',
+      data: {
+        ...rpcProjection,
+        journey: { ...rpcProjection.journey, consistency_score: 101 },
+      },
+    },
+  ])('rejects $name in the RPC projection', async ({ data }) => {
+    const module = await loadCompletionModule();
+    const result = await module.completeJourneySession!({
+      rpc: vi.fn(async () => ({ data, error: null })),
+    }, {
+      userId: USER_ID,
+      journeyId: JOURNEY_ID,
+      timezoneName: 'UTC',
+      localDay: '2026-08-26',
+      localWeekStart: '2026-08-24',
+      completedAt: '2026-08-26T12:00:00.000Z',
+    });
+
+    expect(result).toEqual({ ok: false, code: 'invalid_response' });
+  });
+
+  it.each([0, 100])('accepts consistency boundary %s with a real leap day', async (consistencyScore) => {
+    const module = await loadCompletionModule();
+    const result = await module.completeJourneySession!({
+      rpc: vi.fn(async () => ({
+        data: {
+          ...rpcProjection,
+          local_day: '2028-02-29',
+          journey: {
+            ...rpcProjection.journey,
+            consistency_score: consistencyScore,
+            last_completed_on: '2028-02-29',
+          },
+        },
+        error: null,
+      })),
+    }, {
+      userId: USER_ID,
+      journeyId: JOURNEY_ID,
+      timezoneName: 'UTC',
+      localDay: '2028-02-29',
+      localWeekStart: '2028-02-28',
+      completedAt: '2028-02-29T12:00:00.000Z',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: {
+        local_day: '2028-02-29',
+        journey: {
+          consistency_score: consistencyScore,
+          last_completed_on: '2028-02-29',
+        },
+      },
+    });
+  });
+
   it('accepts future stable milestone codes and strips additive RPC fields', async () => {
     const module = await loadCompletionModule();
     expect(typeof module.completeJourneySession).toBe('function');

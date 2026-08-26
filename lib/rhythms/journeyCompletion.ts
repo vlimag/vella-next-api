@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const isoDate = z.string().date();
 const milestoneCode = z.string()
   .max(64)
   .regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/);
@@ -12,7 +12,7 @@ const journeyState = z.object({
   streak_count: z.number().int().nonnegative(),
   best_streak: z.number().int().nonnegative(),
   total_completed_days: z.number().int().nonnegative(),
-  consistency_score: z.coerce.number().min(0).max(100),
+  consistency_score: z.number().min(0).max(100),
   last_completed_on: isoDate.nullable(),
 });
 
