@@ -61,19 +61,63 @@ as $$
 $$;
 
 create table faith_harbor.growth_analytics_events (
+  id integer primary key,
   event_name text not null,
   properties jsonb not null,
-  constraint growth_analytics_events_event_name_check
-    check (event_name = 'onboarding_started'),
-  constraint growth_analytics_properties_check
-    check (faith_harbor.growth_event_properties_are_safe_v7(event_name, properties))
+  audit_marker integer not null default 0
 );
+
+-- This row represents the known historical population that predates v7. It is
+-- intentionally inserted before the NOT VALID v7 constraints and fails v7.
+insert into faith_harbor.growth_analytics_events (id, event_name, properties)
+values (1, 'onboarding_step', '{"historical_payload":"predates-v7"}');
+
+alter table faith_harbor.growth_analytics_events
+  add constraint growth_analytics_events_event_name_check
+  check (event_name in ('onboarding_started', 'onboarding_step')) not valid;
+alter table faith_harbor.growth_analytics_events
+  add constraint growth_analytics_properties_check
+  check (faith_harbor.growth_event_properties_are_safe_v7(event_name, properties)) not valid;
+
 alter table faith_harbor.growth_analytics_events enable row level security;
 revoke all on faith_harbor.growth_analytics_events from public, anon, authenticated;
 grant all on faith_harbor.growth_analytics_events to service_role;
+
+do $verify_legacy_fixture$
+begin
+  if faith_harbor.growth_event_properties_are_safe_v7(
+      'onboarding_step',
+      '{"historical_payload":"predates-v7"}'::jsonb
+    ) is distinct from false then
+    raise exception 'historical fixture does not fail v7';
+  end if;
+
+  if not exists (
+      select 1 from pg_constraint
+      where conrelid = 'faith_harbor.growth_analytics_events'::regclass
+        and conname = 'growth_analytics_events_event_name_check'
+        and not convalidated
+    ) or not exists (
+      select 1 from pg_constraint
+      where conrelid = 'faith_harbor.growth_analytics_events'::regclass
+        and conname = 'growth_analytics_properties_check'
+        and not convalidated
+    ) then
+    raise exception 'synthetic v7 constraints are not truthfully NOT VALID';
+  end if;
+
+  begin
+    insert into faith_harbor.growth_analytics_events (id, event_name, properties)
+    values (99, 'onboarding_step', '{"historical_payload":"new-write"}');
+    raise exception 'v7 NOT VALID properties constraint did not enforce a new write';
+  exception
+    when check_violation then null;
+  end;
+end
+$verify_legacy_fixture$;
 SQL
 
-telemetry_psql -f "$MIGRATION_PATH" >/dev/null
+telemetry_psql --single-transaction -f "$MIGRATION_PATH" >/dev/null
 
 telemetry_psql >/dev/null <<'SQL'
 do $verify_function_acl$
@@ -239,11 +283,28 @@ begin
   if not exists (
       select 1 from pg_constraint where conrelid = 'faith_harbor.growth_analytics_events'::regclass
         and conname = 'growth_analytics_events_event_name_check' and convalidated
+        and pg_get_constraintdef(oid) like '%rhythms_hub_viewed%'
     ) or not exists (
       select 1 from pg_constraint where conrelid = 'faith_harbor.growth_analytics_events'::regclass
-        and conname = 'growth_analytics_properties_check' and convalidated
+        and conname = 'growth_analytics_properties_check' and not convalidated
+        and pg_get_constraintdef(oid) like '%growth_event_properties_are_safe_v8%'
+    ) or exists (
+      select 1 from pg_constraint where conrelid = 'faith_harbor.growth_analytics_events'::regclass
+        and conname in (
+          'growth_analytics_events_event_name_v8_check',
+          'growth_analytics_properties_v8_check'
+        )
     ) then
-    raise exception 'validated legacy constraint names were not restored';
+    raise exception 'final v8 constraint catalog state is incorrect';
+  end if;
+
+  if not exists (
+      select 1 from faith_harbor.growth_analytics_events
+      where id = 1 and event_name = 'onboarding_step'
+        and properties = '{"historical_payload":"predates-v7"}'::jsonb
+        and audit_marker = 0
+    ) then
+    raise exception 'v7-invalid historical row was not preserved unchanged';
   end if;
 
   if not (select relrowsecurity from pg_class where oid = 'faith_harbor.growth_analytics_events'::regclass)
@@ -255,6 +316,86 @@ begin
   end if;
 end
 $verify_complete_cross_layer_contract$;
+
+insert into faith_harbor.growth_analytics_events (id, event_name, properties)
+values
+  (2, 'rhythms_hub_viewed', '{"source_surface":"rhythms_hub"}'),
+  (3, 'onboarding_started', '{}');
+
+do $verify_future_constraint_enforcement$
+begin
+  begin
+    insert into faith_harbor.growth_analytics_events (id, event_name, properties)
+    values (4, 'rhythms_hub_viewed', '{"source_surface":"rhythms_hub","extra":true}');
+    raise exception 'invalid Rhythms insert was accepted';
+  exception
+    when check_violation then null;
+  end;
+
+  begin
+    insert into faith_harbor.growth_analytics_events (id, event_name, properties)
+    values (5, 'onboarding_started', '{"extra":true}');
+    raise exception 'invalid delegated v7 insert was accepted';
+  exception
+    when check_violation then null;
+  end;
+
+  begin
+    insert into faith_harbor.growth_analytics_events (id, event_name, properties)
+    values (6, 'unapproved_event', '{}');
+    raise exception 'invalid event-name insert was accepted';
+  exception
+    when check_violation then null;
+  end;
+
+  begin
+    update faith_harbor.growth_analytics_events
+    set properties = properties || '{"extra":true}'::jsonb
+    where id = 2;
+    raise exception 'invalid Rhythms update was accepted';
+  exception
+    when check_violation then null;
+  end;
+
+  begin
+    update faith_harbor.growth_analytics_events set audit_marker = 1 where id = 1;
+    raise exception 'v7-invalid historical row was updated without satisfying v8';
+  exception
+    when check_violation then null;
+  end;
+
+  update faith_harbor.growth_analytics_events
+  set properties = '{"source_surface":"home"}'::jsonb
+  where id = 2;
+
+  if not exists (
+      select 1 from faith_harbor.growth_analytics_events
+      where id = 2 and properties = '{"source_surface":"home"}'::jsonb
+    ) or not exists (
+      select 1 from faith_harbor.growth_analytics_events
+      where id = 1 and audit_marker = 0
+    ) then
+    raise exception 'valid update or historical-row rollback behavior changed';
+  end if;
+end
+$verify_future_constraint_enforcement$;
 SQL
 
-echo "Rhythms telemetry PostgreSQL integration passed"
+catalog_state=$(telemetry_psql -At -F '|' -c "
+  select
+    (select convalidated from pg_constraint
+      where conrelid = 'faith_harbor.growth_analytics_events'::regclass
+        and conname = 'growth_analytics_events_event_name_check'),
+    (select convalidated from pg_constraint
+      where conrelid = 'faith_harbor.growth_analytics_events'::regclass
+        and conname = 'growth_analytics_properties_check'),
+    count(*) filter (where id = 1 and audit_marker = 0)
+  from faith_harbor.growth_analytics_events;
+")
+
+if [[ "$catalog_state" != "t|f|1" ]]; then
+  echo "unexpected final constraint/historical-row catalog state" >&2
+  exit 1
+fi
+
+echo "Rhythms telemetry PostgreSQL integration passed: event_name_validated=t properties_validated=f historical_rows=1"

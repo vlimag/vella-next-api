@@ -111,12 +111,13 @@ describe('Vella Rhythms telemetry migration contract', () => {
     expect(migration).not.toMatch(/source['"]?\s*,\s*medium|campaign|user_id|install_id|reflection_text|gratitude_note|raw_error/i);
   });
 
-  it('validates replacement constraints before swapping and never leaves old constraints absent', () => {
+  it('validates only the historically safe event-name replacement before swapping', () => {
     const migration = telemetryMigration();
     expect(migration).toMatch(/add constraint growth_analytics_events_event_name_v8_check[\s\S]*not valid;/);
     expect(migration).toMatch(/validate constraint growth_analytics_events_event_name_v8_check;/);
     expect(migration).toMatch(/add constraint growth_analytics_properties_v8_check[\s\S]*not valid;/);
-    expect(migration).toMatch(/validate constraint growth_analytics_properties_v8_check;/);
+    expect(migration).not.toMatch(/validate constraint growth_analytics_properties_v8_check;/);
+    expect(migration.match(/validate constraint/gi)).toEqual(['validate constraint']);
     expect(migration).toMatch(/drop constraint growth_analytics_events_event_name_check;/);
     expect(migration).toMatch(/rename constraint growth_analytics_events_event_name_v8_check to growth_analytics_events_event_name_check;/);
     expect(migration).toMatch(/drop constraint growth_analytics_properties_check;/);
@@ -135,6 +136,7 @@ describe('Vella Rhythms telemetry migration contract', () => {
   it('contains no destructive table, column, or schema operation', () => {
     const migration = telemetryMigration();
     expect(migration).not.toMatch(/drop\s+(?:table|column|schema)|truncate|delete\s+from/i);
+    expect(migration).not.toMatch(/(?:update|insert\s+into)\s+faith_harbor\.growth_analytics_events/i);
     const drops = migration.match(/drop constraint[^;]+;/gi) ?? [];
     expect(drops).toEqual([
       'drop constraint growth_analytics_events_event_name_check;',
