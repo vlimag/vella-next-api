@@ -10,14 +10,18 @@ done
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 WORKSPACE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
-MIGRATIONS=("$WORKSPACE_ROOT"/supabase/migrations/*_journey_completion_v2.sql)
+IMMUTABLE_MIGRATION_PATH="$WORKSPACE_ROOT/supabase/migrations/20260826082248_journey_completion_v2.sql"
+REPLAY_MIGRATIONS=("$WORKSPACE_ROOT"/supabase/migrations/*_journey_completion_replay_facts.sql)
 
-if [[ ${#MIGRATIONS[@]} -ne 1 || ! -f "${MIGRATIONS[0]}" ]]; then
-  echo "expected exactly one journey completion v2 migration" >&2
+if [[ ! -f "$IMMUTABLE_MIGRATION_PATH" ]]; then
+  echo "missing immutable journey completion v2 migration" >&2
   exit 1
 fi
-
-MIGRATION_PATH=${MIGRATIONS[0]}
+if [[ ${#REPLAY_MIGRATIONS[@]} -ne 1 || ! -f "${REPLAY_MIGRATIONS[0]}" ]]; then
+  echo "expected exactly one journey completion replay-facts migration" >&2
+  exit 1
+fi
+REPLAY_MIGRATION_PATH=${REPLAY_MIGRATIONS[0]}
 PG_ROOT=$(mktemp -d)
 PG_DATA="$PG_ROOT/data"
 PG_PORT=${JOURNEY_COMPLETION_PG_PORT:-55479}
@@ -152,7 +156,8 @@ insert into faith_harbor.user_journey_daily_sessions (
 );
 SQL
 
-journey_psql --single-transaction -f "$MIGRATION_PATH" >/dev/null
+journey_psql --single-transaction -f "$IMMUTABLE_MIGRATION_PATH" >/dev/null
+journey_psql --single-transaction -f "$REPLAY_MIGRATION_PATH" >/dev/null
 
 journey_psql >/dev/null <<'SQL'
 do $catalog$
@@ -165,24 +170,114 @@ begin
     or not has_function_privilege('service_role', 'faith_harbor.complete_journey_session_v2(uuid,uuid,text,text,text,date,date,uuid,timestamp with time zone)', 'execute') then
     raise exception 'unexpected journey completion function security catalog';
   end if;
+
+  if not (select relrowsecurity from pg_class where oid = 'faith_harbor.journey_completion_replay_facts'::regclass)
+    or exists (
+      select 1 from pg_policies
+      where schemaname = 'faith_harbor' and tablename = 'journey_completion_replay_facts'
+    )
+    or has_table_privilege('public', 'faith_harbor.journey_completion_replay_facts', 'select')
+    or has_table_privilege('public', 'faith_harbor.journey_completion_replay_facts', 'insert')
+    or has_table_privilege('public', 'faith_harbor.journey_completion_replay_facts', 'update')
+    or has_table_privilege('public', 'faith_harbor.journey_completion_replay_facts', 'delete')
+    or has_table_privilege('anon', 'faith_harbor.journey_completion_replay_facts', 'select')
+    or has_table_privilege('anon', 'faith_harbor.journey_completion_replay_facts', 'insert')
+    or has_table_privilege('anon', 'faith_harbor.journey_completion_replay_facts', 'update')
+    or has_table_privilege('anon', 'faith_harbor.journey_completion_replay_facts', 'delete')
+    or has_table_privilege('authenticated', 'faith_harbor.journey_completion_replay_facts', 'select')
+    or has_table_privilege('authenticated', 'faith_harbor.journey_completion_replay_facts', 'insert')
+    or has_table_privilege('authenticated', 'faith_harbor.journey_completion_replay_facts', 'update')
+    or has_table_privilege('authenticated', 'faith_harbor.journey_completion_replay_facts', 'delete')
+    or not has_table_privilege('service_role', 'faith_harbor.journey_completion_replay_facts', 'select')
+    or not has_table_privilege('service_role', 'faith_harbor.journey_completion_replay_facts', 'insert')
+    or has_table_privilege('service_role', 'faith_harbor.journey_completion_replay_facts', 'update')
+    or has_table_privilege('service_role', 'faith_harbor.journey_completion_replay_facts', 'delete') then
+    raise exception 'unexpected replay-facts RLS or grants';
+  end if;
+
+  if (
+      select pg_catalog.array_agg(column_name::text order by ordinal_position)
+      from information_schema.columns
+      where table_schema = 'faith_harbor'
+        and table_name = 'journey_completion_replay_facts'
+    ) <> array[
+      'journey_id', 'idempotency_key', 'practice_credits',
+      'newly_earned_milestones', 'local_day'
+    ]::text[]
+    or not exists (
+      select 1
+      from pg_constraint as constraint_row
+      where constraint_row.conrelid = 'faith_harbor.journey_completion_replay_facts'::regclass
+        and constraint_row.contype = 'f'
+        and constraint_row.confrelid = 'faith_harbor.user_journeys'::regclass
+        and constraint_row.confdeltype = 'c'
+    ) then
+    raise exception 'replay-facts table is not minimal or cascade-owned by its journey';
+  end if;
+
+  begin
+    insert into faith_harbor.journey_completion_replay_facts values (
+      '22222222-2222-4222-8222-222222222222',
+      'eeeeeeee-0001-4001-8001-eeeeeeeeeeee',
+      array['guided_prayer', 'guided_prayer']::text[],
+      array[]::text[],
+      '2026-08-26'
+    );
+    raise exception 'replay facts accepted unbounded practice credits';
+  exception when check_violation then
+    null;
+  end;
+
+  begin
+    insert into faith_harbor.journey_completion_replay_facts values (
+      '22222222-2222-4222-8222-222222222222',
+      'eeeeeeee-0002-4002-8002-eeeeeeeeeeee',
+      array[]::text[],
+      array['private_note']::text[],
+      '2026-08-26'
+    );
+    raise exception 'replay facts accepted an unknown milestone code';
+  exception when check_violation then
+    null;
+  end;
+
+  begin
+    insert into faith_harbor.journey_completion_replay_facts values (
+      '22222222-2222-4222-8222-222222222222',
+      'eeeeeeee-0003-4003-8003-eeeeeeeeeeee',
+      array[]::text[],
+      array['streak_3', 'streak_7', 'journey_finisher', 'streak_3']::text[],
+      '2026-08-26'
+    );
+    raise exception 'replay facts accepted unbounded newly-earned milestones';
+  exception when check_violation then
+    null;
+  end;
 end
 $catalog$;
 
-set role service_role;
-select faith_harbor.complete_journey_session_v2(
-  '11111111-1111-4111-8111-111111111111',
-  '22222222-2222-4222-8222-222222222222',
-  'new private reflection', 'new private gratitude', 'UTC',
-  '2026-08-26', '2026-08-24', '33333333-3333-4333-8333-333333333333',
-  '2026-08-26T12:00:00Z'
-);
-reset role;
-
 do $behavior$
+declare first_completion jsonb;
 declare replay jsonb;
 declare keyed_replay jsonb;
 declare mismatch jsonb;
 begin
+  set local role service_role;
+  first_completion := faith_harbor.complete_journey_session_v2(
+    '11111111-1111-4111-8111-111111111111',
+    '22222222-2222-4222-8222-222222222222',
+    'new private reflection', 'new private gratitude', 'UTC',
+    '2026-08-26', '2026-08-24', '33333333-3333-4333-8333-333333333333',
+    '2026-08-26T12:00:00Z'
+  );
+  reset role;
+  if first_completion ->> 'outcome' <> 'completed'
+    or first_completion -> 'practice_credits' <> '["guided_prayer"]'::jsonb
+    or first_completion -> 'newly_earned_milestones' <> '["streak_3", "journey_finisher"]'::jsonb
+    or first_completion ->> 'local_day' <> '2026-08-26' then
+    raise exception 'first keyed completion did not return exact additive facts';
+  end if;
+
   if (select total_completed_days from faith_harbor.user_journeys where id = '22222222-2222-4222-8222-222222222222') <> 2
     or (select status from faith_harbor.user_journeys where id = '22222222-2222-4222-8222-222222222222') <> 'completed'
     or (select count(*) from faith_harbor.practice_sessions where user_id = '11111111-1111-4111-8111-111111111111') <> 1
@@ -209,7 +304,9 @@ begin
   );
   reset role;
   if replay ->> 'outcome' <> 'already_completed'
-    or (replay ->> 'already_completed')::boolean is not true then
+    or (replay ->> 'already_completed')::boolean is not true
+    or replay -> 'practice_credits' <> '[]'::jsonb
+    or replay -> 'newly_earned_milestones' <> '[]'::jsonb then
     raise exception 'old-payload duplicate was not idempotent';
   end if;
 
@@ -224,10 +321,40 @@ begin
   reset role;
   if keyed_replay ->> 'outcome' <> 'already_completed'
     or (keyed_replay ->> 'already_completed')::boolean is not true
+    or keyed_replay -> 'practice_credits' <> '["guided_prayer"]'::jsonb
+    or keyed_replay -> 'newly_earned_milestones' <> '["streak_3", "journey_finisher"]'::jsonb
+    or keyed_replay ->> 'local_day' <> '2026-08-26'
+    or keyed_replay -> 'practice_credits' is distinct from first_completion -> 'practice_credits'
+    or keyed_replay -> 'newly_earned_milestones' is distinct from first_completion -> 'newly_earned_milestones'
+    or keyed_replay -> 'local_day' is distinct from first_completion -> 'local_day'
     or keyed_replay::text like '%11111111-1111-4111-8111-111111111111%'
     or keyed_replay::text like '%private reflection%'
     or keyed_replay::text like '%private gratitude%' then
     raise exception 'same-key replay was not finite, private, and idempotent';
+  end if;
+
+  if (select count(*) from faith_harbor.journey_completion_replay_facts
+      where journey_id = '22222222-2222-4222-8222-222222222222'
+        and idempotency_key = '33333333-3333-4333-8333-333333333333') <> 1
+    or (select practice_credits from faith_harbor.journey_completion_replay_facts
+        where journey_id = '22222222-2222-4222-8222-222222222222'
+          and idempotency_key = '33333333-3333-4333-8333-333333333333')
+       <> array['guided_prayer']::text[]
+    or (select newly_earned_milestones from faith_harbor.journey_completion_replay_facts
+        where journey_id = '22222222-2222-4222-8222-222222222222'
+          and idempotency_key = '33333333-3333-4333-8333-333333333333')
+       <> array['streak_3', 'journey_finisher']::text[]
+    or (select local_day from faith_harbor.journey_completion_replay_facts
+        where journey_id = '22222222-2222-4222-8222-222222222222'
+          and idempotency_key = '33333333-3333-4333-8333-333333333333')
+       <> '2026-08-26'::date
+    or exists (
+      select 1
+      from faith_harbor.journey_completion_replay_facts as facts
+      where pg_catalog.to_jsonb(facts)::text like '%private reflection%'
+        or pg_catalog.to_jsonb(facts)::text like '%private gratitude%'
+    ) then
+    raise exception 'exact bounded replay facts were not persisted privately';
   end if;
 
   set local role service_role;
@@ -376,7 +503,7 @@ begin;
 set local role service_role;
 select faith_harbor.complete_journey_session_v2(
   '11111111-1111-4111-8111-111111111111','66666666-6666-4666-8666-666666666666',
-  null,null,'UTC','2026-08-27','2026-08-24',null,'2026-08-27T12:00:00Z'
+  null,null,'UTC','2026-08-27','2026-08-24','66666666-6666-4666-8666-666666666666','2026-08-27T12:00:00Z'
 ) ->> 'outcome';
 select pg_sleep(2);
 commit;
@@ -403,7 +530,7 @@ set application_name = 'journey_overlap_b';
 set role service_role;
 select faith_harbor.complete_journey_session_v2(
   '11111111-1111-4111-8111-111111111111','66666666-6666-4666-8666-666666666666',
-  null,null,'UTC','2026-08-27','2026-08-24',null,'2026-08-27T12:00:00Z'
+  null,null,'UTC','2026-08-27','2026-08-24','66666666-6666-4666-8666-666666666666','2026-08-27T12:00:00Z'
 ) ->> 'outcome';
 SQL
 ) >"$overlap_b" &
@@ -433,18 +560,38 @@ fi
 journey_psql >/dev/null <<'SQL'
 do $concurrency$
 declare unauthorized jsonb;
+declare replay jsonb;
 begin
   if (select total_completed_days from faith_harbor.user_journeys where id = '66666666-6666-4666-8666-666666666666') <> 1
     or (select count(*) from faith_harbor.user_journey_daily_sessions where user_journey_id = '66666666-6666-4666-8666-666666666666') <> 1
-    or (select count(*) from faith_harbor.practice_sessions where source_key = 'journey:66666666-6666-4666-8666-666666666666:day:1') <> 1 then
+    or (select count(*) from faith_harbor.practice_sessions where source_key = 'journey:66666666-6666-4666-8666-666666666666:day:1') <> 1
+    or (select count(*) from faith_harbor.journey_completion_replay_facts
+        where journey_id = '66666666-6666-4666-8666-666666666666'
+          and idempotency_key = '66666666-6666-4666-8666-666666666666') <> 1 then
     raise exception 'simultaneous calls duplicated completion facts';
+  end if;
+
+  set local role service_role;
+  replay := faith_harbor.complete_journey_session_v2(
+    '11111111-1111-4111-8111-111111111111',
+    '66666666-6666-4666-8666-666666666666',
+    null, null, 'UTC', '2026-08-27', '2026-08-24',
+    '66666666-6666-4666-8666-666666666666', '2026-08-27T12:01:00Z'
+  );
+  reset role;
+  if replay ->> 'outcome' <> 'already_completed'
+    or replay -> 'practice_credits' <> '["guided_prayer"]'::jsonb
+    or replay -> 'newly_earned_milestones' <> '[]'::jsonb
+    or replay ->> 'local_day' <> '2026-08-27' then
+    raise exception 'concurrent exact-key retry did not return exact facts';
   end if;
 
   set local role service_role;
   unauthorized := faith_harbor.complete_journey_session_v2(
     '99999999-9999-4999-8999-999999999999',
     '66666666-6666-4666-8666-666666666666',
-    null, null, 'UTC', '2026-08-28', '2026-08-24', null,
+    null, null, 'UTC', '2026-08-27', '2026-08-24',
+    '66666666-6666-4666-8666-666666666666',
     '2026-08-28T12:00:00Z'
   );
   reset role;

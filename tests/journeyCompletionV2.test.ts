@@ -828,6 +828,53 @@ describe('journey completion typed RPC boundary', () => {
     });
   });
 
+  it('returns exact additive replay facts only for keyed already-completed requests', async () => {
+    const projection = {
+      ...rpcProjection,
+      outcome: 'already_completed',
+      completed: false,
+      already_completed: true,
+      journey: {
+        ...rpcProjection.journey,
+        ...legacyNonOwnerJourneyFields,
+        status: 'completed',
+        user_id: USER_ID,
+        anonymous_profile_id: '99999999-9999-4999-8999-999999999999',
+        reflection_note: 'private reflection',
+        gratitude_note: 'private gratitude',
+      },
+    } as const;
+    mocks.createServiceClient.mockReturnValue(clientWithRpc({ data: projection, error: null }));
+
+    const { response, json } = await post({
+      journey_id: JOURNEY_ID,
+      idempotency_key: IDEMPOTENCY_KEY,
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(json).toEqual({
+      data: {
+        alreadyCompleted: true,
+        journey: {
+          ...rpcProjection.journey,
+          ...legacyNonOwnerJourneyFields,
+          status: 'completed',
+        },
+        milestones: rpcProjection.milestones,
+        practice_credits: ['guided_prayer'],
+        newly_earned_milestones: ['streak_3'],
+        local_day: '2026-08-26',
+      },
+    });
+    const visible = JSON.stringify(json);
+    expect(visible).not.toContain('user_id');
+    expect(visible).not.toContain('anonymous_profile_id');
+    expect(visible).not.toContain(USER_ID);
+    expect(visible).not.toContain('private reflection');
+    expect(visible).not.toContain('private gratitude');
+  });
+
   it.each([
     ['+01:00', '2026-01-04T23:30:00.000Z', '2026-01-04', '2025-12-29'],
     ['-12:00', '2026-01-05T00:30:00.000Z', '2026-01-05', '2026-01-05'],

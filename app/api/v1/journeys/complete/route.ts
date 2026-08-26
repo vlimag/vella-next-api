@@ -74,6 +74,13 @@ export async function POST(req: Request) {
     local_day: result.value.local_day,
   };
 
+  if (result.value.outcome === 'already_completed' && parsed.data.idempotency_key) {
+    return noStore(ok({
+      alreadyCompleted: result.value.already_completed,
+      ...projection,
+    }));
+  }
+
   if (result.value.outcome !== 'completed') {
     return noStore(ok({
       alreadyCompleted: result.value.already_completed,
