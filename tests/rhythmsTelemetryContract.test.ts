@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { growthEventSchema } from '@/lib/growthAnalytics';
 
 const RHYTHMS_EVENTS = [
   'rhythms_hub_viewed',
@@ -47,7 +48,46 @@ function telemetryMigration() {
   return fs.readFileSync(path.join(directory, matches[0]!), 'utf8');
 }
 
+function postgresIntegrationHarness() {
+  return fs.readFileSync(path.resolve(process.cwd(), 'tests/rhythmsTelemetryPostgres.integration.sh'), 'utf8');
+}
+
 describe('Vella Rhythms telemetry migration contract', () => {
+  it('keeps the behavioral PostgreSQL fixture equivalent to all cross-layer event and privacy contracts', () => {
+    const harness = postgresIntegrationHarness();
+    for (const eventName of RHYTHMS_EVENTS) {
+      expect(harness).toContain(`('${eventName}', '{`);
+    }
+    for (const forbiddenKey of [
+      'campaign', 'user_id', 'install_id', 'account_id', 'content', 'reflection_text',
+      'gratitude_note', 'raw_error',
+    ]) {
+      expect(harness).toContain(`'${forbiddenKey}'`);
+    }
+    expect(harness).toContain('wrong property type accepted');
+    expect(harness).toContain('arbitrary catalog accepted');
+    expect(harness).toContain('invalid schema/capability accepted');
+    expect(harness).toContain('v7 delegation behavior changed');
+
+    const acceptedBlock = harness.match(
+      /insert into accepted_rhythms_contracts values([\s\S]*?);\n\n  if \(select count\(\*\)/,
+    )?.[1] ?? '';
+    const fixtures = [...acceptedBlock.matchAll(/\('([^']+)', '(\{[^\n]+\})'\)/g)]
+      .map((match) => ({ eventName: match[1]!, properties: JSON.parse(match[2]!) }));
+    expect(fixtures).toHaveLength(RHYTHMS_EVENTS.length);
+    for (const fixture of fixtures) {
+      expect(growthEventSchema.safeParse({
+        event_id: '11111111-1111-4111-8111-111111111111',
+        install_id: '22222222-2222-4222-8222-222222222222',
+        event_name: fixture.eventName,
+        occurred_at: '2026-08-26T00:00:00.000Z',
+        platform: 'android',
+        app_version: '2.0.0',
+        properties: fixture.properties,
+      }).success).toBe(true);
+    }
+  });
+
   it('allows every approved event and delegates every non-Rhythms event to v7', () => {
     const migration = telemetryMigration();
     for (const eventName of RHYTHMS_EVENTS) {
@@ -63,7 +103,8 @@ describe('Vella Rhythms telemetry migration contract', () => {
       expect(migration).toMatch(new RegExp(`when p_event_name = '${eventName}' then[\\s\\S]*?p_properties = jsonb_build_object`));
     }
     expect(migration).toMatch(/p_properties ->> 'catalog_code' in \([\s\S]*'hope-in-seven'[\s\S]*'guided_prayer'[\s\S]*'journey_finisher'/);
-    expect(migration).toMatch(/\(p_properties ->> 'step_index'\)::integer between 1 and 32/);
+    expect(migration).toMatch(/jsonb_typeof\(p_properties -> 'step_index'\) = 'number'/);
+    expect(migration).not.toMatch(/step_index[^\n]*::integer/);
     expect(migration).toMatch(/p_properties ->> 'schema_version' = '1'/);
     expect(migration).toMatch(/p_properties ->> 'error_code' in \([\s\S]*'network_unavailable'[\s\S]*'asset_unavailable'/);
     expect(migration).not.toMatch(/p_properties \?\|/);
@@ -83,10 +124,17 @@ describe('Vella Rhythms telemetry migration contract', () => {
     expect(migration).not.toMatch(/drop constraint if exists growth_analytics_(?:events_event_name|properties)_check/);
   });
 
-  it('contains no destructive schema operation, grant, RLS, role, or security-definer change', () => {
+  it('narrows v8 execution to service_role without changing table ACLs or RLS', () => {
+    const migration = telemetryMigration();
+    expect(migration).toMatch(/revoke execute on function faith_harbor\.growth_event_properties_are_safe_v8\(text, jsonb\)\s+from public, anon, authenticated;/i);
+    expect(migration).toMatch(/grant execute on function faith_harbor\.growth_event_properties_are_safe_v8\(text, jsonb\)\s+to service_role;/i);
+    expect(migration).not.toMatch(/(?:grant|revoke)[^;]*\bon\s+(?:table|schema)\b/i);
+    expect(migration).not.toMatch(/enable row level security|disable row level security|create policy|alter policy|drop policy|alter role|security definer/i);
+  });
+
+  it('contains no destructive table, column, or schema operation', () => {
     const migration = telemetryMigration();
     expect(migration).not.toMatch(/drop\s+(?:table|column|schema)|truncate|delete\s+from/i);
-    expect(migration).not.toMatch(/\bgrant\b|\brevoke\b|enable row level security|disable row level security|create policy|alter policy|drop policy|alter role|security definer/i);
     const drops = migration.match(/drop constraint[^;]+;/gi) ?? [];
     expect(drops).toEqual([
       'drop constraint growth_analytics_events_event_name_check;',

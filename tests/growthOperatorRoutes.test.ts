@@ -151,6 +151,7 @@ function mockTableQueries(
       if (column === 'event_name') eventName = value;
       return builder;
     });
+    builder.in = vi.fn(() => builder);
     builder.gte = vi.fn(() => builder);
     builder.lt = vi.fn(() => builder);
     builder.order = vi.fn(() => builder);
@@ -188,6 +189,8 @@ function mockTableQueries(
 type RecordedOperatorQuery = {
   table: string;
   filters: Array<{ method: string; column: string; value: unknown }>;
+  range?: [number, number];
+  selection?: { columns: string; options: unknown };
 };
 
 function rhythmsOperatorReport() {
@@ -221,7 +224,7 @@ function rhythmsOperatorReport() {
 }
 
 function mockRhythmsOperatorClient(
-  resolve: (query: RecordedOperatorQuery) => MockTableQueryResult,
+  resolve: (query: RecordedOperatorQuery) => MockTableQueryResult | Promise<MockTableQueryResult>,
 ) {
   const { rpc } = mockGrowthRpcs(rhythmsOperatorReport());
   const queries: RecordedOperatorQuery[] = [];
@@ -229,7 +232,10 @@ function mockRhythmsOperatorClient(
     const query: RecordedOperatorQuery = { table, filters: [] };
     queries.push(query);
     const builder: Record<string, ReturnType<typeof vi.fn>> = {};
-    builder.select = vi.fn(() => builder);
+    builder.select = vi.fn((columns: string, options?: unknown) => {
+      query.selection = { columns, options };
+      return builder;
+    });
     for (const method of ['eq', 'gte', 'gt', 'lte', 'lt', 'in', 'order']) {
       builder[method] = vi.fn((column: string, value: unknown) => {
         query.filters.push({ method, column, value });
@@ -237,19 +243,21 @@ function mockRhythmsOperatorClient(
       });
     }
     builder.limit = vi.fn(async (maximum?: number) => {
-      const result = resolve(query);
+      const result = await resolve(query);
       return {
         data: Array.isArray(result.data) && typeof maximum === 'number'
-          ? result.data.slice(0, maximum)
+          ? result.data.slice(0, Math.min(maximum, 1000))
           : result.data,
         error: result.error,
         count: result.count,
       };
     });
     builder.range = vi.fn(async (fromIndex: number, toIndex: number) => {
-      const result = resolve(query);
+      query.range = [fromIndex, toIndex];
+      const result = await resolve(query);
+      const cappedToIndex = Math.min(toIndex, fromIndex + 999);
       return {
-        data: Array.isArray(result.data) ? result.data.slice(fromIndex, toIndex + 1) : result.data,
+        data: Array.isArray(result.data) ? result.data.slice(fromIndex, cappedToIndex + 1) : result.data,
         error: result.error,
         count: result.count === undefined
           ? Array.isArray(result.data) ? result.data.length : null
@@ -260,6 +268,19 @@ function mockRhythmsOperatorClient(
   });
   mocks.createServiceClient.mockReturnValue({ rpc, from });
   return { queries };
+}
+
+function pagedRhythmsAnalyticsRows(count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    event_id: `${String(index).padStart(8, '0')}-0000-4000-8000-000000000001`,
+    installation_id: `${String(index).padStart(8, '0')}-1111-4111-8111-111111111111`,
+    event_name: 'rhythms_hub_viewed',
+    received_at: new Date(Date.UTC(2026, 6, 1) + index * 1000).toISOString(),
+    platform: 'android',
+    app_version: '2.0.0',
+    build_number: '200',
+    runtime_version: '2.0',
+  }));
 }
 
 function pagedQuery(limit: ReturnType<typeof vi.fn>) {
@@ -335,12 +356,7 @@ describe('growth operator routes', () => {
       },
     };
     const { rpc } = mockGrowthRpcs(report);
-    const limit = vi.fn().mockResolvedValue({ data: [], error: null });
-    const lt = vi.fn(() => pagedQuery(limit));
-    const gte = vi.fn(() => ({ lt }));
-    const eq = vi.fn(() => ({ gte }));
-    const select = vi.fn(() => ({ gte, eq }));
-    const from = vi.fn(() => ({ select }));
+    const { from } = mockTableQueries();
     mocks.createServiceClient.mockReturnValue({ rpc, from });
 
     const response = await getSummary(new Request(
@@ -381,7 +397,7 @@ describe('growth operator routes', () => {
           first_session_completions: 0,
           journey_completions: 0,
         },
-        practice: { catalog_views: 0, weekly_rhythms_saved: 0, session_completions: 0, completed_weeks: 0 },
+        practice: { catalog_views: 0, weekly_rhythms_saved: 0, session_completions: 0 },
         gathering: { views: 0, starts: 0, completions: 0 },
         milestones: { earned: 0, revealed: 0, featured: 0 },
         failures: { idempotency_conflicts: 0, server_errors: 0 },
@@ -441,7 +457,7 @@ describe('growth operator routes', () => {
       p_to: '2026-07-31',
       p_cohort_days: 14,
     });
-    expect(from).toHaveBeenCalledTimes(60);
+    expect(from).toHaveBeenCalledTimes(29);
   });
 
   it('projects ordered truth and independently enforces every 20-unit privacy threshold', async () => {
@@ -2611,41 +2627,47 @@ describe('growth operator routes', () => {
         platform: 'android', app_version: '2.0.0', build_number: '200', runtime_version: '2.0',
         properties: { error_stage: 'session_complete', error_code: 'server_unavailable' },
       },
-    ];
+    ].map((row, index) => ({
+      ...row,
+      event_id: `60000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+      received_at: new Date(Date.UTC(2026, 6, 1) + index * 1000).toISOString(),
+    }));
     const tableRows: Record<string, unknown[]> = {
       growth_analytics_events: analyticsRows,
       user_journeys: [
-        { id: 'journey-1', user_id: privateAccount, created_at: '2026-07-02T00:00:00Z', completed_at: null },
-        { id: 'journey-2', user_id: 'account-2', created_at: '2026-07-03T00:00:00Z', completed_at: '2026-07-20T00:00:00Z' },
+        { id: '30000000-0000-4000-8000-000000000001', created_at: '2026-07-02T00:00:00Z', completed_at: null },
+        { id: '30000000-0000-4000-8000-000000000002', created_at: '2026-07-03T00:00:00Z', completed_at: '2026-07-20T00:00:00Z' },
       ],
       user_journey_daily_sessions: [
-        { user_journey_id: 'journey-1', day_number: 1, completed_at: '2026-07-04T00:00:00Z' },
-        { user_journey_id: 'journey-2', day_number: 1, completed_at: '2026-07-05T00:00:00Z' },
+        { id: '31000000-0000-4000-8000-000000000001', day_number: 1, completed_at: '2026-07-04T00:00:00Z' },
+        { id: '31000000-0000-4000-8000-000000000002', day_number: 1, completed_at: '2026-07-05T00:00:00Z' },
       ],
       user_practices: [
-        { user_id: privateAccount, practice_code: 'scripture', created_at: '2026-07-02T00:00:00Z' },
+        { id: '32000000-0000-4000-8000-000000000001', created_at: '2026-07-02T00:00:00Z' },
       ],
       practice_sessions: [
         {
-          user_id: privateAccount, practice_code: 'scripture', local_week_start: '2026-07-06',
+          id: '33000000-0000-4000-8000-000000000001', user_id: privateAccount,
+          practice_code: 'scripture', local_week_start: '2026-07-06',
           completed_at: '2026-07-07T00:00:00Z', status: 'completed',
         },
         {
-          user_id: privateAccount, practice_code: 'scripture', local_week_start: '2026-07-06',
+          id: '33000000-0000-4000-8000-000000000002', user_id: privateAccount,
+          practice_code: 'scripture', local_week_start: '2026-07-06',
           completed_at: '2026-07-08T00:00:00Z', status: 'completed',
         },
       ],
       user_gathering_progress: [
         {
-          user_id: privateAccount, started_at: '2026-07-09T00:00:00Z',
+          id: '34000000-0000-4000-8000-000000000001', started_at: '2026-07-09T00:00:00Z',
           completed_at: '2026-07-10T00:00:00Z', status: 'completed',
         },
       ],
       user_milestones: [
-        { user_id: privateAccount, milestone_code: 'journey_finisher', earned_at: '2026-07-11T00:00:00Z' },
+        { id: '35000000-0000-4000-8000-000000000001', earned_at: '2026-07-11T00:00:00Z' },
       ],
       user_featured_milestones: [
-        { user_id: privateAccount, created_at: '2026-07-12T00:00:00Z' },
+        { id: '36000000-0000-4000-8000-000000000001', created_at: '2026-07-12T00:00:00Z' },
       ],
     };
     mockRhythmsOperatorClient((query) => {
@@ -2653,10 +2675,19 @@ describe('growth operator routes', () => {
         filter.method === 'eq' && filter.column === 'event_name')?.value;
       const isRhythmsAnalytics = query.table === 'growth_analytics_events' && typeof eventName === 'string' &&
         /^(?:rhythms_|journey_|practice_|weekly_|gathering_|milestone_|session_completion_)/.test(eventName);
-      return {
-        data: isRhythmsAnalytics
+      const dateColumn = query.filters.find((filter) => filter.method === 'gte')?.column;
+      const isServerErrorCount = query.filters.some((filter) =>
+        filter.method === 'eq' && filter.column === 'properties->>error_code');
+      const rows = isServerErrorCount
+        ? analyticsRows.filter((row) => 'error_code' in row.properties &&
+          row.properties.error_code === 'server_unavailable')
+        : isRhythmsAnalytics
           ? analyticsRows.filter((row) => row.event_name === eventName)
-          : tableRows[query.table] ?? [],
+          : tableRows[query.table] ?? [];
+      return {
+        data: typeof dateColumn === 'string'
+          ? rows.filter((row) => typeof (row as Record<string, unknown>)[dateColumn] === 'string')
+          : rows,
         error: null,
       };
     });
@@ -2682,7 +2713,7 @@ describe('growth operator routes', () => {
         first_session_completions: 2,
         journey_completions: 1,
       },
-      practice: { catalog_views: 1, weekly_rhythms_saved: 1, session_completions: 2, completed_weeks: 1 },
+      practice: { catalog_views: 1, weekly_rhythms_saved: 1, session_completions: 2 },
       gathering: { views: 1, starts: 1, completions: 1 },
       milestones: { earned: 1, revealed: 1, featured: 1 },
       failures: { idempotency_conflicts: 1, server_errors: 1 },
@@ -2699,6 +2730,43 @@ describe('growth operator routes', () => {
     }
   });
 
+  it('counts only server_unavailable failures through a property-free server-side count query', async () => {
+    const failures = ['server_unavailable', 'network_unavailable', 'conflict', 'server_unavailable']
+      .map((errorCode, index) => ({
+        event_id: `61000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        installation_id: `62000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+        event_name: index % 2 === 0 ? 'rhythms_load_failed' : 'rhythms_mutation_failed',
+        received_at: new Date(Date.UTC(2026, 6, 1) + index * 1000).toISOString(),
+        platform: 'android', app_version: '2.0.0', build_number: '200', runtime_version: '2.0',
+        properties: { error_stage: 'summary_load', error_code: errorCode },
+      }));
+    const { queries } = mockRhythmsOperatorClient((query) => {
+      if (query.table !== 'growth_analytics_events') return { data: [], error: null };
+      const isServerErrorCount = query.filters.some((filter) =>
+        filter.method === 'eq' && filter.column === 'properties->>error_code');
+      return {
+        data: isServerErrorCount
+          ? failures.filter((row) => row.properties.error_code === 'server_unavailable')
+          : failures,
+        error: null,
+      };
+    });
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics.failures.server_errors).toBe(2);
+    const countQuery = queries.find((query) => query.filters.some((filter) =>
+      filter.method === 'eq' && filter.column === 'properties->>error_code'));
+    expect(countQuery?.filters).toEqual(expect.arrayContaining([
+      { method: 'eq', column: 'properties->>error_code', value: 'server_unavailable' },
+      { method: 'in', column: 'event_name', value: ['rhythms_load_failed', 'rhythms_mutation_failed'] },
+    ]));
+    expect(countQuery?.selection?.columns).not.toContain('properties');
+  });
+
   it('returns only unavailable Rhythms status on any audit query failure without raw error leakage', async () => {
     const rawError = 'database row 11111111-1111-4111-8111-111111111111 failed';
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -2706,6 +2774,140 @@ describe('growth operator routes', () => {
       data: [],
       error: query.table === 'practice_sessions' ? { message: rawError, details: rawError } : null,
     }));
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics).toEqual({ audit_available: false });
+    expect(JSON.stringify(body)).not.toContain(rawError);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain(rawError);
+    consoleError.mockRestore();
+  });
+
+  it('uses exact-count deterministic pagination through the Data API 1,000-row cap', async () => {
+    const analyticsRows = pagedRhythmsAnalyticsRows(1200);
+    const { queries } = mockRhythmsOperatorClient((query) => ({
+      data: query.table === 'growth_analytics_events' ? analyticsRows : [],
+      error: null,
+    }));
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    expect(response.status).toBe(200);
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics.journey_funnel.hub_views).toBe(1200);
+
+    const pages = queries.filter((query) => query.table === 'growth_analytics_events' && query.range &&
+      query.selection?.columns.includes('installation_id'));
+    expect(pages.map((query) => query.range)).toEqual([[0, 999], [1000, 1199]]);
+    for (const page of pages) {
+      expect(page.selection?.options).toEqual({ count: 'exact' });
+      expect(page.filters).toEqual(expect.arrayContaining([
+        { method: 'order', column: 'received_at', value: { ascending: true } },
+        { method: 'order', column: 'event_id', value: { ascending: true } },
+        { method: 'gte', column: 'received_at', value: '2026-07-01T00:00:00.000Z' },
+        { method: 'lt', column: 'received_at', value: '2026-08-01T00:00:00.000Z' },
+      ]));
+    }
+  });
+
+  it('accepts valid Rhythms analytics rows with optional build and runtime dimensions absent', async () => {
+    const analyticsRows = [{
+      ...pagedRhythmsAnalyticsRows(1)[0],
+      build_number: null,
+      runtime_version: null,
+    }];
+    mockRhythmsOperatorClient((query) => ({
+      data: query.table === 'growth_analytics_events' &&
+        query.selection?.columns.includes('installation_id') ? analyticsRows : [],
+      error: null,
+    }));
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics.journey_funnel.hub_views).toBe(1);
+  });
+
+  it.each([
+    ['over-cap exact count', 5001, 5001, null],
+    ['missing exact count', 1, null, null],
+    ['missing final page rows', 1200, 1200, 1100],
+  ] as const)('fails closed for %s', async (_label, rowCount, exactCount, returnedRows) => {
+    const analyticsRows = pagedRhythmsAnalyticsRows(rowCount);
+    mockRhythmsOperatorClient((query) => ({
+      data: query.table === 'growth_analytics_events'
+        ? analyticsRows.slice(0, returnedRows ?? analyticsRows.length)
+        : [],
+      error: null,
+      count: query.table === 'growth_analytics_events' ? exactCount : 0,
+    }));
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics).toEqual({ audit_available: false });
+  });
+
+  it('fails closed for inconsistent exact counts between pages', async () => {
+    const analyticsRows = pagedRhythmsAnalyticsRows(1200);
+    mockRhythmsOperatorClient((query) => ({
+      data: query.table === 'growth_analytics_events' ? analyticsRows : [],
+      error: null,
+      count: query.table === 'growth_analytics_events' && query.range?.[0] === 1000 ? 1199 :
+        query.table === 'growth_analytics_events' ? 1200 : 0,
+    }));
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics).toEqual({ audit_available: false });
+  });
+
+  it.each([
+    ['malformed row', (rows: ReturnType<typeof pagedRhythmsAnalyticsRows>) => [
+      ...rows.slice(0, 1),
+      { ...rows[1], received_at: 'not-a-timestamp' },
+    ]],
+    ['duplicate page row', (rows: ReturnType<typeof pagedRhythmsAnalyticsRows>) => [
+      ...rows.slice(0, 1000),
+      ...rows.slice(0, 200),
+    ]],
+  ] as const)('fails closed for a %s', async (_label, mutate) => {
+    const baseRows = pagedRhythmsAnalyticsRows(1200);
+    const analyticsRows = mutate(baseRows);
+    mockRhythmsOperatorClient((query) => ({
+      data: query.table === 'growth_analytics_events' ? analyticsRows : [],
+      error: null,
+      count: query.table === 'growth_analytics_events' ? analyticsRows.length : 0,
+    }));
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics).toEqual({ audit_available: false });
+  });
+
+  it('fails closed when an audit query promise rejects without logging the rejection', async () => {
+    const rawError = 'rejected private row 11111111-1111-4111-8111-111111111111';
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    mockRhythmsOperatorClient(async (query) => {
+      if (query.table === 'practice_sessions') throw new Error(rawError);
+      return { data: [], error: null };
+    });
 
     const response = await getSummary(new Request(
       'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',

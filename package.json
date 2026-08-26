@@ -10,6 +10,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:rhythms:postgres": "tests/rhythmsTelemetryPostgres.integration.sh",
     "validate:site": "vitest run tests/site.test.ts",
     "corpus:import:webp": "node --env-file=.env scripts/import-approved-webp-corpus.mjs",
     "stripe:setup": "node --env-file=.env scripts/setup-stripe.mjs"

@@ -355,62 +355,145 @@ async function loadRhythmsDiagnostics(
   fromTimestamp: string,
   toTimestamp: string,
 ) {
-  const loadEvent = (eventName: string) => supabase
-    .from('growth_analytics_events')
-    .select('installation_id,event_name,platform,app_version,build_number,runtime_version')
-    .eq('event_name', eventName)
-    .gte('received_at', fromTimestamp)
-    .lt('received_at', toTimestamp)
-    .limit(5001);
-  const loadProductRows = (table: string, columns: string, dateColumn: string) => supabase
-    .from(table)
-    .select(columns)
-    .gte(dateColumn, fromTimestamp)
-    .lt(dateColumn, toTimestamp)
-    .limit(5001);
-  const firstAnalyticsQuery = supabase
-    .from('growth_analytics_events')
-    .select('installation_id,event_name,platform,app_version,build_number,runtime_version');
-  const analyticsLoads = typeof firstAnalyticsQuery.in === 'function'
-    ? [firstAnalyticsQuery
-        .in('event_name', [...RHYTHMS_EVENT_NAMES])
-        .gte('received_at', fromTimestamp)
-        .lt('received_at', toTimestamp)
-        .limit(5001)]
-    : [
-        firstAnalyticsQuery
-          .eq('event_name', RHYTHMS_EVENT_NAMES[0])
-          .gte('received_at', fromTimestamp)
-          .lt('received_at', toTimestamp)
-          .limit(5001),
-        ...RHYTHMS_EVENT_NAMES.slice(1).map((eventName) => loadEvent(eventName)),
-      ];
-  const results = await Promise.all([
-    ...analyticsLoads,
-    loadProductRows('user_journeys', 'id,created_at', 'created_at'),
-    loadProductRows('user_journeys', 'id,completed_at', 'completed_at'),
-    loadProductRows('user_journey_daily_sessions', 'user_journey_id,day_number,completed_at', 'completed_at'),
-    loadProductRows('user_practices', 'user_id,practice_code,created_at', 'created_at'),
-    loadProductRows('practice_sessions', 'user_id,practice_code,local_week_start,status,completed_at', 'completed_at'),
-    loadProductRows('user_gathering_progress', 'started_at', 'started_at'),
-    loadProductRows('user_gathering_progress', 'completed_at,status', 'completed_at'),
-    loadProductRows('user_milestones', 'milestone_code,earned_at', 'earned_at'),
-    loadProductRows('user_featured_milestones', 'created_at', 'created_at'),
-  ]);
-  const unavailable = results.some((result) => result.error || !Array.isArray(result.data) || result.data.length >= 5001);
-  if (unavailable) {
-    console.error('[operator.growth] rhythms_diagnostics_unavailable', {
-      query_failed: results.some((result) => Boolean(result.error) || !Array.isArray(result.data)),
-      row_limit_reached: results.some((result) => Array.isArray(result.data) && result.data.length >= 5001),
-    });
+  const PAGE_SIZE = 1000;
+  const MAXIMUM_ROWS = 5000;
+  type Filter =
+    | { method: 'eq'; column: string; value: string }
+    | { method: 'in'; column: string; value: readonly string[] };
+  type AuditQuery = {
+    table: string;
+    columns: string;
+    dateColumn: string;
+    idColumn: 'event_id' | 'id';
+    filters?: Filter[];
+    validate: (row: DiagnosticRow) => boolean;
+  };
+
+  const timestampAndIdAreValid = (row: DiagnosticRow, query: AuditQuery) => {
+    const id = row[query.idColumn];
+    return typeof id === 'string' && UUID_PATTERN.test(id) &&
+      timestampInWindow(row[query.dateColumn], fromTimestamp, toTimestamp);
+  };
+  const queries: AuditQuery[] = [
+    {
+      table: 'growth_analytics_events',
+      columns: 'event_id,installation_id,event_name,received_at,platform,app_version,build_number,runtime_version',
+      dateColumn: 'received_at',
+      idColumn: 'event_id',
+      filters: [{ method: 'in', column: 'event_name', value: RHYTHMS_EVENT_NAMES }],
+      validate: (row) =>
+        typeof row.installation_id === 'string' && UUID_PATTERN.test(row.installation_id) &&
+        typeof row.event_name === 'string' && RHYTHMS_EVENT_NAMES.includes(row.event_name as typeof RHYTHMS_EVENT_NAMES[number]) &&
+        (row.platform === 'ios' || row.platform === 'android') &&
+        safeReleaseDimension(row.app_version, 32) !== PRIVACY_SAFE_UNKNOWN &&
+        (row.build_number === null || safeReleaseDimension(row.build_number, 24) !== PRIVACY_SAFE_UNKNOWN) &&
+        (row.runtime_version === null || safeReleaseDimension(row.runtime_version, 32) !== PRIVACY_SAFE_UNKNOWN),
+    },
+    {
+      table: 'growth_analytics_events', columns: 'event_id,received_at',
+      dateColumn: 'received_at', idColumn: 'event_id',
+      filters: [
+        { method: 'in', column: 'event_name', value: ['rhythms_load_failed', 'rhythms_mutation_failed'] },
+        { method: 'eq', column: 'properties->>error_code', value: 'server_unavailable' },
+      ],
+      validate: () => true,
+    },
+    {
+      table: 'user_journeys', columns: 'id,created_at', dateColumn: 'created_at', idColumn: 'id',
+      validate: () => true,
+    },
+    {
+      table: 'user_journeys', columns: 'id,completed_at', dateColumn: 'completed_at', idColumn: 'id',
+      validate: () => true,
+    },
+    {
+      table: 'user_journey_daily_sessions', columns: 'id,day_number,completed_at',
+      dateColumn: 'completed_at', idColumn: 'id',
+      validate: (row) => typeof row.day_number === 'number' && Number.isInteger(row.day_number) &&
+        row.day_number >= 1 && row.day_number <= 32,
+    },
+    {
+      table: 'user_practices', columns: 'id,created_at', dateColumn: 'created_at', idColumn: 'id',
+      validate: () => true,
+    },
+    {
+      table: 'practice_sessions', columns: 'id,status,completed_at',
+      dateColumn: 'completed_at', idColumn: 'id',
+      validate: (row) => row.status === 'completed',
+    },
+    {
+      table: 'user_gathering_progress', columns: 'id,started_at', dateColumn: 'started_at', idColumn: 'id',
+      validate: () => true,
+    },
+    {
+      table: 'user_gathering_progress', columns: 'id,completed_at,status',
+      dateColumn: 'completed_at', idColumn: 'id', validate: (row) => row.status === 'completed',
+    },
+    {
+      table: 'user_milestones', columns: 'id,earned_at', dateColumn: 'earned_at', idColumn: 'id',
+      validate: () => true,
+    },
+    {
+      table: 'user_featured_milestones', columns: 'id,created_at', dateColumn: 'created_at', idColumn: 'id',
+      validate: () => true,
+    },
+  ];
+
+  const loadBoundedRows = async (querySpec: AuditQuery) => {
+    const rows: DiagnosticRow[] = [];
+    const seenIds = new Set<string>();
+    let exactCount: number | null = null;
+    let previousSortKey: string | null = null;
+    for (let from = 0; exactCount === null || from < exactCount; from += PAGE_SIZE) {
+      let request = supabase.from(querySpec.table).select(querySpec.columns, { count: 'exact' });
+      for (const filter of querySpec.filters ?? []) {
+        request = filter.method === 'in'
+          ? request.in(filter.column, [...filter.value])
+          : request.eq(filter.column, filter.value);
+      }
+      const to = exactCount === null
+        ? PAGE_SIZE - 1
+        : Math.min(from + PAGE_SIZE - 1, exactCount - 1);
+      const result = await request
+        .gte(querySpec.dateColumn, fromTimestamp)
+        .lt(querySpec.dateColumn, toTimestamp)
+        .order(querySpec.dateColumn, { ascending: true })
+        .order(querySpec.idColumn, { ascending: true })
+        .range(from, to);
+      if (result.error || !Array.isArray(result.data) ||
+        typeof result.count !== 'number' || !Number.isSafeInteger(result.count) ||
+        result.count < 0 || result.count > MAXIMUM_ROWS ||
+        exactCount !== null && result.count !== exactCount) return null;
+      exactCount ??= result.count;
+      const expectedPageLength = Math.min(PAGE_SIZE, exactCount - from);
+      if (result.data.length !== expectedPageLength) return null;
+      for (const value of result.data) {
+        const row = diagnosticRow(value);
+        if (!row || !timestampAndIdAreValid(row, querySpec) || !querySpec.validate(row)) return null;
+        const id = row[querySpec.idColumn] as string;
+        const sortKey = `${row[querySpec.dateColumn] as string}\u0000${id}`;
+        if (seenIds.has(id) || previousSortKey !== null && sortKey <= previousSortKey) return null;
+        seenIds.add(id);
+        previousSortKey = sortKey;
+        rows.push(row);
+      }
+    }
+    return rows;
+  };
+
+  let results: Array<DiagnosticRow[] | null>;
+  try {
+    results = await Promise.all(queries.map(loadBoundedRows));
+  } catch {
+    results = [null];
+  }
+  if (results.some((result) => result === null)) {
     return { audit_available: false as const };
   }
 
-  const eventResults = results.slice(0, analyticsLoads.length);
-  const productResults = results.slice(analyticsLoads.length);
-  const analyticsRows = eventResults.flatMap((result) => diagnosticRows(result.data));
+  const [analyticsRows, serverErrorRows, ...productResults] = results as DiagnosticRow[][];
   const eventCount = (eventName: string) => analyticsRows.filter((row) => row.event_name === eventName).length;
-  const productRows = (index: number) => diagnosticRows(productResults[index]?.data);
+  const productRows = (index: number) => productResults[index] ?? [];
   const journeyStarts = productRows(0)
     .filter((row) => timestampInWindow(row.created_at, fromTimestamp, toTimestamp));
   const journeyCompletions = productRows(1)
@@ -421,11 +504,6 @@ async function loadRhythmsDiagnostics(
     .filter((row) => timestampInWindow(row.created_at, fromTimestamp, toTimestamp));
   const practiceCompletions = productRows(4)
     .filter((row) => row.status === 'completed' && timestampInWindow(row.completed_at, fromTimestamp, toTimestamp));
-  const completedWeeks = new Set(practiceCompletions.flatMap((row) => (
-    typeof row.user_id === 'string' && typeof row.practice_code === 'string' && typeof row.local_week_start === 'string'
-      ? [`${row.user_id}:${row.practice_code}:${row.local_week_start}`]
-      : []
-  ))).size;
   const gatheringStarts = productRows(5)
     .filter((row) => timestampInWindow(row.started_at, fromTimestamp, toTimestamp));
   const gatheringCompletions = productRows(6)
@@ -453,7 +531,6 @@ async function loadRhythmsDiagnostics(
       catalog_views: eventCount('practice_catalog_viewed'),
       weekly_rhythms_saved: weeklyRhythms.length,
       session_completions: practiceCompletions.length,
-      completed_weeks: completedWeeks,
     },
     gathering: {
       views: eventCount('gathering_viewed'),
@@ -467,7 +544,7 @@ async function loadRhythmsDiagnostics(
     },
     failures: {
       idempotency_conflicts: eventCount('session_completion_conflict'),
-      server_errors: eventCount('rhythms_load_failed') + eventCount('rhythms_mutation_failed'),
+      server_errors: serverErrorRows.length,
     },
     cohorts: {
       minimum_installations: MINIMUM_BREAKDOWN_INSTALLS,

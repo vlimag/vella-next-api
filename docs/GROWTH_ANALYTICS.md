@@ -317,7 +317,11 @@ counts become zero and invalid nullable campaign metrics become `null`.
   install IDs, account IDs, or content are returned. If any Rhythms audit query
   fails or reaches its completeness cap, the section is exactly
   `{ "audit_available": false }`; raw database errors are neither returned nor
-  logged;
+  logged. Practice reports saved rhythms and completed sessions, but deliberately
+  omits completed-week totals: one completed session does not prove a completed
+  weekly target. Authoritative weekly completion can be added only after the
+  later practice transaction persists an immutable target snapshot or completion
+  record;
 - `authoritative_subscriptions`: current/store-verified lifecycle totals;
 - `webhook_health`: received, processed and pending Apple/Google events;
 - `privacy`: retention and suppression metadata. Risk-reducing privacy claims
