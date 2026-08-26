@@ -314,8 +314,11 @@ counts become zero and invalid nullable campaign metrics become `null`.
   Release, runtime, and build groups require at least 20 installations. Every
   query is bounded by the explicit `from`/`to` window, analytics installations
   are never joined to identity tables, and no properties, rows, samples,
-  install IDs, account IDs, or content are returned. If any Rhythms audit query
-  fails or reaches its completeness cap, the section is exactly
+  install IDs, account IDs, or content are returned. Each bounded audit set is
+  frozen at its initial maximum `(timestamp, UUID)` tuple and traversed with
+  composite-keyset pages; mutable offsets are not used. If any Rhythms audit
+  query fails, changes incompatibly during collection, or reaches its
+  completeness cap, the section is exactly
   `{ "audit_available": false }`; raw database errors are neither returned nor
   logged. Practice reports saved rhythms and completed sessions, but deliberately
   omits completed-week totals: one completed session does not prove a completed

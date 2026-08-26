@@ -154,6 +154,7 @@ function mockTableQueries(
     builder.in = vi.fn(() => builder);
     builder.gte = vi.fn(() => builder);
     builder.lt = vi.fn(() => builder);
+    builder.or = vi.fn(() => builder);
     builder.order = vi.fn(() => builder);
     builder.limit = vi.fn(async (maximum?: number) => {
       const resolved = result();
@@ -162,6 +163,9 @@ function mockTableQueries(
           ? resolved.data.slice(0, maximum)
           : resolved.data,
         error: resolved.error,
+        count: resolved.count === undefined
+          ? Array.isArray(resolved.data) ? resolved.data.length : null
+          : resolved.count,
       };
     });
     builder.range = vi.fn(async (fromIndex: number, toIndex: number) => {
@@ -189,6 +193,7 @@ function mockTableQueries(
 type RecordedOperatorQuery = {
   table: string;
   filters: Array<{ method: string; column: string; value: unknown }>;
+  limit?: number;
   range?: [number, number];
   selection?: { columns: string; options: unknown };
 };
@@ -242,14 +247,34 @@ function mockRhythmsOperatorClient(
         return builder;
       });
     }
+    builder.or = vi.fn((expression: string) => {
+      query.filters.push({ method: 'or', column: '', value: expression });
+      return builder;
+    });
     builder.limit = vi.fn(async (maximum?: number) => {
+      query.limit = maximum;
       const result = await resolve(query);
+      const orders = query.filters.filter((filter) => filter.method === 'order');
+      const orderedData = Array.isArray(result.data) ? [...result.data].sort((left, right) => {
+        if (typeof left !== 'object' || left === null || typeof right !== 'object' || right === null) return 0;
+        for (const order of orders) {
+          const leftValue = (left as Record<string, unknown>)[order.column];
+          const rightValue = (right as Record<string, unknown>)[order.column];
+          const comparison = String(leftValue).localeCompare(String(rightValue));
+          if (comparison !== 0) {
+            return (order.value as { ascending?: boolean }).ascending === false ? -comparison : comparison;
+          }
+        }
+        return 0;
+      }) : result.data;
       return {
-        data: Array.isArray(result.data) && typeof maximum === 'number'
-          ? result.data.slice(0, Math.min(maximum, 1000))
-          : result.data,
+        data: Array.isArray(orderedData) && typeof maximum === 'number'
+          ? orderedData.slice(0, Math.min(maximum, 1000))
+          : orderedData,
         error: result.error,
-        count: result.count,
+        count: result.count === undefined
+          ? Array.isArray(result.data) ? result.data.length : null
+          : result.count,
       };
     });
     builder.range = vi.fn(async (fromIndex: number, toIndex: number) => {
@@ -2789,10 +2814,17 @@ describe('growth operator routes', () => {
 
   it('uses exact-count deterministic pagination through the Data API 1,000-row cap', async () => {
     const analyticsRows = pagedRhythmsAnalyticsRows(1200);
-    const { queries } = mockRhythmsOperatorClient((query) => ({
-      data: query.table === 'growth_analytics_events' ? analyticsRows : [],
-      error: null,
-    }));
+    const { queries } = mockRhythmsOperatorClient((query) => {
+      const isMainAnalytics = query.table === 'growth_analytics_events' &&
+        query.selection?.columns.includes('installation_id');
+      const keysetFilters = query.filters.filter((filter) => filter.method === 'or');
+      return {
+        data: isMainAnalytics
+          ? keysetFilters.length >= 2 ? analyticsRows.slice(1000) : analyticsRows
+          : [],
+        error: null,
+      };
+    });
 
     const response = await getSummary(new Request(
       'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
@@ -2802,11 +2834,21 @@ describe('growth operator routes', () => {
     const body = await response.json() as { data: Record<string, any> };
     expect(body.data.rhythms_diagnostics.journey_funnel.hub_views).toBe(1200);
 
-    const pages = queries.filter((query) => query.table === 'growth_analytics_events' && query.range &&
+    const boundary = queries.find((query) => query.table === 'growth_analytics_events' && query.limit === 1 &&
       query.selection?.columns.includes('installation_id'));
-    expect(pages.map((query) => query.range)).toEqual([[0, 999], [1000, 1199]]);
+    expect(boundary?.selection?.options).toEqual({ count: 'exact' });
+    expect(boundary?.filters).toEqual(expect.arrayContaining([
+      { method: 'order', column: 'received_at', value: { ascending: false } },
+      { method: 'order', column: 'event_id', value: { ascending: false } },
+      { method: 'gte', column: 'received_at', value: '2026-07-01T00:00:00.000Z' },
+      { method: 'lt', column: 'received_at', value: '2026-08-01T00:00:00.000Z' },
+    ]));
+    const pages = queries.filter((query) => query.table === 'growth_analytics_events' && query.limit === 1000 &&
+      query.selection?.columns.includes('installation_id'));
+    expect(pages).toHaveLength(2);
     for (const page of pages) {
-      expect(page.selection?.options).toEqual({ count: 'exact' });
+      expect(page.selection?.options).toBeUndefined();
+      expect(page.range).toBeUndefined();
       expect(page.filters).toEqual(expect.arrayContaining([
         { method: 'order', column: 'received_at', value: { ascending: true } },
         { method: 'order', column: 'event_id', value: { ascending: true } },
@@ -2814,6 +2856,92 @@ describe('growth operator routes', () => {
         { method: 'lt', column: 'received_at', value: '2026-08-01T00:00:00.000Z' },
       ]));
     }
+  });
+
+  it('never silently replaces a frozen-set row during a same-count offset shift', async () => {
+    const originalRows = pagedRhythmsAnalyticsRows(1200);
+    originalRows[1000] = { ...originalRows[1000], event_name: 'journey_catalog_viewed' };
+    const insertedAfterOriginalSet = {
+      ...pagedRhythmsAnalyticsRows(1201)[1200],
+      received_at: '2026-07-31T23:59:59.000Z',
+    };
+    const shiftedRows = [
+      ...originalRows.slice(0, 500),
+      ...originalRows.slice(501),
+      insertedAfterOriginalSet,
+    ];
+    mockRhythmsOperatorClient((query) => {
+      const isMainAnalytics = query.table === 'growth_analytics_events' &&
+        query.selection?.columns.includes('installation_id');
+      if (!isMainAnalytics) return { data: [], error: null, count: 0 };
+      if (query.range?.[0] === 0) return { data: originalRows, error: null, count: 1200 };
+      if (query.range?.[0] === 1000) return { data: shiftedRows, error: null, count: 1200 };
+      const descendingBoundary = query.filters.some((filter) => filter.method === 'order' &&
+        filter.column === 'received_at' &&
+        (filter.value as { ascending?: boolean }).ascending === false);
+      if (descendingBoundary) {
+        return { data: originalRows, error: null, count: 1200 };
+      }
+      const keysetFilters = query.filters.filter((filter) => filter.method === 'or');
+      return {
+        data: keysetFilters.length >= 2 ? originalRows.slice(1000) : originalRows,
+        error: null,
+        count: 1200,
+      };
+    });
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    const body = await response.json() as { data: Record<string, any> };
+    const diagnostics = body.data.rhythms_diagnostics;
+    if (diagnostics.audit_available) {
+      expect(diagnostics.journey_funnel.hub_views).toBe(1199);
+      expect(diagnostics.journey_funnel.catalog_views).toBe(1);
+    } else {
+      expect(diagnostics).toEqual({ audit_available: false });
+    }
+  });
+
+  it('uses the stable UUID as the keyset tie-breaker for equal timestamps', async () => {
+    const equalTimestampRows = pagedRhythmsAnalyticsRows(1002).map((row) => ({
+      ...row,
+      received_at: '2026-07-15T12:00:00.000Z',
+    }));
+    const { queries } = mockRhythmsOperatorClient((query) => {
+      const isMainAnalytics = query.table === 'growth_analytics_events' &&
+        query.selection?.columns.includes('installation_id');
+      if (!isMainAnalytics) return { data: [], error: null, count: 0 };
+      const descendingBoundary = query.filters.some((filter) => filter.method === 'order' &&
+        filter.column === 'received_at' &&
+        (filter.value as { ascending?: boolean }).ascending === false);
+      if (descendingBoundary) {
+        return { data: equalTimestampRows, error: null, count: 1002 };
+      }
+      const keysetFilters = query.filters.filter((filter) => filter.method === 'or');
+      return {
+        data: keysetFilters.length >= 2 ? equalTimestampRows.slice(1000) : equalTimestampRows,
+        error: null,
+        count: 1002,
+      };
+    });
+
+    const response = await getSummary(new Request(
+      'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',
+      { headers: headers() },
+    ));
+    const body = await response.json() as { data: Record<string, any> };
+    expect(body.data.rhythms_diagnostics.journey_funnel.hub_views).toBe(1002);
+    const secondPage = queries.find((query) => query.table === 'growth_analytics_events' &&
+      query.selection?.columns.includes('installation_id') &&
+      query.filters.filter((filter) => filter.method === 'or').length === 2);
+    expect(secondPage).toBeDefined();
+    expect(secondPage?.filters ?? []).toContainEqual({
+      method: 'or',
+      column: '',
+      value: expect.stringContaining(`event_id.gt.${equalTimestampRows[999].event_id}`),
+    });
   });
 
   it('accepts valid Rhythms analytics rows with optional build and runtime dimensions absent', async () => {
@@ -2858,14 +2986,20 @@ describe('growth operator routes', () => {
     expect(body.data.rhythms_diagnostics).toEqual({ audit_available: false });
   });
 
-  it('fails closed for inconsistent exact counts between pages', async () => {
+  it('fails closed when a frozen row disappears before collection completes', async () => {
     const analyticsRows = pagedRhythmsAnalyticsRows(1200);
-    mockRhythmsOperatorClient((query) => ({
-      data: query.table === 'growth_analytics_events' ? analyticsRows : [],
-      error: null,
-      count: query.table === 'growth_analytics_events' && query.range?.[0] === 1000 ? 1199 :
-        query.table === 'growth_analytics_events' ? 1200 : 0,
-    }));
+    mockRhythmsOperatorClient((query) => {
+      if (query.table !== 'growth_analytics_events') return { data: [], error: null, count: 0 };
+      const descendingBoundary = query.filters.some((filter) => filter.method === 'order' &&
+        filter.column === 'received_at' &&
+        (filter.value as { ascending?: boolean }).ascending === false);
+      if (descendingBoundary) return { data: analyticsRows, error: null, count: 1200 };
+      const keysetFilters = query.filters.filter((filter) => filter.method === 'or');
+      return {
+        data: keysetFilters.length >= 2 ? analyticsRows.slice(1000, 1199) : analyticsRows,
+        error: null,
+      };
+    });
 
     const response = await getSummary(new Request(
       'https://vella.one/api/v1/operator/growth/summary?from=2026-07-01&to=2026-07-31',

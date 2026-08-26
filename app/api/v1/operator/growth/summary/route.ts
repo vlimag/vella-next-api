@@ -374,6 +374,18 @@ async function loadRhythmsDiagnostics(
     return typeof id === 'string' && UUID_PATTERN.test(id) &&
       timestampInWindow(row[query.dateColumn], fromTimestamp, toTimestamp);
   };
+  const KEYSET_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
+  type AuditCursor = { timestamp: string; timestampMillis: number; id: string };
+  const auditCursor = (row: DiagnosticRow, query: AuditQuery): AuditCursor | null => {
+    const timestamp = row[query.dateColumn];
+    const id = row[query.idColumn];
+    if (typeof timestamp !== 'string' || !KEYSET_TIMESTAMP.test(timestamp) ||
+      typeof id !== 'string' || !UUID_PATTERN.test(id)) return null;
+    const timestampMillis = Date.parse(timestamp);
+    return Number.isFinite(timestampMillis) ? { timestamp, timestampMillis, id } : null;
+  };
+  const compareCursors = (left: AuditCursor, right: AuditCursor) =>
+    left.timestampMillis - right.timestampMillis || left.id.localeCompare(right.id);
   const queries: AuditQuery[] = [
     {
       table: 'growth_analytics_events',
@@ -442,43 +454,66 @@ async function loadRhythmsDiagnostics(
   const loadBoundedRows = async (querySpec: AuditQuery) => {
     const rows: DiagnosticRow[] = [];
     const seenIds = new Set<string>();
-    let exactCount: number | null = null;
-    let previousSortKey: string | null = null;
-    for (let from = 0; exactCount === null || from < exactCount; from += PAGE_SIZE) {
-      let request = supabase.from(querySpec.table).select(querySpec.columns, { count: 'exact' });
+    let boundaryRequest = supabase.from(querySpec.table).select(querySpec.columns, { count: 'exact' });
+    for (const filter of querySpec.filters ?? []) {
+      boundaryRequest = filter.method === 'in'
+        ? boundaryRequest.in(filter.column, [...filter.value])
+        : boundaryRequest.eq(filter.column, filter.value);
+    }
+    const boundaryResult = await boundaryRequest
+      .gte(querySpec.dateColumn, fromTimestamp)
+      .lt(querySpec.dateColumn, toTimestamp)
+      .order(querySpec.dateColumn, { ascending: false })
+      .order(querySpec.idColumn, { ascending: false })
+      .limit(1);
+    if (boundaryResult.error || !Array.isArray(boundaryResult.data) ||
+      typeof boundaryResult.count !== 'number' || !Number.isSafeInteger(boundaryResult.count) ||
+      boundaryResult.count < 0 || boundaryResult.count > MAXIMUM_ROWS) return null;
+    const exactCount = boundaryResult.count;
+    if (exactCount === 0) return boundaryResult.data.length === 0 ? rows : null;
+    if (boundaryResult.data.length !== 1) return null;
+    const boundaryRow = diagnosticRow(boundaryResult.data[0]);
+    if (!boundaryRow || !timestampAndIdAreValid(boundaryRow, querySpec) ||
+      !querySpec.validate(boundaryRow)) return null;
+    const frozenMaximum = auditCursor(boundaryRow, querySpec);
+    if (!frozenMaximum) return null;
+
+    let previousCursor: AuditCursor | null = null;
+    while (rows.length < exactCount) {
+      let request = supabase.from(querySpec.table).select(querySpec.columns);
       for (const filter of querySpec.filters ?? []) {
         request = filter.method === 'in'
           ? request.in(filter.column, [...filter.value])
           : request.eq(filter.column, filter.value);
       }
-      const to = exactCount === null
-        ? PAGE_SIZE - 1
-        : Math.min(from + PAGE_SIZE - 1, exactCount - 1);
-      const result = await request
+      request = request
         .gte(querySpec.dateColumn, fromTimestamp)
         .lt(querySpec.dateColumn, toTimestamp)
+        .or(`${querySpec.dateColumn}.lt.${frozenMaximum.timestamp},and(${querySpec.dateColumn}.eq.${frozenMaximum.timestamp},${querySpec.idColumn}.lte.${frozenMaximum.id})`);
+      if (previousCursor) {
+        request = request.or(`${querySpec.dateColumn}.gt.${previousCursor.timestamp},and(${querySpec.dateColumn}.eq.${previousCursor.timestamp},${querySpec.idColumn}.gt.${previousCursor.id})`);
+      }
+      const result = await request
         .order(querySpec.dateColumn, { ascending: true })
         .order(querySpec.idColumn, { ascending: true })
-        .range(from, to);
-      if (result.error || !Array.isArray(result.data) ||
-        typeof result.count !== 'number' || !Number.isSafeInteger(result.count) ||
-        result.count < 0 || result.count > MAXIMUM_ROWS ||
-        exactCount !== null && result.count !== exactCount) return null;
-      exactCount ??= result.count;
-      const expectedPageLength = Math.min(PAGE_SIZE, exactCount - from);
-      if (result.data.length !== expectedPageLength) return null;
+        .limit(PAGE_SIZE);
+      if (result.error || !Array.isArray(result.data) || result.data.length === 0 ||
+        result.data.length > PAGE_SIZE) return null;
       for (const value of result.data) {
         const row = diagnosticRow(value);
         if (!row || !timestampAndIdAreValid(row, querySpec) || !querySpec.validate(row)) return null;
+        const cursor = auditCursor(row, querySpec);
+        if (!cursor || compareCursors(cursor, frozenMaximum) > 0 ||
+          previousCursor && compareCursors(cursor, previousCursor) <= 0) return null;
         const id = row[querySpec.idColumn] as string;
-        const sortKey = `${row[querySpec.dateColumn] as string}\u0000${id}`;
-        if (seenIds.has(id) || previousSortKey !== null && sortKey <= previousSortKey) return null;
+        if (seenIds.has(id)) return null;
         seenIds.add(id);
-        previousSortKey = sortKey;
+        previousCursor = cursor;
         rows.push(row);
+        if (rows.length > exactCount) return null;
       }
     }
-    return rows;
+    return rows.length === exactCount ? rows : null;
   };
 
   let results: Array<DiagnosticRow[] | null>;
