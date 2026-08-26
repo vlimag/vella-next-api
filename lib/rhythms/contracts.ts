@@ -22,10 +22,6 @@ export type RhythmsSummary = {
     current_step: number;
     status: 'not_started' | 'in_progress' | 'completed' | 'abandoned';
   };
-  unrevealed_milestones?: Array<{
-    code: string;
-    asset_key: string;
-  }>;
   next_action?: {
     kind: 'continue_journey' | 'choose_journey';
     target_key: string;
@@ -43,17 +39,32 @@ export const PRACTICE_CODES = [
 
 const stableKey = /^[a-z][a-z0-9_-]{0,127}$/;
 const stableSlug = /^[a-z][a-z0-9-]{0,127}$/;
+const milestoneCode = /^[a-z][a-z0-9_]{0,63}$/;
+const badgeAssetKey = /^[a-z][a-z0-9_.-]{0,127}$/;
+const uuidSyntax = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isNonUuidString(value: unknown, pattern: RegExp): value is string {
+  return typeof value === 'string' && !uuidSyntax.test(value) && pattern.test(value);
+}
 
 export function isPracticeCode(value: unknown): value is typeof PRACTICE_CODES[number] {
   return typeof value === 'string' && PRACTICE_CODES.includes(value as typeof PRACTICE_CODES[number]);
 }
 
 export function isStableKey(value: unknown): value is string {
-  return typeof value === 'string' && stableKey.test(value);
+  return isNonUuidString(value, stableKey);
 }
 
 export function isStableSlug(value: unknown): value is string {
-  return typeof value === 'string' && stableSlug.test(value);
+  return isNonUuidString(value, stableSlug);
+}
+
+export function isMilestoneCode(value: unknown): value is string {
+  return isNonUuidString(value, milestoneCode);
+}
+
+export function isBadgeAssetKey(value: unknown): value is string {
+  return isNonUuidString(value, badgeAssetKey);
 }
 
 export function finiteInteger(value: unknown, min: number, max: number): number | null {

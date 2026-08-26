@@ -16,11 +16,12 @@ vi.mock('../lib/subscriptionAccess', () => ({
 
 import { GET } from '../app/api/v1/rhythms/summary/route';
 import { resolveRhythmsCapabilities } from '../lib/rhythms/capabilities';
+import { isBadgeAssetKey, isMilestoneCode, isStableSlug } from '../lib/rhythms/contracts';
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const PRIVATE_UUID = '22222222-2222-4222-8222-222222222222';
 
-type TableResult = { data: unknown; error: unknown };
+type TableResult = { data: unknown; error: unknown } | Error;
 
 function summaryClient(results: Partial<Record<string, TableResult>> = {}) {
   return {
@@ -32,9 +33,10 @@ function summaryClient(results: Partial<Record<string, TableResult>> = {}) {
       query.order = vi.fn(() => query);
       query.limit = vi.fn(() => query);
       query.maybeSingle = vi.fn(async () => results[table] ?? { data: [], error: null });
-      query.then = (resolve: (value: TableResult) => unknown) => Promise.resolve(
-        results[table] ?? { data: [], error: null },
-      ).then(resolve);
+      query.then = (resolve: (value: TableResult) => unknown, reject?: (error: unknown) => unknown) => {
+        const result = results[table] ?? { data: [], error: null };
+        return result instanceof Error ? Promise.reject(result).then(resolve, reject) : Promise.resolve(result).then(resolve);
+      };
       return query;
     }),
   };
@@ -215,7 +217,7 @@ describe('Vella Rhythms summary capability boundary', () => {
   it('degrades social badges alone when milestone data is unavailable', async () => {
     vi.stubEnv('VELLA_RHYTHMS_PHASE', 'social_badges');
     mocks.client = summaryClient({
-      user_milestones: { data: null, error: { code: '42P01', message: 'private migration detail' } },
+      user_featured_milestones: { data: null, error: { code: '42P01', message: 'private migration detail' } },
     });
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
@@ -230,6 +232,71 @@ describe('Vella Rhythms summary capability boundary', () => {
     expect(log).toHaveBeenCalledWith('[rhythms-summary]', {
       route: 'rhythms_summary', stage: 'milestones', code: 'database_unavailable',
     });
+  });
+
+  it('keeps valid earlier and later sections when a middle section query rejects', async () => {
+    vi.stubEnv('VELLA_RHYTHMS_PHASE', 'social_badges');
+    mocks.client = summaryClient({
+      user_journeys: {
+        data: [{
+          status: 'active', current_day: 2, total_completed_days: 1,
+          journey_templates: { slug: 'hope-in-seven' },
+        }],
+        error: null,
+      },
+      user_practices: new Error(`practice query failed for ${USER_ID}`),
+      user_gathering_progress: {
+        data: [{
+          current_step: 2, status: 'in_progress', gathering_templates: { slug: 'weekly-rest' },
+        }],
+        error: null,
+      },
+      user_featured_milestones: { data: [], error: null },
+    });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { response, json } = await get();
+
+    expect(response.status).toBe(200);
+    expectNoStore(response);
+    expect(json.data.capabilities).toEqual({
+      journey_v2: true, practices: false, gatherings: true, social_badges: true, long_journeys: false,
+    });
+    expect(json.data.active_journey).toEqual({
+      template_key: 'hope-in-seven', current_session: 2, completed_sessions: 1,
+    });
+    expect(json.data.current_gathering).toEqual({
+      template_key: 'weekly-rest', current_step: 2, status: 'in_progress',
+    });
+    expect(log).toHaveBeenCalledWith('[rhythms-summary]', {
+      route: 'rhythms_summary', stage: 'practices', code: 'database_unavailable',
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(USER_ID);
+  });
+
+  it('uses the featured-milestones availability probe without fabricating unrevealed badges', async () => {
+    vi.stubEnv('VELLA_RHYTHMS_PHASE', 'social_badges');
+    const from = vi.fn((table: string) => summaryClient({ user_featured_milestones: { data: [], error: null } }).from(table));
+    mocks.client = { from };
+
+    const { response, json } = await get();
+
+    expect(response.status).toBe(200);
+    expectNoStore(response);
+    expect(json.data.capabilities.social_badges).toBe(true);
+    expect(json.data).not.toHaveProperty('unrevealed_milestones');
+    expect(from).toHaveBeenCalledWith('user_featured_milestones');
+  });
+
+  it('accepts contextual catalog keys while rejecting UUID-shaped stable keys', () => {
+    expect(isMilestoneCode('streak_3')).toBe(true);
+    expect(isMilestoneCode('journey_finisher')).toBe(true);
+    expect(isBadgeAssetKey('flame.spark')).toBe(true);
+    expect(isBadgeAssetKey('flame.steady')).toBe(true);
+    expect(isStableSlug('hope-in-seven')).toBe(true);
+    expect(isMilestoneCode('a1111111-1111-4111-8111-111111111111')).toBe(false);
+    expect(isBadgeAssetKey('a1111111-1111-4111-8111-111111111111')).toBe(false);
+    expect(isStableSlug('a1111111-1111-4111-8111-111111111111')).toBe(false);
   });
 
   it('omits malformed and unknown catalog rows without inventing progress or leaking private fields', async () => {
@@ -280,7 +347,7 @@ describe('Vella Rhythms summary capability boundary', () => {
     mocks.client = summaryClient({
       user_journeys: {
         data: [{
-          status: 'completed', current_day: 7, total_completed_days: 7,
+          status: 'completed', current_day: 7, total_completed_days: 7, completed_at: '2026-08-20T00:00:00.000Z',
           journey_templates: { slug: 'hope-in-seven', duration_days: 7 },
         }],
         error: null,
@@ -292,5 +359,53 @@ describe('Vella Rhythms summary capability boundary', () => {
     expect(response.status).toBe(200);
     expectNoStore(response);
     expect(json.data.next_action).toEqual({ kind: 'choose_journey', target_key: 'journeys' });
+  });
+
+  it('returns the newest valid completed journey alongside an active journey', async () => {
+    vi.stubEnv('VELLA_RHYTHMS_PHASE', 'journey_v2');
+    mocks.client = summaryClient({
+      user_journeys: {
+        data: [
+          {
+            status: 'completed', current_day: 7, total_completed_days: 7, completed_at: '2026-08-01T00:00:00.000Z',
+            journey_templates: { slug: 'older-path' },
+          },
+          {
+            status: 'active', current_day: 2, total_completed_days: 1, completed_at: null,
+            journey_templates: { slug: 'active-path' },
+          },
+          {
+            status: 'completed', current_day: 14, total_completed_days: 14, completed_at: '2026-08-20T00:00:00.000Z',
+            journey_templates: { slug: 'newer-path' },
+          },
+        ],
+        error: null,
+      },
+    });
+
+    const { response, json } = await get();
+
+    expect(response.status).toBe(200);
+    expectNoStore(response);
+    expect(json.data.active_journey).toEqual({
+      template_key: 'active-path', current_session: 2, completed_sessions: 1,
+    });
+    expect(json.data.latest_completed_journey).toEqual({
+      template_key: 'newer-path', completed_sessions: 14,
+    });
+    expect(json.data.next_action).toEqual({ kind: 'continue_journey', target_key: 'active-path' });
+  });
+
+  it('returns a finite no-store response when the access gate rejects', async () => {
+    mocks.requireActiveSubscription.mockRejectedValue(new Error(`private gate failure for ${USER_ID}`));
+
+    const { response, json } = await get();
+
+    expect(response.status).toBe(503);
+    expectNoStore(response);
+    expect(json).toEqual({
+      error: { message: 'Could not load Rhythms summary', details: { code: 'rhythms_unavailable' } },
+    });
+    expect(JSON.stringify(json)).not.toContain(USER_ID);
   });
 });

@@ -108,14 +108,22 @@ describe('subscription-only access', () => {
   });
 
   it('fails closed when entitlement verification is unavailable', async () => {
-    getUserIdFromAuthHeader.mockResolvedValue({ userId: 'subscribed-user' });
-    userHasActivePremium.mockRejectedValue(new Error('database unavailable'));
+    const userId = 'subscribed-user';
+    const privateError = 'database unavailable for subscribed-user';
+    getUserIdFromAuthHeader.mockResolvedValue({ userId });
+    userHasActivePremium.mockRejectedValue(new Error(privateError));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
     const result = await requireActiveSubscription();
     expect('response' in result).toBe(true);
     if ('response' in result) {
       expect(result.response.status).toBe(503);
     }
+    expect(log).toHaveBeenCalledWith('[subscription-access]', {
+      route: 'subscription_access', stage: 'entitlement_check', code: 'entitlement_unavailable',
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain(userId);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(privateError);
   });
 
   it('keeps every product route handler behind the central gate unless explicitly exempt', () => {

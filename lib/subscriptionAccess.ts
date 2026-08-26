@@ -31,10 +31,11 @@ export async function requireActiveSubscription(): Promise<SubscriptionAccessRes
     if (await userHasActivePremium(auth.userId)) {
       return { userId: auth.userId };
     }
-  } catch (error) {
-    console.error('[subscription-access] entitlement_check_failed', {
-      userId: auth.userId,
-      error: error instanceof Error ? error.message : String(error),
+  } catch {
+    console.error('[subscription-access]', {
+      route: 'subscription_access',
+      stage: 'entitlement_check',
+      code: 'entitlement_unavailable',
     });
 
     return {

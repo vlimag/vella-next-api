@@ -32,6 +32,12 @@ function joinedRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' ? value as Record<string, unknown> : null;
 }
 
+function completedAt(value: unknown): number | null {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(value)) return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
 function applyJourneys(summary: RhythmsSummary, result: QueryResult): boolean {
   const rows = asRows(result.data);
   if (result.error || !rows) return false;
@@ -44,11 +50,18 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult): boolean {
     const status = row.status;
     if (!isStableSlug(templateKey) || currentSession === null || completedSessions === null) return [];
     if (status !== 'active' && status !== 'completed') return [];
-    return [{ templateKey, currentSession, completedSessions, status }];
+    const completedTimestamp = status === 'completed' ? completedAt(row.completed_at) : null;
+    if (status === 'completed' && completedTimestamp === null) return [];
+    return [{ templateKey, currentSession, completedSessions, completedTimestamp, status }];
   });
 
   const active = journeys.find((journey) => journey.status === 'active');
-  const completed = journeys.find((journey) => journey.status === 'completed');
+  const completed = journeys
+    .filter((journey) => journey.status === 'completed')
+    .sort((left, right) => (
+      right.completedTimestamp! - left.completedTimestamp!
+      || left.templateKey.localeCompare(right.templateKey)
+    ))[0];
   if (active) {
     summary.active_journey = {
       template_key: active.templateKey,
@@ -56,11 +69,14 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult): boolean {
       completed_sessions: active.completedSessions,
     };
     summary.next_action = { kind: 'continue_journey', target_key: active.templateKey };
-  } else if (completed) {
+  }
+  if (completed) {
     summary.latest_completed_journey = {
       template_key: completed.templateKey,
       completed_sessions: completed.completedSessions,
     };
+  }
+  if (!active && completed) {
     summary.next_action = { kind: 'choose_journey', target_key: 'journeys' };
   }
   return true;
@@ -105,61 +121,86 @@ function applyGatherings(summary: RhythmsSummary, result: QueryResult): boolean 
   return true;
 }
 
-function applyMilestones(summary: RhythmsSummary, result: QueryResult): boolean {
+function probeSection(result: QueryResult): boolean {
   const rows = asRows(result.data);
-  if (result.error || !rows) return false;
-  const milestones = rows.flatMap((row) => {
-    const milestone = joinedRecord(row.gamification_milestones);
-    if (!isStableSlug(milestone?.code) || !isStableSlug(milestone.asset_key)) return [];
-    return [{ code: milestone.code, asset_key: milestone.asset_key }];
-  });
-  if (milestones.length > 0) summary.unrevealed_milestones = milestones;
-  return true;
+  return !result.error && rows !== null;
 }
 
-async function querySections(userId: string, capabilities: RhythmsCapability, summary: RhythmsSummary) {
-  const supabase = createServiceClient();
+async function querySections(
+  supabase: ReturnType<typeof createServiceClient>,
+  userId: string,
+  capabilities: RhythmsCapability,
+  summary: RhythmsSummary,
+) {
   if (capabilities.journey_v2 || capabilities.long_journeys) {
-    const result = await supabase
-      .from('user_journeys')
-      .select('status, current_day, total_completed_days, journey_templates!inner(slug)')
-      .eq('user_id', userId) as QueryResult;
-    if (!applyJourneys(summary, result)) {
-      logSectionFailure('journeys', result.error);
+    let available = false;
+    try {
+      const result = await supabase
+        .from('user_journeys')
+        .select('status, current_day, total_completed_days, completed_at, journey_templates!inner(slug)')
+        .eq('user_id', userId) as QueryResult;
+      available = applyJourneys(summary, result);
+      if (!available) logSectionFailure('journeys', result.error);
+    } catch (error) {
+      logSectionFailure('journeys', error);
+    }
+    if (!available) {
       capabilities.journey_v2 = false;
       capabilities.long_journeys = false;
     }
   }
   if (capabilities.practices) {
-    const result = await supabase
-      .from('user_practices')
-      .select('practice_code, weekly_target, status, practice_definitions!inner(code)')
-      .eq('user_id', userId) as QueryResult;
-    if (!applyPractices(summary, result)) {
-      logSectionFailure('practices', result.error);
-      capabilities.practices = false;
+    let available = false;
+    try {
+      const result = await supabase
+        .from('user_practices')
+        .select('practice_code, weekly_target, status, practice_definitions!inner(code)')
+        .eq('user_id', userId) as QueryResult;
+      available = applyPractices(summary, result);
+      if (!available) logSectionFailure('practices', result.error);
+    } catch (error) {
+      logSectionFailure('practices', error);
     }
+    if (!available) capabilities.practices = false;
   }
   if (capabilities.gatherings) {
-    const result = await supabase
-      .from('user_gathering_progress')
-      .select('current_step, status, gathering_templates!inner(slug)')
-      .eq('user_id', userId) as QueryResult;
-    if (!applyGatherings(summary, result)) {
-      logSectionFailure('gatherings', result.error);
-      capabilities.gatherings = false;
+    let available = false;
+    try {
+      const result = await supabase
+        .from('user_gathering_progress')
+        .select('current_step, status, gathering_templates!inner(slug)')
+        .eq('user_id', userId) as QueryResult;
+      available = applyGatherings(summary, result);
+      if (!available) logSectionFailure('gatherings', result.error);
+    } catch (error) {
+      logSectionFailure('gatherings', error);
     }
+    if (!available) capabilities.gatherings = false;
   }
   if (capabilities.social_badges) {
-    const result = await supabase
-      .from('user_milestones')
-      .select('gamification_milestones!inner(code, asset_key)')
-      .eq('user_id', userId) as QueryResult;
-    if (!applyMilestones(summary, result)) {
-      logSectionFailure('milestones', result.error);
-      capabilities.social_badges = false;
+    let available = false;
+    try {
+      const result = await supabase
+        .from('user_featured_milestones')
+        .select('position')
+        .eq('user_id', userId) as QueryResult;
+      available = probeSection(result);
+      if (!available) logSectionFailure('milestones', result.error);
+    } catch (error) {
+      logSectionFailure('milestones', error);
     }
+    if (!available) capabilities.social_badges = false;
   }
+}
+
+function disableAll(capabilities: RhythmsCapability, summary: RhythmsSummary) {
+  const enabled = Object.keys(capabilities) as Array<keyof RhythmsCapability>;
+  for (const key of enabled) capabilities[key] = false;
+  delete summary.active_journey;
+  delete summary.latest_completed_journey;
+  delete summary.practices;
+  delete summary.current_gathering;
+  delete summary.next_action;
 }
 
 export async function loadRhythmsSummary(userId: string, _locale: string): Promise<RhythmsSummary> {
@@ -167,21 +208,17 @@ export async function loadRhythmsSummary(userId: string, _locale: string): Promi
   const summary = baseRhythmsSummary(capabilities);
   if (!Object.values(capabilities).some(Boolean)) return summary;
 
+  let supabase: ReturnType<typeof createServiceClient>;
   try {
-    await querySections(userId, capabilities, summary);
+    supabase = createServiceClient();
   } catch {
-    // A client initialization failure has no safe section attribution; fail closed for enabled sections.
-    const enabled = Object.keys(capabilities) as Array<keyof RhythmsCapability>;
-    for (const key of enabled) capabilities[key] = false;
+    disableAll(capabilities, summary);
     console.error('[rhythms-summary]', {
       route: 'rhythms_summary', stage: 'summary', code: 'database_unavailable',
     });
-    delete summary.active_journey;
-    delete summary.latest_completed_journey;
-    delete summary.practices;
-    delete summary.current_gathering;
-    delete summary.unrevealed_milestones;
-    delete summary.next_action;
+    return summary;
   }
+
+  await querySections(supabase, userId, capabilities, summary);
   return summary;
 }

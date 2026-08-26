@@ -12,15 +12,15 @@ function noStore(response: Response) {
 }
 
 export async function GET(request: Request) {
-  const access = await requireActiveSubscription();
-  if ('response' in access) return noStore(access.response);
-
-  const parsed = parseQuery(querySchema, {
-    lang: new URL(request.url).searchParams.get('lang') ?? undefined,
-  });
-  if ('error' in parsed) return noStore(fail('Invalid request input', 400, { code: 'invalid_locale' }));
-
   try {
+    const access = await requireActiveSubscription();
+    if ('response' in access) return noStore(access.response);
+
+    const parsed = parseQuery(querySchema, {
+      lang: new URL(request.url).searchParams.get('lang') ?? undefined,
+    });
+    if ('error' in parsed) return noStore(fail('Invalid request input', 400, { code: 'invalid_locale' }));
+
     return noStore(ok(await loadRhythmsSummary(access.userId, parsed.data.lang ?? 'en')));
   } catch {
     return noStore(fail('Could not load Rhythms summary', 503, { code: 'rhythms_unavailable' }));
