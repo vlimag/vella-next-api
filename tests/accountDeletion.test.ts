@@ -147,6 +147,58 @@ describe('account media deletion', () => {
     );
   });
 
+  it('deletes only the requested account Rhythms rows in dependency order', async () => {
+    const userId = '11111111-1111-1111-1111-111111111111';
+    const anotherUserId = '22222222-2222-2222-2222-222222222222';
+    const { client, deleteCalls } = mockClient([]);
+
+    await expect(deleteUserApplicationData(client as never, userId)).resolves.toEqual({});
+
+    const rhythmsCalls = deleteCalls.filter(({ table }) => [
+      'user_featured_milestones',
+      'user_gathering_progress',
+      'practice_sessions',
+      'user_practices',
+    ].includes(table));
+    expect(rhythmsCalls).toEqual([
+      { table: 'user_featured_milestones', column: 'user_id', value: userId },
+      { table: 'user_gathering_progress', column: 'user_id', value: userId },
+      { table: 'practice_sessions', column: 'user_id', value: userId },
+      { table: 'user_practices', column: 'user_id', value: userId },
+    ]);
+    expect(deleteCalls.some(({ value }) => value === anotherUserId)).toBe(false);
+  });
+
+  it.each([
+    ['PGRST205', "Could not find the table 'faith_harbor.practice_sessions' in the schema cache"],
+    ['42P01', 'relation "faith_harbor.practice_sessions" does not exist'],
+  ])('keeps deletion available before a Rhythms table exists (%s)', async (code, message) => {
+    const userId = '11111111-1111-1111-1111-111111111111';
+    const { client, deleteCalls } = mockClient([], null, {
+      practice_sessions: { code, message },
+    });
+
+    await expect(deleteUserApplicationData(client as never, userId)).resolves.toEqual({});
+    expect(deleteCalls).toContainEqual({ table: 'profiles', column: 'id', value: userId });
+  });
+
+  it.each([
+    ['PGRST205', "Could not find the table 'faith_harbor.unrelated_table' in the schema cache"],
+    ['42P01', 'relation "faith_harbor.unrelated_table" does not exist'],
+    ['42501', 'permission denied for table practice_sessions'],
+  ])('does not hide non-Rhythms missing-relation or permission errors (%s)', async (code, message) => {
+    const userId = '11111111-1111-1111-1111-111111111111';
+    const { client, deleteCalls } = mockClient([], null, {
+      practice_sessions: { code, message },
+    });
+
+    await expect(deleteUserApplicationData(client as never, userId)).resolves.toEqual({
+      error: `Could not delete practice_sessions.user_id: ${message}`,
+    });
+    expect(deleteCalls).toContainEqual({ table: 'practice_sessions', column: 'user_id', value: userId });
+    expect(deleteCalls.some(({ table }) => table === 'user_practices')).toBe(false);
+  });
+
   it.each([
     [
       'PGRST205',

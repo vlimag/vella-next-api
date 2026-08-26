@@ -32,6 +32,12 @@ const USER_ROW_DELETE_TARGETS = [
   { table: 'group_plan_assignments', column: 'assigned_by_user_id' },
   { table: 'group_members', column: 'user_id' },
   { table: 'groups', column: 'owner_user_id' },
+  // Delete Rhythms dependencies before user_milestones and their shared catalog
+  // references. These tables are optional only during the additive rollout.
+  { table: 'user_featured_milestones', column: 'user_id' },
+  { table: 'user_gathering_progress', column: 'user_id' },
+  { table: 'practice_sessions', column: 'user_id' },
+  { table: 'user_practices', column: 'user_id' },
   { table: 'user_milestones', column: 'user_id' },
   { table: 'user_journeys', column: 'user_id' },
   { table: 'user_plan_progress', column: 'user_id' },
@@ -55,10 +61,20 @@ const USER_ROW_SET_NULL_TARGETS = [
   { table: 'iap_client_events', column: 'user_id' },
 ] as const;
 
+const OPTIONAL_ROLLOUT_TABLES = new Set([
+  'subscription_marketing_transitions',
+  'growth_install_profile_links',
+  'user_featured_milestones',
+  'user_gathering_progress',
+  'practice_sessions',
+  'user_practices',
+]);
+
 function optionalMigrationTableIsNotInstalled(
   error: { code?: string; message?: string } | null,
-  table: 'subscription_marketing_transitions' | 'growth_install_profile_links',
+  table: string,
 ): boolean {
+  if (!OPTIONAL_ROLLOUT_TABLES.has(table)) return false;
   const message = error?.message ?? '';
   const target = `faith_harbor.${table}`;
   if (!message.includes(target)) return false;
@@ -170,11 +186,7 @@ export async function deleteUserApplicationData(
       .update({ [target.column]: null })
       .eq(target.column, userId);
 
-    if (
-      error &&
-      target.table === 'subscription_marketing_transitions' &&
-      optionalMigrationTableIsNotInstalled(error, 'subscription_marketing_transitions')
-    ) {
+    if (error && optionalMigrationTableIsNotInstalled(error, target.table)) {
       continue;
     }
     if (error) {
@@ -191,11 +203,7 @@ export async function deleteUserApplicationData(
       .delete()
       .eq(target.column, userId);
 
-    if (
-      error &&
-      target.table === 'growth_install_profile_links' &&
-      optionalMigrationTableIsNotInstalled(error, 'growth_install_profile_links')
-    ) {
+    if (error && optionalMigrationTableIsNotInstalled(error, target.table)) {
       continue;
     }
     if (error) {
