@@ -51,7 +51,8 @@ grant usage on schema faith_harbor to anon, authenticated, service_role;
 create table auth.users (id uuid primary key);
 create table faith_harbor.journey_templates (
   id uuid primary key,
-  duration_days integer not null
+  duration_days integer not null,
+  language_code text not null
 );
 create table faith_harbor.user_journeys (
   id uuid primary key,
@@ -65,6 +66,7 @@ create table faith_harbor.user_journeys (
   total_completed_days integer not null default 0,
   consistency_score numeric(5,2) not null default 0,
   last_completed_on date,
+  theme_preference text,
   completed_at timestamptz,
   timezone_name text not null default 'UTC',
   updated_at timestamptz not null default now()
@@ -123,13 +125,14 @@ insert into auth.users values
   ('99999999-9999-4999-8999-999999999999'),
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccccc'),
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddddd');
 insert into faith_harbor.practice_definitions values ('guided_prayer');
 insert into faith_harbor.gamification_milestones values ('streak_3'), ('streak_7'), ('journey_finisher');
 insert into faith_harbor.journey_templates values
-  ('44444444-4444-4444-8444-444444444444', 2),
-  ('55555555-5555-4555-8555-555555555555', 3),
-  ('77777777-7777-4777-8777-777777777770', 1);
+  ('44444444-4444-4444-8444-444444444444', 2, 'en'),
+  ('55555555-5555-4555-8555-555555555555', 3, 'pt'),
+  ('77777777-7777-4777-8777-777777777770', 1, 'es');
 insert into faith_harbor.user_journeys (
   id, user_id, template_id, current_day, streak_count, best_streak,
   total_completed_days, consistency_score, last_completed_on
@@ -205,7 +208,8 @@ begin
     '2026-08-26T12:01:00Z'
   );
   reset role;
-  if replay ->> 'outcome' <> 'already_completed' then
+  if replay ->> 'outcome' <> 'already_completed'
+    or (replay ->> 'already_completed')::boolean is not true then
     raise exception 'old-payload duplicate was not idempotent';
   end if;
 
@@ -219,6 +223,7 @@ begin
   );
   reset role;
   if keyed_replay ->> 'outcome' <> 'already_completed'
+    or (keyed_replay ->> 'already_completed')::boolean is not true
     or keyed_replay::text like '%11111111-1111-4111-8111-111111111111%'
     or keyed_replay::text like '%private reflection%'
     or keyed_replay::text like '%private gratitude%' then
@@ -271,6 +276,69 @@ begin
   if mismatch ->> 'outcome' <> 'idempotency_conflict' then raise exception 'same-key gratitude mismatch was accepted'; end if;
 end
 $behavior$;
+SQL
+
+journey_psql >/dev/null <<'SQL'
+insert into faith_harbor.user_journeys (
+  id, user_id, template_id, status, current_day, streak_count, best_streak,
+  total_completed_days, consistency_score, last_completed_on, theme_preference
+) values
+  ('dddddddd-1111-4111-8111-dddddddddddd', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+   '55555555-5555-4555-8555-555555555555', 'paused', 2, 4, 4, 1, 33.33, '2026-08-25', 'peace'),
+  ('dddddddd-2222-4222-8222-dddddddddddd', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+   '55555555-5555-4555-8555-555555555555', 'abandoned', 2, 4, 4, 1, 33.33, '2026-08-25', 'trust');
+insert into faith_harbor.user_journey_daily_sessions (
+  user_journey_id, day_number, session_date, completed_at
+) values
+  ('dddddddd-1111-4111-8111-dddddddddddd', 1, '2026-08-25', '2026-08-26T12:00:00Z'),
+  ('dddddddd-2222-4222-8222-dddddddddddd', 1, '2026-08-25', '2026-08-26T12:00:00Z');
+
+do $inactive_same_day$
+declare paused_result jsonb;
+declare abandoned_result jsonb;
+begin
+  set local role service_role;
+  paused_result := faith_harbor.complete_journey_session_v2(
+    'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'dddddddd-1111-4111-8111-dddddddddddd',
+    null, null, 'UTC', '2026-08-26', '2026-08-24', null, '2026-08-26T13:00:00Z'
+  );
+  abandoned_result := faith_harbor.complete_journey_session_v2(
+    'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'dddddddd-2222-4222-8222-dddddddddddd',
+    null, null, 'UTC', '2026-08-26', '2026-08-24', null, '2026-08-26T13:00:00Z'
+  );
+  reset role;
+
+  if paused_result ->> 'outcome' <> 'inactive'
+    or (paused_result ->> 'already_completed')::boolean is not false
+    or abandoned_result ->> 'outcome' <> 'inactive'
+    or (abandoned_result ->> 'already_completed')::boolean is not false then
+    raise exception 'paused or abandoned same-day journey reported already completed';
+  end if;
+
+  if paused_result -> 'journey' ->> 'template_id' <> '55555555-5555-4555-8555-555555555555'
+    or paused_result -> 'journey' ->> 'theme_preference' <> 'peace'
+    or paused_result -> 'journey' -> 'journey_templates' <> '{"duration_days": 3, "language_code": "pt"}'::jsonb
+    or paused_result::text like '%dddddddd-dddd-4ddd-8ddd-dddddddddddd%'
+    or (paused_result -> 'journey') ? 'user_id'
+    or (paused_result -> 'journey') ? 'anonymous_profile_id' then
+    raise exception 'inactive projection did not preserve finite non-owner legacy fields';
+  end if;
+
+  if exists (
+      select 1 from faith_harbor.user_journeys
+      where id in ('dddddddd-1111-4111-8111-dddddddddddd', 'dddddddd-2222-4222-8222-dddddddddddd')
+        and (current_day <> 2 or total_completed_days <> 1 or status not in ('paused', 'abandoned'))
+    )
+    or (select count(*) from faith_harbor.user_journey_daily_sessions
+        where user_journey_id in ('dddddddd-1111-4111-8111-dddddddddddd', 'dddddddd-2222-4222-8222-dddddddddddd')) <> 2
+    or (select count(*) from faith_harbor.practice_sessions
+        where user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd') <> 0
+    or (select count(*) from faith_harbor.user_milestones
+        where user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd') <> 0 then
+    raise exception 'inactive same-day call mutated completion facts';
+  end if;
+end
+$inactive_same_day$;
 SQL
 
 journey_psql -At -c "
@@ -467,6 +535,7 @@ begin
   reset role;
   if first_completion ->> 'outcome' <> 'completed'
     or shifted_retry ->> 'outcome' <> 'already_completed'
+    or (shifted_retry ->> 'already_completed')::boolean is not true
     or later_completion ->> 'outcome' <> 'completed'
     or (select total_completed_days from faith_harbor.user_journeys where id = '88888888-8888-4888-8888-888888888888') <> 2
     or (select count(*) from faith_harbor.practice_sessions where user_id = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb') <> 2 then
@@ -489,6 +558,7 @@ begin
   reset role;
   if first_completion ->> 'outcome' <> 'completed'
     or shifted_retry ->> 'outcome' <> 'already_completed'
+    or (shifted_retry ->> 'already_completed')::boolean is not true
     or later_completion ->> 'outcome' <> 'completed'
     or (select total_completed_days from faith_harbor.user_journeys where id = 'aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa') <> 2
     or (select count(*) from faith_harbor.practice_sessions where user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc') <> 2 then

@@ -5,6 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const JOURNEY_ID = '22222222-2222-4222-8222-222222222222';
 const IDEMPOTENCY_KEY = '33333333-3333-4333-8333-333333333333';
+const TEMPLATE_ID = '44444444-4444-4444-8444-444444444444';
+
+const legacyNonOwnerJourneyFields = {
+  template_id: TEMPLATE_ID,
+  theme_preference: 'hope',
+  journey_templates: { duration_days: 7, language_code: 'en' },
+} as const;
 
 const rpcProjection = {
   outcome: 'completed',
@@ -150,6 +157,93 @@ describe('journey completion typed RPC boundary', () => {
       p_completed_at: '2026-08-26T12:00:00.000Z',
     });
     expect(result).toEqual({ ok: true, value: rpcProjection });
+  });
+
+  it('keeps bounded legacy journey fields in service output while stripping owner IDs', async () => {
+    const module = await loadCompletionModule();
+    const projection = {
+      ...rpcProjection,
+      outcome: 'already_completed',
+      completed: false,
+      already_completed: true,
+      journey: {
+        ...rpcProjection.journey,
+        ...legacyNonOwnerJourneyFields,
+        user_id: USER_ID,
+        anonymous_profile_id: '99999999-9999-4999-8999-999999999999',
+      },
+    };
+
+    const result = await module.completeJourneySession!({
+      rpc: vi.fn(async () => ({ data: projection, error: null })),
+    }, {
+      userId: USER_ID,
+      journeyId: JOURNEY_ID,
+      timezoneName: 'UTC',
+      localDay: '2026-08-26',
+      localWeekStart: '2026-08-24',
+      completedAt: '2026-08-26T12:00:00.000Z',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        ...projection,
+        journey: {
+          ...rpcProjection.journey,
+          ...legacyNonOwnerJourneyFields,
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('user_id');
+    expect(JSON.stringify(result)).not.toContain('anonymous_profile_id');
+    expect(JSON.stringify(result)).not.toContain(USER_ID);
+  });
+
+  it.each([
+    {
+      name: 'an oversized theme preference',
+      journey: { ...rpcProjection.journey, ...legacyNonOwnerJourneyFields, theme_preference: 'x'.repeat(65) },
+    },
+    {
+      name: 'an oversized template language code',
+      journey: {
+        ...rpcProjection.journey,
+        ...legacyNonOwnerJourneyFields,
+        journey_templates: { duration_days: 7, language_code: 'x'.repeat(17) },
+      },
+    },
+    {
+      name: 'a template duration above the PostgreSQL integer bound',
+      journey: {
+        ...rpcProjection.journey,
+        ...legacyNonOwnerJourneyFields,
+        journey_templates: { duration_days: 2_147_483_648, language_code: 'en' },
+      },
+    },
+  ])('rejects $name in legacy journey fields', async ({ journey }) => {
+    const module = await loadCompletionModule();
+    const result = await module.completeJourneySession!({
+      rpc: vi.fn(async () => ({
+        data: {
+          ...rpcProjection,
+          outcome: 'already_completed',
+          completed: false,
+          already_completed: true,
+          journey,
+        },
+        error: null,
+      })),
+    }, {
+      userId: USER_ID,
+      journeyId: JOURNEY_ID,
+      timezoneName: 'UTC',
+      localDay: '2026-08-26',
+      localWeekStart: '2026-08-24',
+      completedAt: '2026-08-26T12:00:00.000Z',
+    });
+
+    expect(result).toEqual({ ok: false, code: 'invalid_response' });
   });
 
   it('maps raw database failures to a finite error without leaking details', async () => {
@@ -396,36 +490,86 @@ describe('journey completion typed RPC boundary', () => {
 
   it.each([
     {
-      name: 'already-completed',
-      projection: { ...rpcProjection, outcome: 'already_completed', completed: false, already_completed: true },
+      name: 'active same-day/already-completed',
+      projection: {
+        ...rpcProjection,
+        outcome: 'already_completed',
+        completed: false,
+        already_completed: true,
+        journey: { ...rpcProjection.journey, ...legacyNonOwnerJourneyFields, status: 'active' },
+      },
       expected: {
         alreadyCompleted: true,
-        journey: rpcProjection.journey,
-        milestones: rpcProjection.milestones,
-        practice_credits: rpcProjection.practice_credits,
-        newly_earned_milestones: rpcProjection.newly_earned_milestones,
-        local_day: rpcProjection.local_day,
+        journey: {
+          ...rpcProjection.journey,
+          ...legacyNonOwnerJourneyFields,
+          status: 'active',
+          user_id: USER_ID,
+          anonymous_profile_id: null,
+        },
       },
     },
     {
-      name: 'inactive',
+      name: 'completed',
+      projection: {
+        ...rpcProjection,
+        outcome: 'already_completed',
+        completed: false,
+        already_completed: true,
+        journey: { ...rpcProjection.journey, ...legacyNonOwnerJourneyFields, status: 'completed' },
+      },
+      expected: {
+        alreadyCompleted: true,
+        journey: {
+          ...rpcProjection.journey,
+          ...legacyNonOwnerJourneyFields,
+          status: 'completed',
+          user_id: USER_ID,
+          anonymous_profile_id: null,
+        },
+      },
+    },
+    {
+      name: 'paused',
       projection: {
         ...rpcProjection,
         outcome: 'inactive',
         completed: false,
         already_completed: false,
-        journey: { ...rpcProjection.journey, status: 'paused' },
+        journey: { ...rpcProjection.journey, ...legacyNonOwnerJourneyFields, status: 'paused' },
       },
       expected: {
         alreadyCompleted: false,
-        journey: { ...rpcProjection.journey, status: 'paused' },
-        milestones: rpcProjection.milestones,
-        practice_credits: rpcProjection.practice_credits,
-        newly_earned_milestones: rpcProjection.newly_earned_milestones,
-        local_day: rpcProjection.local_day,
+        journey: {
+          ...rpcProjection.journey,
+          ...legacyNonOwnerJourneyFields,
+          status: 'paused',
+          user_id: USER_ID,
+          anonymous_profile_id: null,
+        },
       },
     },
-  ])('returns the exact previous-client $name payload', async ({ projection, expected }) => {
+    {
+      name: 'abandoned/inactive',
+      projection: {
+        ...rpcProjection,
+        outcome: 'inactive',
+        completed: false,
+        already_completed: false,
+        journey: { ...rpcProjection.journey, ...legacyNonOwnerJourneyFields, status: 'abandoned' },
+      },
+      expected: {
+        alreadyCompleted: false,
+        journey: {
+          ...rpcProjection.journey,
+          ...legacyNonOwnerJourneyFields,
+          status: 'abandoned',
+          user_id: USER_ID,
+          anonymous_profile_id: null,
+        },
+      },
+    },
+  ])('returns the exact base-compatible previous-client $name payload', async ({ projection, expected }) => {
     mocks.createServiceClient.mockReturnValue(clientWithRpc({ data: projection, error: null }));
 
     const { response, json } = await post({ journey_id: JOURNEY_ID });

@@ -75,7 +75,14 @@ export async function POST(req: Request) {
   };
 
   if (result.value.outcome !== 'completed') {
-    return noStore(ok({ alreadyCompleted: result.value.already_completed, ...projection }));
+    return noStore(ok({
+      alreadyCompleted: result.value.already_completed,
+      journey: {
+        ...result.value.journey,
+        user_id: access.userId,
+        anonymous_profile_id: null,
+      },
+    }));
   }
 
   return noStore(ok({ completed: true, ...projection }));

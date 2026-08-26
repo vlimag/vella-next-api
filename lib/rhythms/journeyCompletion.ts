@@ -4,9 +4,14 @@ const isoDate = z.string().date();
 const milestoneCode = z.string()
   .max(64)
   .regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/);
+const legacyJourneyTemplate = z.object({
+  duration_days: z.number().int().positive().max(2_147_483_647),
+  language_code: z.string().min(1).max(16),
+});
 
 const journeyState = z.object({
   id: z.string().uuid(),
+  template_id: z.string().uuid().optional(),
   status: z.enum(['active', 'paused', 'completed', 'abandoned']),
   current_day: z.number().int().positive(),
   streak_count: z.number().int().nonnegative(),
@@ -14,6 +19,8 @@ const journeyState = z.object({
   total_completed_days: z.number().int().nonnegative(),
   consistency_score: z.number().min(0).max(100),
   last_completed_on: isoDate.nullable(),
+  theme_preference: z.string().max(64).nullable().optional(),
+  journey_templates: legacyJourneyTemplate.optional(),
 });
 
 const completionProjection = z.object({
