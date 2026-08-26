@@ -9,25 +9,25 @@ const legacyJourneyTemplate = z.object({
   language_code: z.string().min(1).max(16),
 });
 
-const journeyState = z.object({
+const coreJourneyState = z.object({
   id: z.string().uuid(),
-  template_id: z.string().uuid().optional(),
-  status: z.enum(['active', 'paused', 'completed', 'abandoned']),
+  status: z.enum(['active', 'completed']),
   current_day: z.number().int().positive(),
   streak_count: z.number().int().nonnegative(),
   best_streak: z.number().int().nonnegative(),
   total_completed_days: z.number().int().nonnegative(),
   consistency_score: z.number().min(0).max(100),
   last_completed_on: isoDate.nullable(),
-  theme_preference: z.string().max(64).nullable().optional(),
-  journey_templates: legacyJourneyTemplate.optional(),
 });
 
-const completionProjection = z.object({
-  outcome: z.enum(['completed', 'already_completed', 'inactive']),
-  completed: z.boolean(),
-  already_completed: z.boolean(),
-  journey: journeyState,
+const legacyJourneyState = coreJourneyState.extend({
+  template_id: z.string().uuid(),
+  status: z.enum(['active', 'paused', 'completed', 'abandoned']),
+  theme_preference: z.string().max(64).nullable(),
+  journey_templates: legacyJourneyTemplate,
+});
+
+const completionFacts = {
   milestones: z.array(z.object({
     milestone_code: milestoneCode,
     earned_at: z.string().datetime({ offset: true }),
@@ -35,10 +35,32 @@ const completionProjection = z.object({
   practice_credits: z.array(z.literal('guided_prayer')).max(1),
   newly_earned_milestones: z.array(milestoneCode).max(32),
   local_day: isoDate,
-});
+};
 
-const finiteOutcome = z.union([
-  completionProjection,
+const finiteOutcome = z.discriminatedUnion('outcome', [
+  z.object({
+    outcome: z.literal('completed'),
+    completed: z.literal(true),
+    already_completed: z.literal(false),
+    journey: coreJourneyState,
+    ...completionFacts,
+  }),
+  z.object({
+    outcome: z.literal('already_completed'),
+    completed: z.literal(false),
+    already_completed: z.literal(true),
+    journey: legacyJourneyState,
+    ...completionFacts,
+  }),
+  z.object({
+    outcome: z.literal('inactive'),
+    completed: z.literal(false),
+    already_completed: z.literal(false),
+    journey: legacyJourneyState.extend({
+      status: z.enum(['paused', 'abandoned']),
+    }),
+    ...completionFacts,
+  }),
   z.object({ outcome: z.literal('not_found') }),
   z.object({ outcome: z.literal('idempotency_conflict') }),
   z.object({ outcome: z.literal('invalid_request') }),

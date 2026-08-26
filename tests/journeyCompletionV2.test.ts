@@ -88,6 +88,21 @@ async function loadCompletionModule(): Promise<CompletionModule> {
   return import(completionModulePath).catch(() => ({}));
 }
 
+async function completeProjection(data: unknown) {
+  const module = await loadCompletionModule();
+  expect(typeof module.completeJourneySession).toBe('function');
+  return module.completeJourneySession!({
+    rpc: vi.fn(async () => ({ data, error: null })),
+  }, {
+    userId: USER_ID,
+    journeyId: JOURNEY_ID,
+    timezoneName: 'UTC',
+    localDay: '2026-08-26',
+    localWeekStart: '2026-08-24',
+    completedAt: '2026-08-26T12:00:00.000Z',
+  });
+}
+
 function completionMigration() {
   const directory = path.resolve(process.cwd(), '../supabase/migrations');
   const matches = fs.readdirSync(directory)
@@ -156,6 +171,182 @@ describe('journey completion typed RPC boundary', () => {
       p_idempotency_key: IDEMPOTENCY_KEY,
       p_completed_at: '2026-08-26T12:00:00.000Z',
     });
+    expect(result).toEqual({ ok: true, value: rpcProjection });
+  });
+
+  it.each([
+    { outcome: 'completed', completed: false, already_completed: false, status: 'active' },
+    { outcome: 'completed', completed: false, already_completed: true, status: 'active' },
+    { outcome: 'completed', completed: true, already_completed: true, status: 'active' },
+    { outcome: 'already_completed', completed: false, already_completed: false, status: 'active' },
+    { outcome: 'already_completed', completed: true, already_completed: false, status: 'active' },
+    { outcome: 'already_completed', completed: true, already_completed: true, status: 'active' },
+    { outcome: 'inactive', completed: false, already_completed: true, status: 'paused' },
+    { outcome: 'inactive', completed: true, already_completed: false, status: 'paused' },
+    { outcome: 'inactive', completed: true, already_completed: true, status: 'paused' },
+  ])(
+    'rejects outcome=$outcome with completed=$completed and already_completed=$already_completed',
+    async ({ outcome, completed, already_completed, status }) => {
+      const result = await completeProjection({
+        ...rpcProjection,
+        outcome,
+        completed,
+        already_completed,
+        journey: {
+          ...rpcProjection.journey,
+          ...legacyNonOwnerJourneyFields,
+          status,
+        },
+      });
+
+      expect(result).toEqual({ ok: false, code: 'invalid_response' });
+    },
+  );
+
+  it.each([
+    { outcome: 'completed', completed: true, already_completed: false, status: 'paused' },
+    { outcome: 'completed', completed: true, already_completed: false, status: 'abandoned' },
+    { outcome: 'inactive', completed: false, already_completed: false, status: 'active' },
+    { outcome: 'inactive', completed: false, already_completed: false, status: 'completed' },
+  ])('rejects invalid outcome=$outcome with journey status=$status', async ({
+    outcome,
+    completed,
+    already_completed,
+    status,
+  }) => {
+    const result = await completeProjection({
+      ...rpcProjection,
+      outcome,
+      completed,
+      already_completed,
+      journey: {
+        ...rpcProjection.journey,
+        ...legacyNonOwnerJourneyFields,
+        status,
+      },
+    });
+
+    expect(result).toEqual({ ok: false, code: 'invalid_response' });
+  });
+
+  it.each([
+    { outcome: 'completed', completed: true, already_completed: false, status: 'active' },
+    { outcome: 'completed', completed: true, already_completed: false, status: 'completed' },
+    { outcome: 'already_completed', completed: false, already_completed: true, status: 'active' },
+    { outcome: 'already_completed', completed: false, already_completed: true, status: 'completed' },
+    { outcome: 'already_completed', completed: false, already_completed: true, status: 'paused' },
+    { outcome: 'already_completed', completed: false, already_completed: true, status: 'abandoned' },
+    { outcome: 'inactive', completed: false, already_completed: false, status: 'paused' },
+    { outcome: 'inactive', completed: false, already_completed: false, status: 'abandoned' },
+  ])('accepts outcome=$outcome with journey status=$status', async ({
+    outcome,
+    completed,
+    already_completed,
+    status,
+  }) => {
+    const result = await completeProjection({
+      ...rpcProjection,
+      outcome,
+      completed,
+      already_completed,
+      journey: {
+        ...rpcProjection.journey,
+        ...(outcome === 'completed' ? {} : legacyNonOwnerJourneyFields),
+        status,
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      value: { outcome, completed, already_completed, journey: { status } },
+    });
+  });
+
+  it.each([
+    {
+      outcome: 'already_completed', completed: false, already_completed: true, status: 'active',
+      missing: 'template_id',
+    },
+    {
+      outcome: 'already_completed', completed: false, already_completed: true, status: 'active',
+      missing: 'theme_preference',
+    },
+    {
+      outcome: 'already_completed', completed: false, already_completed: true, status: 'active',
+      missing: 'journey_templates',
+    },
+    {
+      outcome: 'inactive', completed: false, already_completed: false, status: 'paused',
+      missing: 'template_id',
+    },
+    {
+      outcome: 'inactive', completed: false, already_completed: false, status: 'paused',
+      missing: 'theme_preference',
+    },
+    {
+      outcome: 'inactive', completed: false, already_completed: false, status: 'paused',
+      missing: 'journey_templates',
+    },
+  ])('requires $missing for outcome=$outcome', async ({
+    outcome,
+    completed,
+    already_completed,
+    status,
+    missing,
+  }) => {
+    const journey: Record<string, unknown> = {
+      ...rpcProjection.journey,
+      ...legacyNonOwnerJourneyFields,
+      status,
+    };
+    delete journey[missing];
+
+    const result = await completeProjection({
+      ...rpcProjection,
+      outcome,
+      completed,
+      already_completed,
+      journey,
+    });
+
+    expect(result).toEqual({ ok: false, code: 'invalid_response' });
+  });
+
+  it.each([
+    { outcome: 'already_completed', completed: false, already_completed: true, status: 'active' },
+    { outcome: 'inactive', completed: false, already_completed: false, status: 'paused' },
+  ])('preserves nullable theme_preference for outcome=$outcome', async ({
+    outcome,
+    completed,
+    already_completed,
+    status,
+  }) => {
+    const result = await completeProjection({
+      ...rpcProjection,
+      outcome,
+      completed,
+      already_completed,
+      journey: {
+        ...rpcProjection.journey,
+        ...legacyNonOwnerJourneyFields,
+        theme_preference: null,
+        status,
+      },
+    });
+
+    expect(result).toMatchObject({ ok: true, value: { journey: { theme_preference: null } } });
+  });
+
+  it('strips legacy journey fields from a completed outcome', async () => {
+    const result = await completeProjection({
+      ...rpcProjection,
+      journey: {
+        ...rpcProjection.journey,
+        ...legacyNonOwnerJourneyFields,
+        future_journey_field: true,
+      },
+    });
+
     expect(result).toEqual({ ok: true, value: rpcProjection });
   });
 
