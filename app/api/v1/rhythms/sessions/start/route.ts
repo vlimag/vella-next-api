@@ -1,0 +1,71 @@
+import { fail, ok } from '@/lib/http';
+import { canonicalTimeZone } from '@/lib/rhythms/practices';
+import {
+  startDirectPracticeSession,
+  startPracticeSessionInputSchema,
+  type PracticeSessionClient,
+} from '@/lib/rhythms/practiceSessions';
+import { localDateKey, localWeekStart } from '@/lib/rhythms/time';
+import { createServiceClient } from '@/lib/supabase';
+import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+
+function noStore(response: Response) {
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
+}
+
+function invalidRequest() {
+  return noStore(fail('Invalid session request', 400, { code: 'invalid_session_request' }));
+}
+
+export async function POST(request: Request) {
+  const access = await requireActiveSubscription();
+  if ('response' in access) return noStore(access.response);
+
+  let rawBody: unknown;
+  try {
+    rawBody = await request.json();
+  } catch {
+    return invalidRequest();
+  }
+  const parsed = startPracticeSessionInputSchema.safeParse(rawBody);
+  if (!parsed.success) return invalidRequest();
+  const timezone = canonicalTimeZone(parsed.data.timezone_name);
+  if (!timezone) return invalidRequest();
+
+  const now = new Date();
+  try {
+    const client = createServiceClient() as unknown as PracticeSessionClient;
+    const result = await startDirectPracticeSession(client, {
+      userId: access.userId,
+      practiceCode: parsed.data.practice_code,
+      idempotencyKey: parsed.data.idempotency_key,
+      timezoneName: timezone,
+      localDay: localDateKey(now, timezone),
+      localWeekStart: localWeekStart(now, timezone),
+      startedAt: now.toISOString(),
+    });
+    if (!result.ok) {
+      console.error('[practice-sessions]', {
+        route: 'practice_session_start', stage: 'rpc', code: result.code,
+      });
+      return noStore(fail('Could not start practice session', 503, { code: 'practice_session_unavailable' }));
+    }
+    if (result.value.outcome === 'practice_unavailable') {
+      return noStore(fail('Practice is not available in this weekly rhythm', 409, { code: 'practice_unavailable' }));
+    }
+    if (result.value.outcome === 'idempotency_conflict') {
+      return noStore(fail('Session request conflicts with an earlier operation', 409, { code: 'session_completion_conflict' }));
+    }
+    if (result.value.outcome === 'invalid_request') return invalidRequest();
+    if (result.value.outcome === 'cancelled') {
+      return noStore(fail('Practice session was cancelled', 409, { code: 'session_cancelled' }));
+    }
+    return noStore(ok(result.value));
+  } catch {
+    console.error('[practice-sessions]', {
+      route: 'practice_session_start', stage: 'rpc', code: 'database_unavailable',
+    });
+    return noStore(fail('Could not start practice session', 503, { code: 'practice_session_unavailable' }));
+  }
+}

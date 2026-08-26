@@ -12,6 +12,7 @@
     "test": "vitest run",
     "test:rhythms:postgres": "tests/rhythmsTelemetryPostgres.integration.sh",
     "test:practices:postgres": "tests/rhythmPracticesPostgres.integration.sh",
+    "test:practice-sessions:postgres": "tests/practiceSessionsPostgres.integration.sh",
     "validate:site": "vitest run tests/site.test.ts",
     "corpus:import:webp": "node --env-file=.env scripts/import-approved-webp-corpus.mjs",
     "stripe:setup": "node --env-file=.env scripts/setup-stripe.mjs"
