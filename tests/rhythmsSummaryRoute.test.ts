@@ -30,6 +30,7 @@ import {
 
 const USER_ID = '11111111-1111-4111-8111-111111111111';
 const PRIVATE_UUID = '22222222-2222-4222-8222-222222222222';
+const PAUSED_JOURNEY_ID = '33333333-3333-4333-8333-333333333333';
 
 const FUTURE_SCHEMA_V1_SUMMARY: RhythmsSummary = {
   schema_version: 1,
@@ -449,6 +450,7 @@ describe('Vella Rhythms summary capability boundary', () => {
       user_journeys: {
         data: [
           {
+            id: PAUSED_JOURNEY_ID,
             status: 'paused', current_day: 3, total_completed_days: 2,
             paused_at: '2026-08-20T00:00:00.000Z', timezone_name: 'America/Sao_Paulo',
             journey_templates: { slug: 'paused-path' },
@@ -470,12 +472,58 @@ describe('Vella Rhythms summary capability boundary', () => {
     expect(json.data.active_journey).toBeUndefined();
     expect(json.data.latest_completed_journey).toEqual({ template_key: 'legacy-path', completed_sessions: 7 });
     expect(json.data.paused_journey).toEqual({
+      journey_id: PAUSED_JOURNEY_ID,
       template_key: 'paused-path', current_session: 3, completed_sessions: 2,
       paused_at: '2026-08-20T00:00:00.000Z', timezone_name: 'America/Sao_Paulo',
     });
     expect(json.data.next_journey_recommendation).toEqual({
       template_slug: 'daily-faith-journey', reason_code: 'next_available',
     });
+  });
+
+  it('fails the paused projection closed when its authoritative journey id is malformed', async () => {
+    vi.stubEnv('VELLA_RHYTHMS_PHASE', 'journey_v2');
+    mocks.client = summaryClient({
+      user_journeys: {
+        data: [{
+          id: 'not-a-uuid', status: 'paused', current_day: 3, total_completed_days: 2,
+          paused_at: '2026-08-20T00:00:00.000Z', timezone_name: 'America/Sao_Paulo',
+          journey_templates: { slug: 'paused-path' },
+        }],
+        error: null,
+      },
+    });
+
+    const { response, json } = await get();
+
+    expect(response.status).toBe(200);
+    expectNoStore(response);
+    expect(json.data).not.toHaveProperty('paused_journey');
+    expect(JSON.stringify(json)).not.toContain('not-a-uuid');
+  });
+
+  it('selects the journey id only inside the existing owned summary query', async () => {
+    vi.stubEnv('VELLA_RHYTHMS_PHASE', 'journey_v2');
+    const selectCalls: Array<{ table: string; fields: unknown }> = [];
+    const client = summaryClient({ user_journeys: { data: [], error: null } });
+    const from = vi.fn((table: string) => {
+      const query = client.from(table) as Record<string, unknown>;
+      const select = query.select as ReturnType<typeof vi.fn>;
+      query.select = vi.fn((fields: unknown) => {
+        selectCalls.push({ table, fields });
+        return select(fields);
+      });
+      return query;
+    });
+    mocks.client = { from };
+
+    const { response } = await get();
+
+    expect(response.status).toBe(200);
+    expect(selectCalls.filter(({ table }) => table === 'user_journeys')).toEqual([{
+      table: 'user_journeys',
+      fields: 'id, status, current_day, total_completed_days, completed_at, paused_at, timezone_name, journey_templates!inner(slug)',
+    }]);
   });
 
   it('forwards the validated summary locale to deterministic recommendation eligibility', async () => {

@@ -1,4 +1,5 @@
 import { createServiceClient } from '@/lib/supabase';
+import { z } from 'zod';
 import { resolveRhythmsCapabilities, type RhythmsCapability } from '@/lib/rhythms/capabilities';
 import {
   baseRhythmsSummary,
@@ -11,6 +12,7 @@ import { recommendNextJourney } from '@/lib/rhythms/journeyRecommendations';
 
 type QueryResult = { data: unknown; error: unknown };
 type SummarySection = 'journeys' | 'practices' | 'gatherings' | 'milestones';
+const uuidSchema = z.string().uuid();
 
 function safeFailureCode(_error: unknown): 'database_unavailable' {
   return 'database_unavailable';
@@ -59,8 +61,11 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult, locale: str
     if (status === 'completed' && completedTimestamp === null) return [];
     const pausedAt = status === 'paused' ? completedAt(row.paused_at) : null;
     const timezoneName = status === 'paused' && validTimezone(row.timezone_name) ? row.timezone_name : null;
-    if (status === 'paused' && (pausedAt === null || timezoneName === null)) return [];
-    return [{ templateKey, currentSession, completedSessions, completedTimestamp, pausedAt, timezoneName, status }];
+    const journeyId = status === 'paused' && typeof row.id === 'string' && uuidSchema.safeParse(row.id).success
+      ? row.id
+      : null;
+    if (status === 'paused' && (journeyId === null || pausedAt === null || timezoneName === null)) return [];
+    return [{ journeyId, templateKey, currentSession, completedSessions, completedTimestamp, pausedAt, timezoneName, status }];
   });
 
   const active = journeys.find((journey) => journey.status === 'active');
@@ -89,6 +94,7 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult, locale: str
     .sort((left, right) => right.pausedAt! - left.pausedAt! || left.templateKey.localeCompare(right.templateKey))[0];
   if (paused) {
     summary.paused_journey = {
+      journey_id: paused.journeyId!,
       template_key: paused.templateKey,
       current_session: paused.currentSession,
       completed_sessions: paused.completedSessions,
@@ -166,7 +172,7 @@ async function querySections(
     try {
       const result = await supabase
         .from('user_journeys')
-        .select('status, current_day, total_completed_days, completed_at, paused_at, timezone_name, journey_templates!inner(slug)')
+        .select('id, status, current_day, total_completed_days, completed_at, paused_at, timezone_name, journey_templates!inner(slug)')
         .eq('user_id', userId) as QueryResult;
       available = applyJourneys(summary, result, locale);
       if (!available) logSectionFailure('journeys', result.error);

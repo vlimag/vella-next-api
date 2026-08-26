@@ -13,6 +13,7 @@ export type RhythmsSummary = {
     completed_sessions: number;
   };
   paused_journey?: {
+    journey_id: string;
     template_key: string;
     current_session: number;
     completed_sessions: number;
