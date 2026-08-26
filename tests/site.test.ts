@@ -278,6 +278,68 @@ const prayerPrivacyChecks = {
   },
 } as const;
 
+const narrationPrivacyChecks = {
+  en: {
+    aiVoice: 'AI-generated voice, not a human recording',
+    approvedContent: 'approved public Scripture text or reviewed Vella editorial content',
+    cache: 'private shared server cache and on your device',
+    excluded: 'never sends your prayers, notes, profile, private responses, or other private content for narration',
+  },
+  pt: {
+    aiVoice: 'voz gerada por IA, e não uma gravação humana',
+    approvedContent: 'texto bíblico público aprovado ou o conteúdo editorial revisado da Vella',
+    cache: 'cache privado compartilhado no servidor e no aparelho',
+    excluded: 'nunca envia suas orações, notas, perfil, respostas privadas ou outro conteúdo privado para a narração',
+  },
+  es: {
+    aiVoice: 'voz generada por IA, no una grabación humana',
+    approvedContent: 'texto bíblico público aprobado o el contenido editorial revisado de Vella',
+    cache: 'caché privado compartido del servidor y en el dispositivo',
+    excluded: 'nunca envía tus oraciones, notas, perfil, respuestas privadas u otro contenido privado para la narración',
+  },
+  fr: {
+    aiVoice: "voix générée par l'IA, et non un enregistrement humain",
+    approvedContent: 'texte biblique public approuvé ou le contenu éditorial Vella relu',
+    cache: 'cache privé partagé sur le serveur et sur votre appareil',
+    excluded: "n'envoie jamais vos prières, notes, profil, réponses privées ou autre contenu privé pour la narration",
+  },
+  de: {
+    aiVoice: 'KI-generierte Stimme und keine menschliche Aufnahme',
+    approvedContent: 'genehmigten öffentlichen Bibeltext oder redaktionell geprüfte Vella-Inhalte',
+    cache: 'privaten gemeinsamen Server-Cache und auf deinem Gerät',
+    excluded: 'sendet niemals deine Gebete, Notizen, dein Profil, private Antworten oder andere private Inhalte zur Vertonung',
+  },
+  it: {
+    aiVoice: "voce generata dall'IA e non una registrazione umana",
+    approvedContent: 'testo biblico pubblico approvato o il contenuto editoriale Vella revisionato',
+    cache: 'cache privata condivisa sul server e sul dispositivo',
+    excluded: 'non invia mai preghiere, note, profilo, risposte private o altri contenuti privati per la narrazione',
+  },
+  ru: {
+    aiVoice: 'голосом, созданным ИИ, а не записью человека',
+    approvedContent: 'утверждённый общедоступный текст Писания либо проверенный редакционный материал Vella',
+    cache: 'закрытом общем серверном кэше и на устройстве',
+    excluded: 'никогда не отправляет ваши молитвы, заметки, профиль, личные ответы или другой личный контент для озвучивания',
+  },
+  pl: {
+    aiVoice: 'głosem wygenerowanym przez AI, a nie nagraniem człowieka',
+    approvedContent: 'zatwierdzony publiczny tekst Pisma albo sprawdzoną treść redakcyjną Vella',
+    cache: 'prywatnej współdzielonej pamięci podręcznej serwera i na urządzeniu',
+    excluded: 'nigdy nie wysyła Twoich modlitw, notatek, profilu, prywatnych odpowiedzi ani innych prywatnych treści do narracji',
+  },
+} as const;
+
+const crashlyticsPrivacyChecks = {
+  en: ['Firebase Crashlytics', 'native crash and ANR reports', 'does not set a Vella account user ID', 'or attach private devotional content'],
+  pt: ['Firebase Crashlytics', 'relatórios de falhas nativas e ANRs', 'não define um ID da conta Vella', 'nem anexa conteúdo devocional privado'],
+  es: ['Firebase Crashlytics', 'informes de fallos nativos y ANR', 'no establece un ID de la cuenta de Vella', 'ni adjunta contenido devocional privado'],
+  fr: ['Firebase Crashlytics', 'rapports de plantage natif et d’ANR', 'ne définit aucun identifiant de compte Vella', 'ne joint aucun contenu dévotionnel privé'],
+  de: ['Firebase Crashlytics', 'Berichte zu nativen Abstürzen und ANRs', 'keine Vella-Konto-Nutzer-ID', 'keine privaten Andachtsinhalte'],
+  it: ['Firebase Crashlytics', 'rapporti su arresti anomali nativi e ANR', 'non imposta un ID utente dell’account Vella', 'né allega contenuti devozionali privati'],
+  ru: ['Firebase Crashlytics', 'отчёты о нативных сбоях и ANR', 'не задаёт ID пользователя аккаунта Vella', 'не прикрепляет личный духовный контент'],
+  pl: ['Firebase Crashlytics', 'raporty o natywnych awariach i ANR', 'nie ustawia identyfikatora użytkownika konta Vella', 'nie dołącza prywatnych treści religijnych'],
+} as const;
+
 const growthAnalyticsPrivacyChecks = {
   en: {
     identifier: 'random pseudonymous installation identifier',
@@ -698,6 +760,27 @@ describe('Vella localized website', () => {
       expect(privacy).toContain(checks.audioRetention);
       expect(privacy).toContain(checks.notifications);
       expect(privacy).toContain(checks.accountDeletion);
+    }
+  });
+
+  it('discloses AI Scripture narration and its private-content boundary in every locale', async () => {
+    for (const locale of LOCALES) {
+      const copy = await getCopy(locale);
+      const privacy = JSON.stringify(copy.legal.privacySections);
+      const checks = narrationPrivacyChecks[locale];
+
+      expect(privacy).toContain(checks.aiVoice);
+      expect(privacy).toContain(checks.approvedContent);
+      expect(privacy).toContain(checks.cache);
+      expect(privacy).toContain(checks.excluded);
+    }
+  });
+
+  it('discloses privacy-minimized Crashlytics diagnostics in every locale', async () => {
+    for (const locale of LOCALES) {
+      const copy = await getCopy(locale);
+      const privacy = JSON.stringify(copy.legal.privacySections);
+      for (const check of crashlyticsPrivacyChecks[locale]) expect(privacy).toContain(check);
     }
   });
 

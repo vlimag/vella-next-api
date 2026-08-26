@@ -63,6 +63,7 @@ describe('daily Scripture corpus boundary', () => {
       day: '2026-07-31',
       reflection_prompt: 'How will you respond to this love today?',
       bible_verses: {
+        id: 'approved-verse-id',
         chapter: 3,
         verse: 16,
         text_content: 'For God so loved the world.',
@@ -76,5 +77,6 @@ describe('daily Scripture corpus boundary', () => {
       code: 'KJV',
       name: 'King James Version',
     });
+    expect(payload.bible_verses.id).toBe('approved-verse-id');
   });
 });

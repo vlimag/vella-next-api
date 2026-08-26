@@ -3,6 +3,7 @@ export type DailyVerseLookupRow = {
   day: string;
   reflection_prompt: string | null;
   bible_verses: {
+    id: string;
     chapter: number;
     verse: number;
     text_content: string;
@@ -18,6 +19,7 @@ export function toDailyVersePayload(row: DailyVerseLookupRow) {
     day: row.day,
     reflection_prompt: row.reflection_prompt,
     bible_verses: {
+      id: row.bible_verses.id,
       chapter: row.bible_verses.chapter,
       verse: row.bible_verses.verse,
       text_content: row.bible_verses.text_content,

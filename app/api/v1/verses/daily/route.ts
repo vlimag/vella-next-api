@@ -46,6 +46,7 @@ export async function GET(req: Request) {
     day,
     reflection_prompt,
     bible_verses!inner(
+      id,
       chapter,
       verse,
       text_content,
