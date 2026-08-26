@@ -13,6 +13,11 @@ import {
 } from '@/lib/social';
 import { moderateFaithPostContent } from '@/lib/socialModeration';
 import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import {
+  tryLoadFeaturedMilestonesByUser,
+  type MilestoneClient,
+  type PublicMilestone,
+} from '@/lib/rhythms/milestones';
 
 const FEED_MEDIA_BUCKET = process.env.SUPABASE_FEED_MEDIA_BUCKET ?? 'faith-harbor-feed-media';
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
@@ -73,6 +78,15 @@ type FeedPostMediaRow = {
   height: number | null;
   sort_order: number;
 };
+
+function primaryMilestoneField(
+  featured: Map<string, PublicMilestone[]> | null,
+  userId: string,
+) {
+  return featured
+    ? { primary_milestone: featured.get(userId)?.[0] ?? null }
+    : {};
+}
 
 function imageExtensionForMimeType(mimeType: string) {
   if (mimeType === 'image/png') return 'png';
@@ -195,7 +209,13 @@ export async function GET(req: Request) {
   const authorIds = [...new Set(pagePosts.map((post) => post.author_user_id))];
   const postIds = pagePosts.map((post) => post.id);
 
-  const [{ data: profiles }, { data: likedRows }, { data: mediaRows }, { data: followRows }] = await Promise.all([
+  const [
+    { data: profiles },
+    { data: likedRows },
+    { data: mediaRows },
+    { data: followRows },
+    featuredByUser,
+  ] = await Promise.all([
     authorIds.length > 0
       ? supabase
           .from('social_profiles')
@@ -224,6 +244,11 @@ export async function GET(req: Request) {
           .eq('follower_user_id', viewerUserId)
           .in('followed_user_id', authorIds)
       : Promise.resolve({ data: [], error: null }),
+    tryLoadFeaturedMilestonesByUser(
+      supabase as unknown as MilestoneClient,
+      authorIds,
+      'feed',
+    ),
   ]);
 
   const profileById = new Map<string, { handle: string; display_name: string; avatar_url: string | null }>();
@@ -294,6 +319,7 @@ export async function GET(req: Request) {
           handle: author?.handle ?? `faith_${post.author_user_id.slice(0, 6)}`,
           display_name: author?.display_name ?? 'Faith user',
           avatar_url: author?.avatar_url ?? null,
+          ...primaryMilestoneField(featuredByUser, post.author_user_id),
         },
       };
     }),
@@ -451,6 +477,12 @@ export async function POST(req: Request) {
     body: post.body,
   });
 
+  const featuredByUser = await tryLoadFeaturedMilestonesByUser(
+    supabase as unknown as MilestoneClient,
+    [auth.userId],
+    'feed',
+  );
+
   return ok({
     id: post.id,
     body: post.body,
@@ -467,6 +499,7 @@ export async function POST(req: Request) {
       handle: profile.handle,
       display_name: profile.display_name,
       avatar_url: profile.avatar_url ?? null,
+      ...primaryMilestoneField(featuredByUser, auth.userId),
     },
   }, { status: 201 });
 }

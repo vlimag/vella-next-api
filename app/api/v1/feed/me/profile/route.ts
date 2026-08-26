@@ -5,6 +5,10 @@ import { parseQuery } from '@/lib/validation';
 import { ensureSocialProfile, isSocialUserSuspended, safeSocialAvatarUrl } from '@/lib/social';
 import { moderateSocialProfileContent } from '@/lib/socialModeration';
 import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import {
+  tryLoadFeaturedMilestonesByUser,
+  type MilestoneClient,
+} from '@/lib/rhythms/milestones';
 
 const handleSchema = z
   .string()
@@ -37,7 +41,16 @@ export async function GET() {
     .single();
 
   if (error || !data) return fail('Could not load social profile', 500, error?.message);
-  return ok({ ...data, avatar_url: safeSocialAvatarUrl(auth.userId, data.avatar_url) });
+  const featured = await tryLoadFeaturedMilestonesByUser(
+    supabase as unknown as MilestoneClient,
+    [auth.userId],
+    'profile',
+  );
+  return ok({
+    ...data,
+    avatar_url: safeSocialAvatarUrl(auth.userId, data.avatar_url),
+    ...(featured ? { featured_milestones: featured.get(auth.userId) ?? [] } : {}),
+  });
 }
 
 export async function POST(req: Request) {
@@ -85,5 +98,14 @@ export async function POST(req: Request) {
     return fail('Could not update social profile', 500, error?.message);
   }
 
-  return ok({ ...data, avatar_url: safeSocialAvatarUrl(auth.userId, data.avatar_url) });
+  const featured = await tryLoadFeaturedMilestonesByUser(
+    supabase as unknown as MilestoneClient,
+    [auth.userId],
+    'profile',
+  );
+  return ok({
+    ...data,
+    avatar_url: safeSocialAvatarUrl(auth.userId, data.avatar_url),
+    ...(featured ? { featured_milestones: featured.get(auth.userId) ?? [] } : {}),
+  });
 }

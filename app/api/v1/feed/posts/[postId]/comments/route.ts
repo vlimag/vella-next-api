@@ -15,6 +15,11 @@ import {
 } from '@/lib/social';
 import { moderateFaithContent } from '@/lib/socialModeration';
 import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import {
+  tryLoadFeaturedMilestonesByUser,
+  type MilestoneClient,
+  type PublicMilestone,
+} from '@/lib/rhythms/milestones';
 
 const bodySchema = z.object({
   body: z.string().trim().min(1).max(1200),
@@ -23,6 +28,15 @@ const bodySchema = z.object({
 type RouteParams = {
   params: Promise<{ postId: string }>;
 };
+
+function primaryMilestoneField(
+  featured: Map<string, PublicMilestone[]> | null,
+  userId: string,
+) {
+  return featured
+    ? { primary_milestone: featured.get(userId)?.[0] ?? null }
+    : {};
+}
 
 export async function GET(_req: Request, { params }: RouteParams) {
   const access = await requireActiveSubscription();
@@ -64,7 +78,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
   const authorIds = [...new Set(visibleComments.map((comment) => String(comment.author_user_id)))];
   const commentIds = visibleComments.map((comment) => String(comment.id));
 
-  const [{ data: profiles }, { data: likedRows }] = await Promise.all([
+  const [{ data: profiles }, { data: likedRows }, featuredByUser] = await Promise.all([
     authorIds.length > 0
       ? supabase
           .from('social_profiles')
@@ -78,6 +92,11 @@ export async function GET(_req: Request, { params }: RouteParams) {
           .eq('user_id', viewerUserId)
           .in('comment_id', commentIds)
       : Promise.resolve({ data: [], error: null }),
+    tryLoadFeaturedMilestonesByUser(
+      supabase as unknown as MilestoneClient,
+      authorIds,
+      'comments',
+    ),
   ]);
 
   const profileById = new Map<string, { handle: string; display_name: string; avatar_url: string | null }>();
@@ -106,6 +125,7 @@ export async function GET(_req: Request, { params }: RouteParams) {
           handle: author?.handle ?? `faith_${String(comment.author_user_id).slice(0, 6)}`,
           display_name: author?.display_name ?? 'Faith user',
           avatar_url: author?.avatar_url ?? null,
+          ...primaryMilestoneField(featuredByUser, String(comment.author_user_id)),
         },
       };
     }),
@@ -185,6 +205,12 @@ export async function POST(req: Request, { params }: RouteParams) {
     }),
   ]);
 
+  const featuredByUser = await tryLoadFeaturedMilestonesByUser(
+    supabase as unknown as MilestoneClient,
+    [auth.userId],
+    'comments',
+  );
+
   return ok({
     id: comment.id,
     post_id: comment.post_id,
@@ -197,6 +223,7 @@ export async function POST(req: Request, { params }: RouteParams) {
       handle: profile.handle,
       display_name: profile.display_name,
       avatar_url: null,
+      ...primaryMilestoneField(featuredByUser, auth.userId),
     },
   }, { status: 201 });
 }
