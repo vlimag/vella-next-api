@@ -165,9 +165,23 @@ begin
   if not exists (
     select 1 from faith_harbor.gamification_milestones
     where code = 'journey_finisher' and category = 'journey' and tier = 'spark'
+      and asset_key = 'flame.spark'
       and is_active and is_shareable
   ) then
     raise exception 'canonical milestone upsert drifted';
+  end if;
+  if exists (
+    select 1
+    from (values
+      ('streak_3'::text, 'flame.spark'::text),
+      ('streak_7'::text, 'flame.steady'::text),
+      ('journey_finisher'::text, 'flame.spark'::text)
+    ) as expected(code, asset_key)
+    left join faith_harbor.gamification_milestones as milestone
+      on milestone.code = expected.code and milestone.asset_key = expected.asset_key
+    where milestone.code is null
+  ) then
+    raise exception 'canonical milestone asset-key seed drifted';
   end if;
   if not exists (
     select 1 from information_schema.columns
@@ -181,6 +195,49 @@ begin
   end if;
 end
 $verify_rhythms_foundation$;
+
+do $verify_milestone_asset_keys$
+declare
+  candidate_asset_key text;
+begin
+  foreach candidate_asset_key in array array[
+    'milestone.generic', 'flame.spark', 'flame.steady', 'flame.rooted', 'flame.pilgrim', 'future.server.badge'
+  ] loop
+    insert into faith_harbor.gamification_milestones (
+      code, title, description, metric, target_value, asset_key
+    ) values (
+      'fixture_' || replace(candidate_asset_key, '.', '_'),
+      'Fixture',
+      'Valid bounded dotted asset key',
+      'streak',
+      1,
+      candidate_asset_key
+    );
+  end loop;
+
+  if (select count(*) from faith_harbor.gamification_milestones where code in (
+    'fixture_milestone_generic', 'fixture_flame_spark', 'fixture_flame_steady',
+    'fixture_flame_rooted', 'fixture_flame_pilgrim', 'fixture_future_server_badge'
+  ) and asset_key in (
+    'milestone.generic', 'flame.spark', 'flame.steady', 'flame.rooted', 'flame.pilgrim', 'future.server.badge'
+  )) <> 6 then
+    raise exception 'canonical or future dotted asset key was rejected';
+  end if;
+  if exists (
+    select 1
+    from (values
+      ('streak_3'::text, 'flame.spark'::text),
+      ('streak_7'::text, 'flame.steady'::text),
+      ('journey_finisher'::text, 'flame.spark'::text)
+    ) as expected(code, asset_key)
+    left join faith_harbor.gamification_milestones as milestone
+      on milestone.code = expected.code and milestone.asset_key = expected.asset_key
+    where milestone.code is null
+  ) then
+    raise exception 'fixture changed canonical milestone asset-key seeds';
+  end if;
+end
+$verify_milestone_asset_keys$;
 
 insert into faith_harbor.user_journeys (user_id, status, current_day)
 values ('11111111-1111-1111-1111-111111111111', 'active', 3);

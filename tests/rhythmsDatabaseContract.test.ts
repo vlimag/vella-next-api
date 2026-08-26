@@ -106,5 +106,13 @@ describe('Vella Rhythms foundation migration', () => {
     expect(sql).toContain("'streak_3'");
     expect(sql).toContain("'streak_7'");
     expect(sql).toContain("'journey_finisher'");
+
+    const milestoneSeeds = sql.match(
+      /insert into faith_harbor\.gamification_milestones[\s\S]*?on conflict \(code\) do update/i,
+    )?.[0] ?? '';
+    expect(milestoneSeeds).toMatch(/\('streak_3'[\s\S]*?'flame\.spark'/i);
+    expect(milestoneSeeds).toMatch(/\('streak_7'[\s\S]*?'flame\.steady'/i);
+    expect(milestoneSeeds).toMatch(/\('journey_finisher'[\s\S]*?'flame\.spark'/i);
+    expect(sql).toMatch(/asset_key text\s+check \(asset_key is null or asset_key ~ '\^\[a-z\]\[a-z0-9_.-\]\{0,127\}\$'\)/i);
   });
 });
