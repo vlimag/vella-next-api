@@ -61,12 +61,13 @@ export async function POST(request: Request) {
     if ('error' in parsed) return noStore(parsed.error);
 
     const supabase = createServiceClient();
-    const existingResult = await supabase
+    const readOwnedJourney = () => supabase
       .from('user_journeys')
       .select(JOURNEY_FIELDS)
       .eq('id', parsed.data.journey_id)
       .eq('user_id', access.userId)
       .maybeSingle();
+    const existingResult = await readOwnedJourney();
     if (existingResult.error) throw existingResult.error;
     const existing = existingResult.data as Record<string, unknown> | null;
     if (!existing || existing.user_id !== access.userId) {
@@ -89,10 +90,28 @@ export async function POST(request: Request) {
       .eq('status', 'paused')
       .select(JOURNEY_FIELDS)
       .maybeSingle();
-    if (isUniqueViolation(error) || (!error && !data)) {
+    if (isUniqueViolation(error)) {
       return noStore(fail('Another journey is already active', 409, { code: 'journey_active_conflict' }));
     }
     if (error) throw error;
+    if (!data) {
+      const reread = await readOwnedJourney();
+      if (reread.error) throw reread.error;
+      const authoritative = reread.data as Record<string, unknown> | null;
+      if (!authoritative || authoritative.user_id !== access.userId) {
+        return noStore(fail('Journey not found', 404, { code: 'journey_not_found' }));
+      }
+      const state = safeJourney(authoritative);
+      if (!state) throw new Error('invalid_reread_projection');
+      if (state.status === 'active') return noStore(ok({ journey: state }));
+      if (state.status === 'completed') {
+        return noStore(fail('Journey is already completed', 409, { code: 'journey_already_completed' }));
+      }
+      if (state.status === 'paused') {
+        return noStore(fail('Journey could not be resumed', 409, { code: 'journey_resume_conflict' }));
+      }
+      return noStore(fail('Journey not found', 404, { code: 'journey_not_found' }));
+    }
     const resumed = safeJourney(data);
     if (!resumed) throw new Error('invalid_resumed_projection');
     return noStore(ok({ journey: resumed }));

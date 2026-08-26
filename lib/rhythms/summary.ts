@@ -43,7 +43,7 @@ function validTimezone(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_+.-]+(?:\/[A-Za-z0-9_+.-]+)*$/.test(value);
 }
 
-function applyJourneys(summary: RhythmsSummary, result: QueryResult): boolean {
+function applyJourneys(summary: RhythmsSummary, result: QueryResult, locale: string): boolean {
   const rows = asRows(result.data);
   if (result.error || !rows) return false;
 
@@ -100,7 +100,7 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult): boolean {
     const recommendation = recommendNextJourney({
       completed: journeys.filter((journey) => journey.status === 'completed').map((journey) => journey.templateKey),
       goals: [],
-      locale: 'en',
+      locale,
     });
     if (recommendation) summary.next_journey_recommendation = recommendation;
   }
@@ -159,6 +159,7 @@ async function querySections(
   userId: string,
   capabilities: RhythmsCapability,
   summary: RhythmsSummary,
+  locale: string,
 ) {
   if (capabilities.journey_v2 || capabilities.long_journeys) {
     let available = false;
@@ -167,7 +168,7 @@ async function querySections(
         .from('user_journeys')
         .select('status, current_day, total_completed_days, completed_at, paused_at, timezone_name, journey_templates!inner(slug)')
         .eq('user_id', userId) as QueryResult;
-      available = applyJourneys(summary, result);
+      available = applyJourneys(summary, result, locale);
       if (!available) logSectionFailure('journeys', result.error);
     } catch (error) {
       logSectionFailure('journeys', error);
@@ -233,7 +234,7 @@ function disableAll(capabilities: RhythmsCapability, summary: RhythmsSummary) {
   delete summary.next_action;
 }
 
-export async function loadRhythmsSummary(userId: string, _locale: string): Promise<RhythmsSummary> {
+export async function loadRhythmsSummary(userId: string, locale: string): Promise<RhythmsSummary> {
   const capabilities = resolveRhythmsCapabilities();
   const summary = baseRhythmsSummary(capabilities);
   if (!Object.values(capabilities).some(Boolean)) return summary;
@@ -249,6 +250,6 @@ export async function loadRhythmsSummary(userId: string, _locale: string): Promi
     return summary;
   }
 
-  await querySections(supabase, userId, capabilities, summary);
+  await querySections(supabase, userId, capabilities, summary, locale);
   return summary;
 }

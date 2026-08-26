@@ -76,6 +76,18 @@ function nextLocalDate(localDay: string) {
   return date.toISOString().slice(0, 10);
 }
 
+function finiteTimestamp(value: unknown): string | null {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
+function finiteSource(value: unknown): 'legacy' | 'onboarding' | 'recommendation' | 'browse' | null {
+  return value === 'legacy' || value === 'onboarding' || value === 'recommendation' || value === 'browse' ? value : null;
+}
+
+function finiteVersion(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 1000 ? value : null;
+}
+
 async function getActiveJourney(req: Request) {
   const access = await requireActiveSubscription();
   if ('response' in access) return noStore(access.response);
@@ -114,7 +126,7 @@ async function getActiveJourney(req: Request) {
     console.warn('[journeys] theme_preference_missing_using_default', { route: 'active' });
     ({ data, error } = await loadActiveJourney(false));
   }
-  if (error) return noStore(fail('Could not load active journey', 503, { code: 'journey_unavailable' }));
+  if (error) return noStore(fail('Could not load active journey', 500, { code: 'journey_unavailable' }));
   if (!data) return noStore(ok(null));
 
   const journey = data as unknown as ActiveJourneyRow;
@@ -133,7 +145,7 @@ async function getActiveJourney(req: Request) {
       .eq('language_code', requestedLanguage)
       .maybeSingle();
 
-    if (localizedTemplateError) return noStore(fail('Could not load localized journey template', 503, { code: 'journey_unavailable' }));
+    if (localizedTemplateError) return noStore(fail('Could not load localized journey template', 500, { code: 'journey_unavailable' }));
     if (localizedTemplate) {
       template = localizedTemplate;
     } else {
@@ -148,7 +160,7 @@ async function getActiveJourney(req: Request) {
           .eq('language_code', 'en')
           .maybeSingle();
 
-        if (englishTemplateError) return noStore(fail('Could not load fallback journey template', 503, { code: 'journey_unavailable' }));
+        if (englishTemplateError) return noStore(fail('Could not load fallback journey template', 500, { code: 'journey_unavailable' }));
         if (englishTemplate) {
           sourceTemplate = englishTemplate;
         }
@@ -209,7 +221,7 @@ async function getActiveJourney(req: Request) {
                 requestId,
                 language: requestedLanguage,
                 slug: sourceTemplate.slug,
-                error: cacheError.message,
+                code: 'cache_write_failed',
               });
             }
           }
@@ -217,7 +229,7 @@ async function getActiveJourney(req: Request) {
           console.error('[journey-localizer] template_localization_failed', {
             language: requestedLanguage,
             slug: sourceTemplate.slug,
-            error: error instanceof Error ? error.message : String(error),
+            code: 'localization_failed',
           });
         }
       }
@@ -255,11 +267,18 @@ async function getActiveJourney(req: Request) {
   }
 
   const { data: milestones, error: milestonesError } = await milestonesQuery;
-  if (milestonesError) return noStore(fail('Could not load milestones', 503, { code: 'journey_unavailable' }));
+  if (milestonesError) return noStore(fail('Could not load milestones', 500, { code: 'journey_unavailable' }));
 
   const duration = template.duration_days || 1;
   const progressPercent = Math.min(100, Number(((journey.total_completed_days / duration) * 100).toFixed(2)));
 
+  const continuity = {
+    completed_at: finiteTimestamp(journey.completed_at),
+    paused_at: finiteTimestamp(journey.paused_at),
+    last_resumed_at: finiteTimestamp(journey.last_resumed_at),
+    source: finiteSource(journey.source),
+    completion_version: finiteVersion(journey.completion_version),
+  };
   return noStore(ok({
     journey: {
       id: journey.id,
@@ -277,11 +296,11 @@ async function getActiveJourney(req: Request) {
       start_date: journey.start_date,
       progress_percent: progressPercent,
       timezone_name: timezoneName,
-      completed_at: journey.completed_at,
-      paused_at: journey.paused_at,
-      last_resumed_at: journey.last_resumed_at,
-      source: journey.source,
-      completion_version: journey.completion_version,
+      ...(continuity.completed_at ? { completed_at: continuity.completed_at } : {}),
+      ...(continuity.paused_at ? { paused_at: continuity.paused_at } : {}),
+      ...(continuity.last_resumed_at ? { last_resumed_at: continuity.last_resumed_at } : {}),
+      ...(continuity.source ? { source: continuity.source } : {}),
+      ...(continuity.completion_version !== null ? { completion_version: continuity.completion_version } : {}),
     },
     template,
     today_steps: todaySteps,
@@ -294,6 +313,6 @@ export async function GET(req: Request) {
     return await getActiveJourney(req);
   } catch {
     console.error('[journeys-active]', { route: 'journey_active', stage: 'query', code: 'database_unavailable' });
-    return noStore(fail('Could not load active journey', 503, { code: 'journey_unavailable' }));
+    return noStore(fail('Could not load active journey', 500, { code: 'journey_unavailable' }));
   }
 }

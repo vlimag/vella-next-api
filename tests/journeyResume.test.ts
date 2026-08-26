@@ -59,6 +59,24 @@ function resumeClient(options: { existing?: Record<string, unknown> | null; upda
   return { from, read, write };
 }
 
+function raceResumeClient(authoritative: Record<string, unknown> | null) {
+  let reads = 0;
+  const read = () => {
+    const query: Record<string, unknown> = {};
+    query.select = vi.fn(() => query);
+    query.eq = vi.fn(() => query);
+    query.maybeSingle = vi.fn(async () => ({ data: ++reads === 1 ? journey : authoritative, error: null }));
+    return query;
+  };
+  const write: Record<string, unknown> = {};
+  write.update = vi.fn(() => write);
+  write.eq = vi.fn(() => write);
+  write.select = vi.fn(() => write);
+  write.maybeSingle = vi.fn(async () => ({ data: null, error: null }));
+  const from = vi.fn(() => from.mock.calls.length === 2 ? write : read());
+  return { from, write };
+}
+
 async function post(body: unknown) {
   const module = await resumeModule();
   expect(typeof module.POST).toBe('function');
@@ -139,6 +157,23 @@ describe('journey resume route', () => {
     expect(response.status).toBe(409);
     expect(json).toEqual({ error: { message: 'Another journey is already active', details: { code: 'journey_active_conflict' } } });
     expect(client.write.update).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [{ ...journey, status: 'active', paused_at: null, last_resumed_at: '2026-08-26T12:00:00.000Z' }, 200, undefined],
+    [{ ...journey, status: 'completed', completed_at: '2026-08-26T12:00:00.000Z' }, 409, 'journey_already_completed'],
+    [null, 404, 'journey_not_found'],
+    [{ ...journey, status: 'paused' }, 409, 'journey_resume_conflict'],
+  ] as const)('re-reads the authoritative journey after a conditional no-row race', async (authoritative, status, code) => {
+    const client = raceResumeClient(authoritative);
+    mocks.createServiceClient.mockReturnValue(client);
+
+    const { response, json } = await post({ journey_id: JOURNEY_ID });
+
+    expect(response.status).toBe(status);
+    expect(client.write.update).toHaveBeenCalledTimes(1);
+    if (status === 200) expect(json.data.journey).toMatchObject({ status: 'active', current_day: 3, total_completed_days: 2 });
+    else expect(json.error.details.code).toBe(code);
   });
 
   it('fails closed when an owned journey projection contains an invalid source instead of echoing it', async () => {

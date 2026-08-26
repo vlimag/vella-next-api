@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(() => mocks.client),
   requireActiveSubscription: vi.fn(),
+  recommendNextJourney: vi.fn(),
   client: null as unknown as { from: (table: string) => unknown },
 }));
 
@@ -12,6 +13,10 @@ vi.mock('../lib/supabase', () => ({
 
 vi.mock('../lib/subscriptionAccess', () => ({
   requireActiveSubscription: mocks.requireActiveSubscription,
+}));
+
+vi.mock('../lib/rhythms/journeyRecommendations', () => ({
+  recommendNextJourney: mocks.recommendNextJourney,
 }));
 
 import { GET } from '../app/api/v1/rhythms/summary/route';
@@ -74,6 +79,7 @@ describe('Vella Rhythms summary capability boundary', () => {
     vi.stubEnv('VELLA_RHYTHMS_PHASE', 'foundation');
     mocks.requireActiveSubscription.mockResolvedValue({ userId: USER_ID });
     mocks.client = summaryClient();
+    mocks.recommendNextJourney.mockReturnValue({ template_slug: 'daily-faith-journey', reason_code: 'next_available' });
   });
 
   afterEach(() => {
@@ -470,6 +476,21 @@ describe('Vella Rhythms summary capability boundary', () => {
     expect(json.data.next_journey_recommendation).toEqual({
       template_slug: 'daily-faith-journey', reason_code: 'next_available',
     });
+  });
+
+  it('forwards the validated summary locale to deterministic recommendation eligibility', async () => {
+    vi.stubEnv('VELLA_RHYTHMS_PHASE', 'journey_v2');
+    mocks.client = summaryClient({
+      user_journeys: { data: [{
+        status: 'completed', current_day: 7, total_completed_days: 7,
+        completed_at: '2026-08-21T00:00:00.000Z', journey_templates: { slug: 'legacy-path' },
+      }], error: null },
+    });
+
+    const { response } = await get('https://vella.one/api/v1/rhythms/summary?lang=pt');
+
+    expect(response.status).toBe(200);
+    expect(mocks.recommendNextJourney).toHaveBeenCalledWith(expect.objectContaining({ locale: 'pt' }));
   });
 
   it('returns a finite no-store response when the access gate rejects', async () => {

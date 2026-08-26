@@ -21,7 +21,7 @@ async function activeModule(): Promise<ActiveModule> {
   return import(modulePath).catch(() => ({}));
 }
 
-function activeClient(error: unknown = null) {
+function activeClient(options: { error?: unknown; journey?: Record<string, unknown> } = {}) {
   const active = {
     id: JOURNEY_ID, user_id: USER_ID, anonymous_profile_id: null, template_id: TEMPLATE_ID, status: 'active',
     current_day: 3, streak_count: 2, best_streak: 4, total_completed_days: 2, consistency_score: 66,
@@ -33,12 +33,13 @@ function activeClient(error: unknown = null) {
       description: 'A finite summary', duration_days: 7, is_premium: false, theme_tags: ['hope'], version: 1,
     },
   };
+  const row = { ...active, ...options.journey };
   const first: Record<string, unknown> = {};
   first.select = vi.fn(() => first);
   first.eq = vi.fn(() => first);
   first.order = vi.fn(() => first);
   first.limit = vi.fn(() => first);
-  first.maybeSingle = vi.fn(async () => ({ data: error ? null : active, error }));
+  first.maybeSingle = vi.fn(async () => ({ data: options.error ? null : row, error: options.error ?? null }));
   const milestones: Record<string, unknown> = {};
   milestones.select = vi.fn(() => milestones);
   milestones.eq = vi.fn(() => milestones);
@@ -89,7 +90,7 @@ describe('active journey continuity', () => {
     const response = await module.GET!(new Request('https://vella.one/api/v1/journeys/active?lang=en'));
     const json = await response.json();
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(500);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(json).toEqual({ error: { message: 'Could not load active journey', details: { code: 'journey_unavailable' } } });
     expect(JSON.stringify(json)).not.toContain(USER_ID);
@@ -97,16 +98,37 @@ describe('active journey continuity', () => {
 
   it('does not expose a database error from the active-journey query', async () => {
     const privateMessage = `private relation failure for ${USER_ID}`;
-    mocks.createServiceClient.mockReturnValue(activeClient({ message: privateMessage }));
+    mocks.createServiceClient.mockReturnValue(activeClient({ error: { message: privateMessage } }));
     const module = await activeModule();
     expect(typeof module.GET).toBe('function');
 
     const response = await module.GET!(new Request('https://vella.one/api/v1/journeys/active?lang=en'));
     const json = await response.json();
 
-    expect(response.status).toBe(503);
+    expect(response.status).toBe(500);
     expect(response.headers.get('Cache-Control')).toBe('no-store');
     expect(json).toEqual({ error: { message: 'Could not load active journey', details: { code: 'journey_unavailable' } } });
     expect(JSON.stringify(json)).not.toContain(privateMessage);
+  });
+
+  it('omits malformed optional continuity metadata and normalizes an invalid timezone without serializing it', async () => {
+    const privateValue = `private-${USER_ID}`;
+    mocks.createServiceClient.mockReturnValue(activeClient({ journey: {
+      timezone_name: '+01:00', completed_at: privateValue, paused_at: privateValue,
+      last_resumed_at: privateValue, source: 'internal', completion_version: Number.POSITIVE_INFINITY,
+    } }));
+    const module = await activeModule();
+    const response = await module.GET!(new Request('https://vella.one/api/v1/journeys/active?lang=en'));
+    const json = await response.json();
+    const serialized = JSON.stringify(json);
+
+    expect(response.status).toBe(200);
+    expect(json.data.journey.timezone_name).toBe('UTC');
+    expect(json.data.journey).not.toHaveProperty('completed_at');
+    expect(json.data.journey).not.toHaveProperty('paused_at');
+    expect(json.data.journey).not.toHaveProperty('last_resumed_at');
+    expect(json.data.journey).not.toHaveProperty('source');
+    expect(json.data.journey).not.toHaveProperty('completion_version');
+    expect(serialized).not.toContain(privateValue);
   });
 });
