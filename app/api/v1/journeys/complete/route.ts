@@ -29,17 +29,27 @@ export async function POST(req: Request) {
 
   const now = new Date();
   const timezoneName = normalizeTimeZone(parsed.data.timezone_name);
-  const result = await completeJourneySession(createServiceClient(), {
-    userId: access.userId,
-    journeyId: parsed.data.journey_id,
-    reflectionNote: parsed.data.reflection_note,
-    gratitudeNote: parsed.data.gratitude_note,
-    timezoneName,
-    localDay: localDateKey(now, timezoneName),
-    localWeekStart: localWeekStart(now, timezoneName),
-    idempotencyKey: parsed.data.idempotency_key,
-    completedAt: now.toISOString(),
-  });
+  let result: Awaited<ReturnType<typeof completeJourneySession>>;
+  try {
+    result = await completeJourneySession(createServiceClient(), {
+      userId: access.userId,
+      journeyId: parsed.data.journey_id,
+      reflectionNote: parsed.data.reflection_note,
+      gratitudeNote: parsed.data.gratitude_note,
+      timezoneName,
+      localDay: localDateKey(now, timezoneName),
+      localWeekStart: localWeekStart(now, timezoneName),
+      idempotencyKey: parsed.data.idempotency_key,
+      completedAt: now.toISOString(),
+    });
+  } catch {
+    console.error('[journeys-complete]', {
+      route: 'journey_complete',
+      stage: 'rpc',
+      code: 'database_unavailable',
+    });
+    return noStore(fail('Could not complete journey', 500));
+  }
 
   if (!result.ok) {
     console.error('[journeys-complete]', {

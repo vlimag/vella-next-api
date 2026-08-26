@@ -173,16 +173,202 @@ describe('journey completion typed RPC boundary', () => {
     expect(JSON.stringify(result)).not.toContain(USER_ID);
   });
 
-  it('keeps the previous-client payload valid and returns all established fields', async () => {
+  it('accepts future stable milestone codes and strips additive RPC fields', async () => {
+    const module = await loadCompletionModule();
+    expect(typeof module.completeJourneySession).toBe('function');
+    const futureProjection = {
+      ...rpcProjection,
+      future_rpc_field: { private: 'discard me' },
+      journey: { ...rpcProjection.journey, future_journey_field: true },
+      milestones: [{
+        milestone_code: 'journey_rooted_21',
+        earned_at: '2026-08-26T12:00:00.000Z',
+        future_milestone_field: true,
+      }],
+      newly_earned_milestones: ['journey_rooted_21'],
+    };
+
+    const result = await module.completeJourneySession!({
+      rpc: vi.fn(async () => ({ data: futureProjection, error: null })),
+    }, {
+      userId: USER_ID,
+      journeyId: JOURNEY_ID,
+      timezoneName: 'UTC',
+      localDay: '2026-08-26',
+      localWeekStart: '2026-08-24',
+      completedAt: '2026-08-26T12:00:00.000Z',
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      value: {
+        ...rpcProjection,
+        journey: rpcProjection.journey,
+        milestones: [{
+          milestone_code: 'journey_rooted_21',
+          earned_at: '2026-08-26T12:00:00.000Z',
+        }],
+        newly_earned_milestones: ['journey_rooted_21'],
+      },
+    });
+  });
+
+  it.each([
+    'Journey_Rooted',
+    'journey-rooted',
+    'a'.repeat(65),
+  ])('rejects malformed milestone code %s', async (milestoneCode) => {
+    const module = await loadCompletionModule();
+    const result = await module.completeJourneySession!({
+      rpc: vi.fn(async () => ({
+        data: {
+          ...rpcProjection,
+          milestones: [{ milestone_code: milestoneCode, earned_at: '2026-08-26T12:00:00.000Z' }],
+          newly_earned_milestones: [milestoneCode],
+        },
+        error: null,
+      })),
+    }, {
+      userId: USER_ID,
+      journeyId: JOURNEY_ID,
+      timezoneName: 'UTC',
+      localDay: '2026-08-26',
+      localWeekStart: '2026-08-24',
+      completedAt: '2026-08-26T12:00:00.000Z',
+    });
+
+    expect(result).toEqual({ ok: false, code: 'invalid_response' });
+  });
+
+  it('rejects unbounded milestone arrays', async () => {
+    const module = await loadCompletionModule();
+    const milestone = { milestone_code: 'streak_3', earned_at: '2026-08-26T12:00:00.000Z' };
+    const input = {
+      userId: USER_ID,
+      journeyId: JOURNEY_ID,
+      timezoneName: 'UTC',
+      localDay: '2026-08-26',
+      localWeekStart: '2026-08-24',
+      completedAt: '2026-08-26T12:00:00.000Z',
+    };
+    const oversizedHistory = await module.completeJourneySession!({
+      rpc: vi.fn(async () => ({
+        data: { ...rpcProjection, milestones: Array.from({ length: 129 }, () => milestone) },
+        error: null,
+      })),
+    }, input);
+    const oversizedNew = await module.completeJourneySession!({
+      rpc: vi.fn(async () => ({
+        data: {
+          ...rpcProjection,
+          newly_earned_milestones: Array.from({ length: 33 }, () => 'streak_3'),
+        },
+        error: null,
+      })),
+    }, input);
+
+    expect(oversizedHistory).toEqual({ ok: false, code: 'invalid_response' });
+    expect(oversizedNew).toEqual({ ok: false, code: 'invalid_response' });
+  });
+
+  it('returns the exact previous-client success payload', async () => {
     const { response, json } = await post({ journey_id: JOURNEY_ID });
 
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe('no-store');
-    expect(json.data).toMatchObject({
-      completed: true,
-      journey: rpcProjection.journey,
-      milestones: rpcProjection.milestones,
+    expect(json).toEqual({
+      data: {
+        completed: true,
+        journey: rpcProjection.journey,
+        milestones: rpcProjection.milestones,
+        practice_credits: rpcProjection.practice_credits,
+        newly_earned_milestones: rpcProjection.newly_earned_milestones,
+        local_day: rpcProjection.local_day,
+      },
     });
+  });
+
+  it.each([
+    {
+      name: 'already-completed',
+      projection: { ...rpcProjection, outcome: 'already_completed', completed: false, already_completed: true },
+      expected: {
+        alreadyCompleted: true,
+        journey: rpcProjection.journey,
+        milestones: rpcProjection.milestones,
+        practice_credits: rpcProjection.practice_credits,
+        newly_earned_milestones: rpcProjection.newly_earned_milestones,
+        local_day: rpcProjection.local_day,
+      },
+    },
+    {
+      name: 'inactive',
+      projection: {
+        ...rpcProjection,
+        outcome: 'inactive',
+        completed: false,
+        already_completed: false,
+        journey: { ...rpcProjection.journey, status: 'paused' },
+      },
+      expected: {
+        alreadyCompleted: false,
+        journey: { ...rpcProjection.journey, status: 'paused' },
+        milestones: rpcProjection.milestones,
+        practice_credits: rpcProjection.practice_credits,
+        newly_earned_milestones: rpcProjection.newly_earned_milestones,
+        local_day: rpcProjection.local_day,
+      },
+    },
+  ])('returns the exact previous-client $name payload', async ({ projection, expected }) => {
+    mocks.createServiceClient.mockReturnValue(clientWithRpc({ data: projection, error: null }));
+
+    const { response, json } = await post({ journey_id: JOURNEY_ID });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(json).toEqual({ data: expected });
+  });
+
+  it('returns the exact not-found response', async () => {
+    mocks.createServiceClient.mockReturnValue(clientWithRpc({ data: { outcome: 'not_found' }, error: null }));
+
+    const { response, json } = await post({ journey_id: JOURNEY_ID });
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(json).toEqual({ error: { message: 'Journey not found' } });
+  });
+
+  it('returns the exact malformed-input response without creating a client', async () => {
+    const { response, json } = await post({ journey_id: 'not-a-uuid' });
+
+    expect(response.status).toBe(400);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(json).toEqual({
+      error: {
+        message: 'Invalid request input',
+        details: {
+          formErrors: [],
+          fieldErrors: { journey_id: ['Invalid uuid'] },
+        },
+      },
+    });
+    expect(mocks.createServiceClient).not.toHaveBeenCalled();
+  });
+
+  it('returns the access-gate rejection unchanged with no-store', async () => {
+    mocks.requireActiveSubscription.mockResolvedValue({
+      response: new Response(JSON.stringify({
+        error: { message: 'Subscription required' },
+      }), { status: 402, headers: { 'content-type': 'application/json' } }),
+    });
+
+    const { response, json } = await post({ journey_id: JOURNEY_ID });
+
+    expect(response.status).toBe(402);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(json).toEqual({ error: { message: 'Subscription required' } });
+    expect(mocks.createServiceClient).not.toHaveBeenCalled();
   });
 
   it('accepts optional timezone and idempotency fields and exposes additive completion facts', async () => {
@@ -227,10 +413,50 @@ describe('journey completion typed RPC boundary', () => {
 
     expect(response.status).toBe(500);
     expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(json).toEqual({ error: { message: 'Could not complete journey' } });
     const visible = JSON.stringify({ json, logs: errorLog.mock.calls });
     expect(visible).not.toContain(privateError);
     expect(visible).not.toContain(USER_ID);
     expect(visible).not.toContain('private reflection');
+  });
+
+  it.each(['rpc', 'create-client'])('contains thrown %s failures with the exact safe response', async (source) => {
+    const privateError = `owner ${USER_ID} note private reflection raw SQL failure`;
+    if (source === 'rpc') {
+      mocks.createServiceClient.mockReturnValue({
+        rpc: vi.fn(async () => { throw new Error(privateError); }),
+        from: vi.fn(() => completedLegacyJourney()),
+      });
+    } else {
+      mocks.createServiceClient.mockImplementation(() => { throw new Error(privateError); });
+    }
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const { response, json } = await post({
+      journey_id: JOURNEY_ID,
+      reflection_note: 'private reflection',
+    });
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(json).toEqual({ error: { message: 'Could not complete journey' } });
+    const visible = JSON.stringify({ json, logs: errorLog.mock.calls });
+    expect(visible).not.toContain(privateError);
+    expect(visible).not.toContain(USER_ID);
+    expect(visible).not.toContain('private reflection');
+  });
+
+  it('maps an idempotency conflict to a finite 409 response', async () => {
+    mocks.createServiceClient.mockReturnValue(clientWithRpc({
+      data: { outcome: 'idempotency_conflict' },
+      error: null,
+    }));
+
+    const { response, json } = await post({ journey_id: JOURNEY_ID });
+
+    expect(response.status).toBe(409);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(json).toEqual({ error: { message: 'Completion request conflicts with an existing session' } });
   });
 });
 
@@ -255,5 +481,15 @@ describe('journey completion v2 migration contract', () => {
     expect(ledgerWrites[0]).not.toMatch(/reflection|gratitude|note|user_id.*jsonb/i);
     expect(sql).not.toMatch(/row_to_json|to_jsonb\([^)]*user_journeys|select\s+\*/i);
     expect(sql).not.toMatch(/raise exception[^;]*(?:user|note|sql)/i);
+  });
+
+  it('compares replay semantics and projects the latest completion into the declared timezone', () => {
+    const sql = completionMigration();
+
+    expect(sql).toMatch(/idempotency_conflict/i);
+    expect(sql).toMatch(/reflection_note\s+is not distinct from\s+p_reflection_note/i);
+    expect(sql).toMatch(/gratitude_note\s+is not distinct from\s+p_gratitude_note/i);
+    expect(sql).toMatch(/order by\s+(?:session\.)?completed_at\s+desc[\s\S]*limit 1/i);
+    expect(sql).toMatch(/at time zone\s+p_timezone_name/i);
   });
 });
