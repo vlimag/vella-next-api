@@ -12,6 +12,17 @@ export type RhythmsSummary = {
     template_key: string;
     completed_sessions: number;
   };
+  paused_journey?: {
+    template_key: string;
+    current_session: number;
+    completed_sessions: number;
+    paused_at: string;
+    timezone_name: string;
+  };
+  next_journey_recommendation?: {
+    template_slug: string;
+    reason_code: 'onboarding_goal_match' | 'next_available';
+  };
   practices?: Array<{
     code: string;
     weekly_target: number;

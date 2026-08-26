@@ -7,6 +7,7 @@ import {
   isStableSlug,
   type RhythmsSummary,
 } from '@/lib/rhythms/contracts';
+import { recommendNextJourney } from '@/lib/rhythms/journeyRecommendations';
 
 type QueryResult = { data: unknown; error: unknown };
 type SummarySection = 'journeys' | 'practices' | 'gatherings' | 'milestones';
@@ -38,6 +39,10 @@ function completedAt(value: unknown): number | null {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
+function validTimezone(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 255 && /^[A-Za-z0-9_+.-]+(?:\/[A-Za-z0-9_+.-]+)*$/.test(value);
+}
+
 function applyJourneys(summary: RhythmsSummary, result: QueryResult): boolean {
   const rows = asRows(result.data);
   if (result.error || !rows) return false;
@@ -49,10 +54,13 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult): boolean {
     const completedSessions = finiteInteger(row.total_completed_days, 0, 1000);
     const status = row.status;
     if (!isStableSlug(templateKey) || currentSession === null || completedSessions === null) return [];
-    if (status !== 'active' && status !== 'completed') return [];
+    if (status !== 'active' && status !== 'paused' && status !== 'completed') return [];
     const completedTimestamp = status === 'completed' ? completedAt(row.completed_at) : null;
     if (status === 'completed' && completedTimestamp === null) return [];
-    return [{ templateKey, currentSession, completedSessions, completedTimestamp, status }];
+    const pausedAt = status === 'paused' ? completedAt(row.paused_at) : null;
+    const timezoneName = status === 'paused' && validTimezone(row.timezone_name) ? row.timezone_name : null;
+    if (status === 'paused' && (pausedAt === null || timezoneName === null)) return [];
+    return [{ templateKey, currentSession, completedSessions, completedTimestamp, pausedAt, timezoneName, status }];
   });
 
   const active = journeys.find((journey) => journey.status === 'active');
@@ -75,6 +83,26 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult): boolean {
       template_key: completed.templateKey,
       completed_sessions: completed.completedSessions,
     };
+  }
+  const paused = journeys
+    .filter((journey) => journey.status === 'paused')
+    .sort((left, right) => right.pausedAt! - left.pausedAt! || left.templateKey.localeCompare(right.templateKey))[0];
+  if (paused) {
+    summary.paused_journey = {
+      template_key: paused.templateKey,
+      current_session: paused.currentSession,
+      completed_sessions: paused.completedSessions,
+      paused_at: new Date(paused.pausedAt!).toISOString(),
+      timezone_name: paused.timezoneName!,
+    };
+  }
+  if (!active && journeys.length > 0) {
+    const recommendation = recommendNextJourney({
+      completed: journeys.filter((journey) => journey.status === 'completed').map((journey) => journey.templateKey),
+      goals: [],
+      locale: 'en',
+    });
+    if (recommendation) summary.next_journey_recommendation = recommendation;
   }
   if (!active && completed) {
     summary.next_action = { kind: 'choose_journey', target_key: 'journeys' };
@@ -137,7 +165,7 @@ async function querySections(
     try {
       const result = await supabase
         .from('user_journeys')
-        .select('status, current_day, total_completed_days, completed_at, journey_templates!inner(slug)')
+        .select('status, current_day, total_completed_days, completed_at, paused_at, timezone_name, journey_templates!inner(slug)')
         .eq('user_id', userId) as QueryResult;
       available = applyJourneys(summary, result);
       if (!available) logSectionFailure('journeys', result.error);
@@ -198,6 +226,8 @@ function disableAll(capabilities: RhythmsCapability, summary: RhythmsSummary) {
   for (const key of enabled) capabilities[key] = false;
   delete summary.active_journey;
   delete summary.latest_completed_journey;
+  delete summary.paused_journey;
+  delete summary.next_journey_recommendation;
   delete summary.practices;
   delete summary.current_gathering;
   delete summary.next_action;

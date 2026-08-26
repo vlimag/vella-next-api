@@ -437,6 +437,41 @@ describe('Vella Rhythms summary capability boundary', () => {
     expect(json.data.next_action).toEqual({ kind: 'continue_journey', target_key: 'active-path' });
   });
 
+  it('adds finite paused continuity and a deterministic next-journey recommendation without changing schema v1 fields', async () => {
+    vi.stubEnv('VELLA_RHYTHMS_PHASE', 'journey_v2');
+    mocks.client = summaryClient({
+      user_journeys: {
+        data: [
+          {
+            status: 'paused', current_day: 3, total_completed_days: 2,
+            paused_at: '2026-08-20T00:00:00.000Z', timezone_name: 'America/Sao_Paulo',
+            journey_templates: { slug: 'paused-path' },
+          },
+          {
+            status: 'completed', current_day: 7, total_completed_days: 7,
+            completed_at: '2026-08-21T00:00:00.000Z', journey_templates: { slug: 'legacy-path' },
+          },
+        ],
+        error: null,
+      },
+    });
+
+    const { response, json } = await get();
+
+    expect(response.status).toBe(200);
+    expectNoStore(response);
+    expect(json.data.schema_version).toBe(1);
+    expect(json.data.active_journey).toBeUndefined();
+    expect(json.data.latest_completed_journey).toEqual({ template_key: 'legacy-path', completed_sessions: 7 });
+    expect(json.data.paused_journey).toEqual({
+      template_key: 'paused-path', current_session: 3, completed_sessions: 2,
+      paused_at: '2026-08-20T00:00:00.000Z', timezone_name: 'America/Sao_Paulo',
+    });
+    expect(json.data.next_journey_recommendation).toEqual({
+      template_slug: 'daily-faith-journey', reason_code: 'next_available',
+    });
+  });
+
   it('returns a finite no-store response when the access gate rejects', async () => {
     mocks.requireActiveSubscription.mockRejectedValue(new Error(`private gate failure for ${USER_ID}`));
 
