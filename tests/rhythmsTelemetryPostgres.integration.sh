@@ -11,13 +11,20 @@ done
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 WORKSPACE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 TELEMETRY_MIGRATIONS=("$WORKSPACE_ROOT"/supabase/migrations/*_vella_rhythms_telemetry.sql)
+MILESTONE_EXTENSION_MIGRATIONS=("$WORKSPACE_ROOT"/supabase/migrations/*_extend_rhythm_milestone_telemetry.sql)
 
 if [[ ${#TELEMETRY_MIGRATIONS[@]} -ne 1 || ! -f "${TELEMETRY_MIGRATIONS[0]}" ]]; then
   echo "expected exactly one Vella Rhythms telemetry migration" >&2
   exit 1
 fi
 
+if [[ ${#MILESTONE_EXTENSION_MIGRATIONS[@]} -ne 1 || ! -f "${MILESTONE_EXTENSION_MIGRATIONS[0]}" ]]; then
+  echo "expected exactly one Rhythms milestone telemetry extension migration" >&2
+  exit 1
+fi
+
 MIGRATION_PATH=${TELEMETRY_MIGRATIONS[0]}
+MILESTONE_EXTENSION_PATH=${MILESTONE_EXTENSION_MIGRATIONS[0]}
 TELEMETRY_PG_ROOT=$(mktemp -d)
 TELEMETRY_PG_DATA="$TELEMETRY_PG_ROOT/data"
 TELEMETRY_PG_PORT=${TELEMETRY_PG_PORT:-55478}
@@ -118,6 +125,7 @@ $verify_legacy_fixture$;
 SQL
 
 telemetry_psql --single-transaction -f "$MIGRATION_PATH" >/dev/null
+telemetry_psql --single-transaction -f "$MILESTONE_EXTENSION_PATH" >/dev/null
 
 telemetry_psql >/dev/null <<'SQL'
 do $verify_function_acl$
@@ -131,6 +139,60 @@ begin
   end if;
 end
 $verify_function_acl$;
+
+do $verify_v9_function_acl$
+begin
+  if has_function_privilege('public', 'faith_harbor.growth_event_properties_are_safe_v9(text,jsonb)', 'execute')
+    or has_function_privilege('anon', 'faith_harbor.growth_event_properties_are_safe_v9(text,jsonb)', 'execute')
+    or has_function_privilege('authenticated', 'faith_harbor.growth_event_properties_are_safe_v9(text,jsonb)', 'execute')
+    or not has_function_privilege('service_role', 'faith_harbor.growth_event_properties_are_safe_v9(text,jsonb)', 'execute')
+    or not has_function_privilege(current_user, 'faith_harbor.growth_event_properties_are_safe_v9(text,jsonb)', 'execute') then
+    raise exception 'unexpected v9 function execute ACL';
+  end if;
+end
+$verify_v9_function_acl$;
+
+do $verify_recurring_milestone_contracts$
+declare
+  catalog_code text;
+  source_surface text;
+begin
+  foreach catalog_code in array array[
+    'rhythm_first_week', 'rhythm_four_weeks', 'rhythm_balanced', 'rhythm_return'
+  ] loop
+    if faith_harbor.growth_event_properties_are_safe_v9(
+      'milestone_earned', jsonb_build_object('catalog_code', catalog_code)
+    ) is distinct from true then
+      raise exception 'valid recurring milestone rejected: %', catalog_code;
+    end if;
+
+    foreach source_surface in array array[
+      'rhythms_hub', 'home', 'journey_catalog', 'journey_detail',
+      'journey_completion', 'practice_catalog', 'weekly_rhythm',
+      'gathering', 'milestones', 'profile'
+    ] loop
+      if faith_harbor.growth_event_properties_are_safe_v9(
+        'milestone_revealed',
+        jsonb_build_object('catalog_code', catalog_code, 'source_surface', source_surface)
+      ) is distinct from true then
+        raise exception 'valid recurring milestone surface rejected: % %', catalog_code, source_surface;
+      end if;
+    end loop;
+  end loop;
+
+  if faith_harbor.growth_event_properties_are_safe_v9(
+      'milestone_earned', '{"catalog_code":"arbitrary-code"}'::jsonb
+    ) is distinct from false
+    or faith_harbor.growth_event_properties_are_safe_v9(
+      'milestone_earned', '{"catalog_code":"rhythm_first_week","user_id":"private"}'::jsonb
+    ) is distinct from false
+    or faith_harbor.growth_event_properties_are_safe_v9(
+      'milestone_revealed', '{"catalog_code":"rhythm_first_week","source_surface":"arbitrary"}'::jsonb
+    ) is distinct from false then
+    raise exception 'invalid recurring milestone contract accepted';
+  end if;
+end
+$verify_recurring_milestone_contracts$;
 
 do $verify_indexed_step_contracts$
 declare
@@ -287,15 +349,16 @@ begin
     ) or not exists (
       select 1 from pg_constraint where conrelid = 'faith_harbor.growth_analytics_events'::regclass
         and conname = 'growth_analytics_properties_check' and not convalidated
-        and pg_get_constraintdef(oid) like '%growth_event_properties_are_safe_v8%'
+        and pg_get_constraintdef(oid) like '%growth_event_properties_are_safe_v9%'
     ) or exists (
       select 1 from pg_constraint where conrelid = 'faith_harbor.growth_analytics_events'::regclass
         and conname in (
           'growth_analytics_events_event_name_v8_check',
-          'growth_analytics_properties_v8_check'
+          'growth_analytics_properties_v8_check',
+          'growth_analytics_properties_v9_check'
         )
     ) then
-    raise exception 'final v8 constraint catalog state is incorrect';
+    raise exception 'final v9 constraint catalog state is incorrect';
   end if;
 
   if not exists (
@@ -359,7 +422,7 @@ begin
 
   begin
     update faith_harbor.growth_analytics_events set audit_marker = 1 where id = 1;
-    raise exception 'v7-invalid historical row was updated without satisfying v8';
+    raise exception 'v7-invalid historical row was updated without satisfying v9';
   exception
     when check_violation then null;
   end;

@@ -78,7 +78,10 @@ const practiceCatalogCodeSchema = z.enum([
   'guided_prayer', 'scripture', 'gratitude', 'silence', 'daily_reflection', 'act_of_kindness',
 ]);
 const gatheringCatalogCodeSchema = z.literal('weekly-rest');
-const milestoneCatalogCodeSchema = z.enum(['streak_3', 'streak_7', 'journey_finisher']);
+const milestoneCatalogCodeSchema = z.enum([
+  'streak_3', 'streak_7', 'journey_finisher',
+  'rhythm_first_week', 'rhythm_four_weeks', 'rhythm_balanced', 'rhythm_return',
+]);
 const badgeCatalogCodeSchema = z.enum([
   'milestone.generic', 'flame.spark', 'flame.steady', 'flame.rooted', 'flame.pilgrim',
 ]);

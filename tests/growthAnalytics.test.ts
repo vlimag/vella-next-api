@@ -81,7 +81,7 @@ const RHYTHMS_EVENT_PROPERTIES = {
   weekly_rhythm_returned: {
     catalog_code: 'gratitude', source_surface: 'weekly_rhythm', session_kind: 'gratitude',
   },
-  milestone_earned: { catalog_code: 'journey_finisher' },
+  milestone_earned: { catalog_code: 'rhythm_first_week' },
   milestone_revealed: { catalog_code: 'streak_3', source_surface: 'milestones' },
   milestone_featured: { catalog_code: 'streak_7', source_surface: 'profile' },
   milestone_unfeatured: { catalog_code: 'streak_7', source_surface: 'profile' },
