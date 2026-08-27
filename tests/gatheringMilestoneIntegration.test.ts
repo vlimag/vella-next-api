@@ -47,5 +47,15 @@ describe('gathering v2 milestone integration fixture', () => {
     expect(fixture).toContain('run_concurrent_v2_v1_idempotency');
     expect(fixture).toContain('concurrent cross-version idempotency key leaked a raw database error');
     expect(fixture).toContain('concurrent cross-version idempotency key did not produce exactly one completion and one conflict');
+    expect(fixture).toContain('v1 completed-row precedence was not preserved');
+    expect(fixture).toContain('metric retry did not remain idempotent');
+    expect(fixture).toContain('metric idempotency key conflict incremented a counter');
+    expect(fixture).toContain('run_concurrent_metric_retry');
+    expect(fixture).toContain('run_concurrent_metric_conflict');
+    expect(fixture).toContain('concurrent metric retry did not increment exactly once');
+    expect(fixture).toContain('concurrent metric conflict fabricated a counter');
+    expect(fixture).toContain('failed metric write permanently consumed its idempotency key');
+    expect(fixture).toContain('wait_for_account_lock');
+    expect(fixture).toContain('designated first completion did not win the lock handshake');
   });
 });

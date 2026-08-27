@@ -243,7 +243,8 @@ insert into auth.users (id, is_anonymous) values
   ('88888888-8888-4888-8888-888888888888', false),
   ('99999999-9999-4999-8999-999999999999', false),
   ('12121212-1212-4121-8121-121212121212', false),
-  ('13131313-1313-4131-8131-131313131313', false);
+  ('13131313-1313-4131-8131-131313131313', false),
+  ('14141414-1414-4141-8141-141414141414', false);
 
 insert into faith_harbor.gathering_releases (id, catalog_code, release_week, slot_type, source_kind, status, content_hash, prompt_revision, editorial_revision, published_at)
 values
@@ -465,6 +466,23 @@ begin
     or (select count(*) from faith_harbor.user_milestones where user_id = '99999999-9999-4999-8999-999999999999' and milestone_code = 'gathering_first_light') <> 1 then
     raise exception 'sequential v2-v1 idempotency key duplicated progress, completion, or badge';
   end if;
+
+  perform faith_harbor.save_gathering_progress_v1(
+    '14141414-1414-4141-8141-141414141414', v1_template_id, 8, true,
+    '90000000-0000-4000-8000-000000000007', 'UTC', '2026-08-27', '2026-08-24', '2026-08-27T00:00:00Z'
+  );
+  perform faith_harbor.save_gathering_progress_v2(
+    '14141414-1414-4141-8141-141414141414', v2_template_id, 8, 'completed',
+    '90000000-0000-4000-8000-000000000008', 'UTC'
+  );
+  select faith_harbor.save_gathering_progress_v1(
+    '14141414-1414-4141-8141-141414141414', v1_template_id, 8, true,
+    '90000000-0000-4000-8000-000000000008', 'UTC', '2026-08-27', '2026-08-24', '2026-08-27T00:00:00Z'
+  ) into v1_conflict;
+  if v1_conflict ->> 'outcome' <> 'already_completed'
+    or v1_conflict ->> 'practice_credit' <> 'guided_prayer' then
+    raise exception 'v1 completed-row precedence was not preserved: %', v1_conflict;
+  end if;
 end
 $verify_cross_version_idempotency$;
 
@@ -486,20 +504,49 @@ begin
     or faith_harbor.record_gathering_operational_event_v1('inventory_checked', 'succeeded', 'monday', null, null, null) ->> 'outcome' <> 'invalid_request' then
     raise exception 'operational NULL dimensions were not rejected';
   end if;
-  select faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'view', 1) into result;
-  perform faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'start', 1);
-  perform faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'completion', 1);
+  select faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'view', 1, 'd0000000-0000-4000-8000-000000000001') into result;
+  perform faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'start', 1, 'd0000000-0000-4000-8000-000000000002');
+  perform faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'completion', 1, 'd0000000-0000-4000-8000-000000000003');
   if (select array[views, starts, completions, resumes, step_dropoffs] from faith_harbor.gathering_content_metrics_daily where metric_date = current_date and release_id = 'a0000000-0000-4000-8000-000000000001' and locale = 'en') <> array[1, 1, 1, 0, 0] then
     raise exception 'requested metrics did not remain independent';
   end if;
-  perform faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'pt', 'resume', 1);
-  perform faith_harbor.aggregate_gathering_metrics_v1(current_date + 1, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'step_dropout', 1);
+  perform faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'pt', 'resume', 1, 'd0000000-0000-4000-8000-000000000004');
+  perform faith_harbor.aggregate_gathering_metrics_v1(current_date + 1, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'step_dropout', 1, 'd0000000-0000-4000-8000-000000000005');
   if (select array[views, starts, completions, resumes, step_dropoffs] from faith_harbor.gathering_content_metrics_daily where metric_date = current_date and release_id = 'a0000000-0000-4000-8000-000000000001' and locale = 'pt') <> array[0, 0, 0, 1, 0]
     or (select array[views, starts, completions, resumes, step_dropoffs] from faith_harbor.gathering_content_metrics_daily where metric_date = current_date + 1 and release_id = 'a0000000-0000-4000-8000-000000000001' and locale = 'en') <> array[0, 0, 0, 0, 1] then
     raise exception 'isolated metrics fabricated other counters';
   end if;
-  if faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', null, 1) ->> 'outcome' <> 'invalid_request' then
+  select faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'es', 'view', 2, 'd0000000-0000-4000-8000-000000000006') into result;
+  if result ->> 'outcome' <> 'recorded'
+    or faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'es', 'view', 2, 'd0000000-0000-4000-8000-000000000006') ->> 'outcome' <> 'already_recorded' then
+    raise exception 'metric retry did not remain idempotent';
+  end if;
+  if faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'es', 'view', 3, 'd0000000-0000-4000-8000-000000000006') ->> 'outcome' <> 'idempotency_conflict'
+    or (select array[views, starts, completions, resumes, step_dropoffs] from faith_harbor.gathering_content_metrics_daily where metric_date = current_date and release_id = 'a0000000-0000-4000-8000-000000000001' and locale = 'es') <> array[2, 0, 0, 0, 0] then
+    raise exception 'metric idempotency key conflict incremented a counter';
+  end if;
+  if faith_harbor.aggregate_gathering_metrics_v1(current_date, 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'monday', 'fr', 'view', 1, 'd0000000-0000-4000-8000-000000000007') ->> 'outcome' <> 'not_found'
+    or faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'fr', 'view', 1, 'd0000000-0000-4000-8000-000000000007') ->> 'outcome' <> 'recorded' then
+    raise exception 'failed validation permanently consumed a metric idempotency key';
+  end if;
+  if faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', null, 1, 'd0000000-0000-4000-8000-000000000008') ->> 'outcome' <> 'invalid_request' then
     raise exception 'NULL metric_name was not rejected';
+  end if;
+  if has_function_privilege('public', 'faith_harbor.aggregate_gathering_metrics_v1(date,uuid,text,text,text,integer,uuid)', 'execute')
+    or has_function_privilege('anon', 'faith_harbor.aggregate_gathering_metrics_v1(date,uuid,text,text,text,integer,uuid)', 'execute')
+    or has_function_privilege('authenticated', 'faith_harbor.aggregate_gathering_metrics_v1(date,uuid,text,text,text,integer,uuid)', 'execute')
+    or not has_function_privilege('service_role', 'faith_harbor.aggregate_gathering_metrics_v1(date,uuid,text,text,text,integer,uuid)', 'execute')
+    or not exists (select 1 from pg_catalog.pg_class as relation join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace where namespace.nspname = 'faith_harbor' and relation.relname = 'gathering_metric_idempotency_keys' and relation.relrowsecurity)
+    or has_table_privilege('public', 'faith_harbor.gathering_metric_idempotency_keys', 'select')
+    or has_table_privilege('anon', 'faith_harbor.gathering_metric_idempotency_keys', 'insert')
+    or has_table_privilege('authenticated', 'faith_harbor.gathering_metric_idempotency_keys', 'delete')
+    or not has_table_privilege('service_role', 'faith_harbor.gathering_metric_idempotency_keys', 'insert') then
+    raise exception 'metric idempotency storage ACL or RLS was not private';
+  end if;
+  select faith_harbor.purge_gathering_metric_idempotency_keys_v1(pg_catalog.clock_timestamp() + interval '31 days') into result;
+  if result ->> 'outcome' <> 'purged'
+    or exists (select 1 from faith_harbor.gathering_metric_idempotency_keys) then
+    raise exception 'metric idempotency retention purge did not clear expired keys: result %, remaining %', result, (select count(*) from faith_harbor.gathering_metric_idempotency_keys);
   end if;
   if exists (select 1 from information_schema.columns where table_schema = 'faith_harbor' and table_name = 'gathering_content_metrics_daily' and column_name in ('user_id', 'account_id', 'email')) then
     raise exception 'daily metrics retained identity';
@@ -578,9 +625,10 @@ run_concurrent_cross_version_idempotency() {
   if [[ "$first_kind" == 'v2' ]]; then first_call=$v2_call; fi
   if [[ "$second_kind" == 'v1' ]]; then second_call=$v1_call; fi
 
-  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); $first_call" >"$first_output" 2>&1 &
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "begin; select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended('$account_id', 1)); select pg_sleep(0.25); $first_call commit;" >"$first_output" 2>&1 &
   local first_pid=$!
-  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); $second_call" >"$second_output" 2>&1 &
+  wait_for_account_lock "$account_id"
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "$second_call" >"$second_output" 2>&1 &
   local second_pid=$!
   wait "$first_pid"
   wait "$second_pid"
@@ -593,7 +641,29 @@ run_concurrent_cross_version_idempotency() {
     echo 'concurrent cross-version idempotency key did not produce exactly one finite conflict' >&2
     return 1
   fi
+  if ! rg -q '"outcome": "completed"' "$first_output" \
+    || ! rg -q '"outcome": "idempotency_conflict"' "$second_output"; then
+    echo 'designated first completion did not win the lock handshake' >&2
+    return 1
+  fi
   gatherings_psql -d gatherings_clean -v ON_ERROR_STOP=1 -c "do \$\$ begin if (select count(*) from faith_harbor.user_gathering_progress where user_id = '$account_id' and status = 'completed') <> 1 or (select count(*) from faith_harbor.user_gathering_progress where user_id = '$account_id' and completion_idempotency_key = '$completion_key'::uuid) <> 1 or (select count(*) from faith_harbor.user_milestones where user_id = '$account_id' and milestone_code = 'gathering_first_light') > 1 then raise exception 'concurrent cross-version idempotency key did not produce exactly one completion and one conflict'; end if; end \$\$;" >/dev/null
+}
+
+wait_for_account_lock() {
+  local account_id=$1
+  local attempt
+  local lock_state
+
+  for attempt in $(seq 1 100); do
+    lock_state=$(gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select case when pg_catalog.pg_try_advisory_lock(pg_catalog.hashtextextended('$account_id', 1)) then pg_catalog.pg_advisory_unlock(pg_catalog.hashtextextended('$account_id', 1))::text else 'held' end;")
+    if [[ "$lock_state" == 'held' ]]; then
+      return 0
+    fi
+    sleep 0.02
+  done
+
+  echo "account lock handshake timed out for $account_id" >&2
+  return 1
 }
 
 run_concurrent_v1_v2_idempotency() {
@@ -606,5 +676,74 @@ run_concurrent_v2_v1_idempotency() {
 
 run_concurrent_v1_v2_idempotency
 run_concurrent_v2_v1_idempotency
+
+run_concurrent_metric_retry() {
+  local metric_key='e0000000-0000-4000-8000-000000000001'
+  local first_output="$GATHERINGS_PG_ROOT/metric-retry.first"
+  local second_output="$GATHERINGS_PG_ROOT/metric-retry.second"
+  local metric_call="select faith_harbor.aggregate_gathering_metrics_v1(current_date + 2, 'a0000000-0000-4000-8000-000000000001'::uuid, 'monday', 'de', 'view', 1, '$metric_key'::uuid);"
+
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); $metric_call" >"$first_output" 2>&1 &
+  local first_pid=$!
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); $metric_call" >"$second_output" 2>&1 &
+  local second_pid=$!
+  wait "$first_pid"
+  wait "$second_pid"
+
+  if rg -q 'ERROR|23505' "$first_output" "$second_output" \
+    || [[ $(rg -l '"outcome": "recorded"' "$first_output" "$second_output" | wc -l | tr -d ' ') -ne 1 ]] \
+    || [[ $(rg -l '"outcome": "already_recorded"' "$first_output" "$second_output" | wc -l | tr -d ' ') -ne 1 ]]; then
+    echo 'concurrent metric retry did not return one record and one duplicate outcome' >&2
+    return 1
+  fi
+  gatherings_psql -d gatherings_clean -v ON_ERROR_STOP=1 -c "do \$\$ begin if (select array[views, starts, completions, resumes, step_dropoffs] from faith_harbor.gathering_content_metrics_daily where metric_date = current_date + 2 and release_id = 'a0000000-0000-4000-8000-000000000001' and locale = 'de') <> array[1, 0, 0, 0, 0] then raise exception 'concurrent metric retry did not increment exactly once'; end if; end \$\$;" >/dev/null
+}
+
+run_concurrent_metric_conflict() {
+  local metric_key='e0000000-0000-4000-8000-000000000002'
+  local first_output="$GATHERINGS_PG_ROOT/metric-conflict.first"
+  local second_output="$GATHERINGS_PG_ROOT/metric-conflict.second"
+  local view_call="select faith_harbor.aggregate_gathering_metrics_v1(current_date + 3, 'a0000000-0000-4000-8000-000000000001'::uuid, 'monday', 'de', 'view', 1, '$metric_key'::uuid);"
+  local start_call="select faith_harbor.aggregate_gathering_metrics_v1(current_date + 3, 'a0000000-0000-4000-8000-000000000001'::uuid, 'monday', 'de', 'start', 1, '$metric_key'::uuid);"
+
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); $view_call" >"$first_output" 2>&1 &
+  local first_pid=$!
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); $start_call" >"$second_output" 2>&1 &
+  local second_pid=$!
+  wait "$first_pid"
+  wait "$second_pid"
+
+  if rg -q 'ERROR|23505' "$first_output" "$second_output" \
+    || [[ $(rg -l '"outcome": "recorded"' "$first_output" "$second_output" | wc -l | tr -d ' ') -ne 1 ]] \
+    || [[ $(rg -l '"outcome": "idempotency_conflict"' "$first_output" "$second_output" | wc -l | tr -d ' ') -ne 1 ]]; then
+    echo 'concurrent metric conflict did not return one record and one finite conflict' >&2
+    return 1
+  fi
+  gatherings_psql -d gatherings_clean -v ON_ERROR_STOP=1 -c "do \$\$ begin if (select views + starts + completions + resumes + step_dropoffs from faith_harbor.gathering_content_metrics_daily where metric_date = current_date + 3 and release_id = 'a0000000-0000-4000-8000-000000000001' and locale = 'de') <> 1 then raise exception 'concurrent metric conflict fabricated a counter'; end if; end \$\$;" >/dev/null
+}
+
+run_failed_metric_write_rollback() {
+  local metric_key='e0000000-0000-4000-8000-000000000003'
+  local failure_output="$GATHERINGS_PG_ROOT/metric-write-failure"
+
+  gatherings_psql -d gatherings_clean -v ON_ERROR_STOP=1 -c "insert into faith_harbor.gathering_content_metrics_daily (metric_date, release_id, slot_type, locale, views) values (current_date + 4, 'a0000000-0000-4000-8000-000000000002', 'thursday', 'de', 100000000);" >/dev/null
+  if gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select faith_harbor.aggregate_gathering_metrics_v1(current_date + 4, 'a0000000-0000-4000-8000-000000000002'::uuid, 'thursday', 'de', 'view', 1, '$metric_key'::uuid);" >"$failure_output" 2>&1; then
+    echo 'metric write overflow unexpectedly succeeded' >&2
+    return 1
+  fi
+  if ! rg -q 'gathering_content_metrics_daily_independent_counters_check' "$failure_output"; then
+    echo 'metric write failure did not reach the bounded counter constraint' >&2
+    return 1
+  fi
+  gatherings_psql -d gatherings_clean -v ON_ERROR_STOP=1 -c "update faith_harbor.gathering_content_metrics_daily set views = 0 where metric_date = current_date + 4 and release_id = 'a0000000-0000-4000-8000-000000000002' and locale = 'de';" >/dev/null
+  if ! gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select faith_harbor.aggregate_gathering_metrics_v1(current_date + 4, 'a0000000-0000-4000-8000-000000000002'::uuid, 'thursday', 'de', 'view', 1, '$metric_key'::uuid);" | rg -q '"outcome": "recorded"'; then
+    echo 'failed metric write permanently consumed its idempotency key' >&2
+    return 1
+  fi
+}
+
+run_concurrent_metric_retry
+run_concurrent_metric_conflict
+run_failed_metric_write_rollback
 
 echo "gatherings v2 PostgreSQL integration passed"

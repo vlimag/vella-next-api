@@ -87,6 +87,11 @@ describe('gathering catalog v2 database contract', () => {
     expect(completionWrite).toBeGreaterThanOrEqual(0);
     expect(accountLock).toBeLessThan(progressInsert);
     expect(accountLock).toBeLessThan(completionWrite);
+    const completedResponse = progress.indexOf("if selected_progress.status = 'completed'");
+    const crossTemplateConflict = progress.indexOf('gathering_template_id <> selected_template.id');
+    expect(completedResponse).toBeGreaterThanOrEqual(0);
+    expect(crossTemplateConflict).toBeGreaterThanOrEqual(0);
+    expect(completedResponse).toBeLessThan(crossTemplateConflict);
     expect(progress).toMatch(/completion_idempotency_key = p_idempotency_key[\s\S]*gathering_template_id <> selected_template\.id[\s\S]*'idempotency_conflict'/i);
     expect(sql).toMatch(/revoke execute on function faith_harbor\.save_gathering_progress_v1\([\s\S]*from public, anon, authenticated;/i);
     expect(sql).toMatch(/grant execute on function faith_harbor\.save_gathering_progress_v1\([\s\S]*to service_role;/i);
@@ -102,6 +107,10 @@ describe('gathering catalog v2 database contract', () => {
     expect(operational).toMatch(/p_locale is not null and p_locale not in \(/i);
     expect(operational).toMatch(/p_safe_error_code is not null and p_safe_error_code not in \(/i);
     expect(aggregate).toMatch(/p_metric_name is null[\s\S]*p_metric_name not in \('view', 'start', 'completion', 'resume', 'step_dropout'\)/i);
+    expect(aggregate).toMatch(/p_idempotency_key is null/i);
+    expect(aggregate).toMatch(/insert into faith_harbor\.gathering_metric_idempotency_keys[\s\S]*on conflict \(idempotency_key\) do nothing/i);
+    expect(aggregate).toMatch(/'already_recorded'/i);
+    expect(aggregate).toMatch(/'idempotency_conflict'/i);
     expect(aggregate).toMatch(/on conflict \(metric_date, release_id, locale\) do update/i);
     expect(aggregate).toMatch(/case when p_metric_name = 'view' then p_increment else 0 end/i);
     expect(aggregate).toMatch(/case when p_metric_name = 'start' then p_increment else 0 end/i);
@@ -110,6 +119,11 @@ describe('gathering catalog v2 database contract', () => {
     expect(`${operational}\n${aggregate}`).not.toMatch(/user_id|account_id|email|receipt|private_prayer|journal/i);
     expect(sql).toMatch(/alter table faith_harbor\.gathering_content_metrics_daily\s+drop constraint if exists gathering_content_metrics_daily_check;/i);
     expect(sql).toMatch(/add constraint gathering_content_metrics_daily_independent_counters_check/i);
+    expect(sql).toMatch(/create table if not exists faith_harbor\.gathering_metric_idempotency_keys/i);
+    expect(sql).toMatch(/alter table faith_harbor\.gathering_metric_idempotency_keys enable row level security/i);
+    expect(sql).toMatch(/create policy gathering_metric_idempotency_keys_service_role[\s\S]*to service_role/i);
+    expect(sql).toMatch(/create index if not exists idx_gathering_metric_idempotency_keys_delete_after/i);
+    expect(sql).toMatch(/create or replace function faith_harbor\.purge_gathering_metric_idempotency_keys_v1\(/i);
   });
 
   it('hardens every v2 RPC with an empty search path and service-role-only execution', () => {
@@ -118,7 +132,8 @@ describe('gathering catalog v2 database contract', () => {
       ['get_gathering_catalog_v2', 'uuid, text, text, timestamptz'],
       ['save_gathering_progress_v2', 'uuid, uuid, integer, text, uuid, text'],
       ['record_gathering_operational_event_v1', 'text, text, text, text, text, text'],
-      ['aggregate_gathering_metrics_v1', 'date, uuid, text, text, text, integer'],
+      ['aggregate_gathering_metrics_v1', 'date, uuid, text, text, text, integer, uuid'],
+      ['purge_gathering_metric_idempotency_keys_v1', 'timestamptz'],
     ]) {
       const body = functionBody(sql, name);
       expect(body).toMatch(/security definer\s+set search_path = ''/i);
