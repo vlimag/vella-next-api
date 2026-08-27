@@ -1434,6 +1434,15 @@ describe('growth analytics ingestion', () => {
     })).success).toBe(true);
   });
 
+  it('keeps the existing API analytics catalog additive while Gathering v2 is database-scoped', () => {
+    expect(GROWTH_EVENT_NAMES).toHaveLength(72);
+    expect(new Set(GROWTH_EVENT_NAMES).size).toBe(72);
+    expect(GROWTH_EVENT_NAMES).toEqual(expect.arrayContaining(Object.keys(RHYTHMS_EVENT_PROPERTIES)));
+    expect(GROWTH_EVENT_NAMES).not.toContain('gathering_catalog_loaded');
+    expect(GROWTH_EVENT_NAMES).not.toContain('gathering_card_selected');
+    expect(GROWTH_EVENT_NAMES).not.toContain('gathering_session_abandoned');
+  });
+
   it('requires authenticated ingestion for Rhythms completion telemetry and never forwards account identity', async () => {
     const unauthenticated = serviceClient();
     mocks.createServiceClient.mockReturnValueOnce(unauthenticated);
