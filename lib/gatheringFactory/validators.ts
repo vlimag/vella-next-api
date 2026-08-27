@@ -45,7 +45,7 @@ const SIMILARITY_THRESHOLD = 0.82;
 const prohibitedPatterns: readonly RegExp[] = [
   /\b(?:cure|cures|cured|diagnose|diagnosed|diagnosis)\b[\s\S]{0,80}\b(?:you|your|this|the)\b/i,
   /\b(?:medical|legal|financial)\s+(?:advice|treatment|diagnosis|guarantee)\b/i,
-  /\b(?:curará|curaran|curarás|curar|cura|diagnóstico|diagnostico|tratamento médico|conselho jurídico|conseil juridique|medizinische Beratung|consiglio legale|гарант\w*|гарант\w*|gwarant\w*|wylecz\w*)\b/i,
+  /\b(?:curará|curaran|curarás|diagnóstico|diagnostico|tratamento médico|conselho jurídico|conseil juridique|medizinische Beratung|consiglio legale|гарант\w*|гарант\w*|gwarant\w*|wylecz\w*)\b/i,
   /\b(?:stop|avoid|replace|skip)\s+(?:your\s+)?(?:medication|medicine|therapy|doctor|treatment)\b/i,
   /\b(?:guaranteed|guarantee|certainly|definitely|always works|will\s+(?:cure|heal|fix|solve))\b/i,
   /\b(?:garantizado|garantizada|garantido|garantida|garanti|garantiert|garantito|garantita|гарант\w*|gwarant\w*)\b/i,
@@ -57,7 +57,7 @@ const prohibitedPatterns: readonly RegExp[] = [
   /\b(?:vote for|political party|politician|election campaign|court order|lawsuit)\b/i,
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
   /(?<!\w)\+?\d(?:[\s().-]*\d){7,}(?!\w)/i,
-  /\b(?:user[_ -]?id|account[_ -]?id|receipt|purchase[_ -]?token|raw[_ -]?(?:prayer|journal)|private (?:prayer|journal|note))\b/i,
+  /\b(?:user[_ -]?id|account[_ -]?id|receipt|purchase[_ -]?token|raw[_ -]?(?:prayer|journal)|private[_ -]?(?:prayer|journal|note)[_ -]?(?:text|content|body|payload))\b/i,
 ];
 
 const forbiddenScriptureKeys = new Set([

@@ -126,6 +126,26 @@ describe('gathering factory validators', () => {
     });
   });
 
+  it('allows ordinary editorial references to a private prayer', () => {
+    const candidate = validCandidate();
+    candidate.locales.en.steps[5] = {
+      section_type: 'private_prayer',
+      body: 'Hold this as a private prayer before God.',
+    };
+
+    expect(validateGatheringCandidate(candidate, { recentReleases: [] })).toEqual({ ok: true });
+  });
+
+  it('allows benign localized references to pastoral care', () => {
+    const candidate = validCandidate();
+    candidate.locales.it.steps[3] = {
+      section_type: 'reflection',
+      body: 'Accogli la cura amorevole di Dio per la tua famiglia.',
+    };
+
+    expect(validateGatheringCandidate(candidate, { recentReleases: [] })).toEqual({ ok: true });
+  });
+
   it('rejects prohibited claims in localized editorial copy', () => {
     const candidate = validCandidate();
     candidate.locales.es.steps[3] = {

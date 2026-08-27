@@ -158,7 +158,7 @@ export async function generateGatheringDraft(
     input: [
       {
         role: 'system',
-        content: 'Create one safe, warm, denomination-neutral Christian Gathering. Return only the requested structured object. Select an approved Scripture reference; never write Scripture text.',
+        content: 'Create one safe, warm, denomination-neutral Christian Gathering. Return only the requested structured object. Select an approved Scripture reference; never write Scripture text. Never use quotation marks or attribute direct words to God, Jesus, the Bible, or Scripture. Avoid cure, healing, or guarantee claims and all private identifiers.',
       },
       {
         role: 'user',

@@ -57,6 +57,8 @@ describe('gathering factory Responses API adapter', () => {
       expect(step.properties.section_type.type).toBe('string');
     }
     expect(request.metadata).toEqual({ prompt_revision: 'gathering-factory.1' });
+    expect(request.input[0].content).toContain('Never use quotation marks');
+    expect(request.input[0].content).toContain('Avoid cure, healing, or guarantee claims');
     expect(JSON.stringify(request)).not.toContain('user_id');
     expect(result.usage).toEqual({ inputTokens: 1_200, outputTokens: 900 });
     expect(result.draft).toEqual(validDraft());
