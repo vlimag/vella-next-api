@@ -48,6 +48,8 @@ describe('gathering catalog v2 database contract', () => {
     expect(progress).toMatch(/p_state = 'completed'[\s\S]*p_current_step <> 8/i);
     expect(progress).toMatch(/pg_catalog\.clock_timestamp\(\)/i);
     expect(progress).toMatch(/pg_catalog\.pg_advisory_xact_lock/i);
+    expect(progress).toMatch(/hashtextextended\(\s*p_owner_user_id::text,\s*1\s*\)/i);
+    expect(progress.match(/pg_catalog\.pg_advisory_xact_lock/gi)).toHaveLength(2);
     expect(progress).toMatch(/count\(distinct completed_template\.release_id\)/i);
     expect(progress).toMatch(/'gathering_first_light'/i);
     expect(progress).toMatch(/'gathering_monthly_rhythm'/i);
@@ -64,11 +66,18 @@ describe('gathering catalog v2 database contract', () => {
     const aggregate = functionBody(sql, 'aggregate_gathering_metrics_v1');
 
     expect(operational).toMatch(/p_event_name not in \([\s\S]*'inventory_checked'[\s\S]*'watchdog_checked'/i);
+    expect(operational).toMatch(/p_event_name is null[\s\S]*p_event_state is null[\s\S]*p_slot_type is null[\s\S]*p_locale is null/i);
     expect(operational).toMatch(/p_locale is not null and p_locale not in \(/i);
     expect(operational).toMatch(/p_safe_error_code is not null and p_safe_error_code not in \(/i);
-    expect(aggregate).toMatch(/p_metric_name not in \('view', 'start', 'completion', 'resume', 'step_dropout'\)/i);
+    expect(aggregate).toMatch(/p_metric_name is null[\s\S]*p_metric_name not in \('view', 'start', 'completion', 'resume', 'step_dropout'\)/i);
     expect(aggregate).toMatch(/on conflict \(metric_date, release_id, locale\) do update/i);
+    expect(aggregate).toMatch(/case when p_metric_name = 'view' then p_increment else 0 end/i);
+    expect(aggregate).toMatch(/case when p_metric_name = 'start' then p_increment else 0 end/i);
+    expect(aggregate).toMatch(/case when p_metric_name = 'completion' then p_increment else 0 end/i);
+    expect(aggregate).not.toMatch(/p_metric_name in \('view', 'start', 'completion', 'resume', 'step_dropout'\)/i);
     expect(`${operational}\n${aggregate}`).not.toMatch(/user_id|account_id|email|receipt|private_prayer|journal/i);
+    expect(sql).toMatch(/alter table faith_harbor\.gathering_content_metrics_daily\s+drop constraint if exists gathering_content_metrics_daily_check;/i);
+    expect(sql).toMatch(/add constraint gathering_content_metrics_daily_independent_counters_check/i);
   });
 
   it('hardens every v2 RPC with an empty search path and service-role-only execution', () => {

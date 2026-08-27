@@ -12,11 +12,12 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 WORKSPACE_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 TASK_1_MIGRATION="$WORKSPACE_ROOT/supabase/migrations/20260827210000_gathering_content_factory.sql"
 TASK_2_MIGRATION="$WORKSPACE_ROOT/supabase/migrations/20260827210100_gathering_catalog_v2.sql"
+V1_GATHERING_MIGRATION="$WORKSPACE_ROOT/supabase/migrations/20260826180539_first_vella_gathering.sql"
 GATHERINGS_PG_ROOT=$(mktemp -d)
 GATHERINGS_PG_DATA="$GATHERINGS_PG_ROOT/data"
 GATHERINGS_PG_PORT=${GATHERINGS_PG_PORT:-55458}
 
-[[ -f "$TASK_1_MIGRATION" && -f "$TASK_2_MIGRATION" ]] || {
+[[ -f "$TASK_1_MIGRATION" && -f "$TASK_2_MIGRATION" && -f "$V1_GATHERING_MIGRATION" ]] || {
   echo "gatherings v2 migrations are missing" >&2
   exit 1
 }
@@ -150,7 +151,9 @@ create extension if not exists pgcrypto;
 create table auth.users (id uuid primary key, is_anonymous boolean not null default false);
 create function faith_harbor.set_updated_at() returns trigger language plpgsql set search_path = '' as $$ begin new.updated_at := pg_catalog.now(); return new; end; $$;
 create table faith_harbor.gathering_templates (id uuid primary key default gen_random_uuid(), slug text not null, version integer not null, locale text not null, title text not null, summary text not null, theme_key text not null, estimated_duration_seconds integer not null, status text not null, available_from timestamptz, available_until timestamptz, access_tier text not null, editorial_revision text not null, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique (slug, version, locale));
-create table faith_harbor.gathering_template_steps (id uuid primary key default gen_random_uuid(), gathering_template_id uuid not null references faith_harbor.gathering_templates(id), step_order smallint not null, section_type text not null, content_key text not null, unique (gathering_template_id, step_order));
+create table faith_harbor.bible_versions (id uuid primary key, code text not null);
+create table faith_harbor.bible_verses (id uuid primary key, version_id uuid, language_code text not null, text_content text not null, chapter integer not null, verse integer not null);
+create table faith_harbor.gathering_template_steps (id uuid primary key default gen_random_uuid(), gathering_template_id uuid not null references faith_harbor.gathering_templates(id), step_order smallint not null, section_type text not null, content_key text not null, editorial_text text, scripture_verse_id uuid, duration_seconds integer, narration_asset_key text, is_required boolean not null default true, unique (gathering_template_id, step_order));
 create table faith_harbor.user_gathering_progress (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id), gathering_template_id uuid not null references faith_harbor.gathering_templates(id), current_step smallint not null default 0, status text not null default 'not_started', started_at timestamptz, completed_at timestamptz, last_seen_at timestamptz, completion_idempotency_key uuid, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique (user_id, gathering_template_id));
 create table faith_harbor.gamification_milestones (code text primary key, title text not null, description text not null, metric text not null check (metric in ('streak', 'completed_days', 'completed_journeys')), target_value integer not null, badge_color text not null, is_premium boolean not null, category text not null, tier text, theme_key text, asset_key text, display_priority integer not null, is_shareable boolean not null, is_active boolean not null);
 create table faith_harbor.user_milestones (id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id), anonymous_profile_id uuid, milestone_code text not null references faith_harbor.gamification_milestones(code), earned_at timestamptz not null default now(), metadata jsonb not null default '{}'::jsonb);
@@ -165,10 +168,14 @@ gatherings_psql -d gatherings_clean -f "$TASK_1_MIGRATION" -f "$TASK_2_MIGRATION
 
 # Upgrade deployment: preserve an existing v1 row while moving from Task 1 to Task 2.
 gatherings_psql -d gatherings_upgrade -f "$TASK_1_MIGRATION" >/dev/null
+sed -n '/^create or replace function faith_harbor.get_current_gathering_v1(/,/^\$\$;/p' "$V1_GATHERING_MIGRATION" | gatherings_psql -d gatherings_upgrade >/dev/null
 gatherings_psql -d gatherings_upgrade >/dev/null <<'SQL'
 insert into auth.users (id, is_anonymous) values ('11111111-1111-4111-8111-111111111111', false);
 insert into faith_harbor.gathering_templates (id, slug, version, locale, title, summary, theme_key, estimated_duration_seconds, status, access_tier, editorial_revision)
 values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'weekly-rest', 1, 'en', 'Legacy v1', 'Legacy contract', 'legacy', 900, 'published', 'premium', 'editorial.1');
+insert into faith_harbor.gathering_template_steps (gathering_template_id, step_order, section_type, content_key, editorial_text, duration_seconds)
+select 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', step_order, 'arrival', format('weekly-rest:v1:en:%s', step_order), 'Legacy safe step', 60
+from generate_series(1, 8) as step_order;
 SQL
 gatherings_psql -d gatherings_upgrade -f "$TASK_2_MIGRATION" >/dev/null
 
@@ -182,6 +189,17 @@ begin
   ) then
     raise exception 'v1 contract was not preserved during upgrade';
   end if;
+  if (faith_harbor.get_current_gathering_v1(
+    '11111111-1111-4111-8111-111111111111', 'en', '2026-08-27T00:00:00Z'
+  ) ->> 'schema_version') <> '1'
+  or faith_harbor.get_current_gathering_v1(
+    '11111111-1111-4111-8111-111111111111', 'en', '2026-08-27T00:00:00Z'
+  ) #>> '{template,slug}' <> 'weekly-rest'
+  or jsonb_array_length(faith_harbor.get_current_gathering_v1(
+    '11111111-1111-4111-8111-111111111111', 'en', '2026-08-27T00:00:00Z'
+  ) #> '{template,steps}') <> 8 then
+    raise exception 'v1 weekly-rest response was not executable';
+  end if;
 end
 $verify_v1_preserved$;
 SQL
@@ -189,7 +207,10 @@ SQL
 gatherings_psql -d gatherings_clean >/dev/null <<'SQL'
 insert into auth.users (id, is_anonymous) values
   ('11111111-1111-4111-8111-111111111111', false),
-  ('22222222-2222-4222-8222-222222222222', true);
+  ('22222222-2222-4222-8222-222222222222', true),
+  ('33333333-3333-4333-8333-333333333333', false),
+  ('44444444-4444-4444-8444-444444444444', false),
+  ('55555555-5555-4555-8555-555555555555', false);
 
 insert into faith_harbor.gathering_releases (id, catalog_code, release_week, slot_type, source_kind, status, content_hash, prompt_revision, editorial_revision, published_at)
 values
@@ -248,6 +269,14 @@ begin
   select faith_harbor.get_gathering_catalog_v2(null, 'en', 'Europe/Paris', '2026-03-04T23:00:00Z') into result;
   if result::text not like '%g-2026w10-thu%' then
     raise exception 'Paris Thursday boundary was not available: %', result;
+  end if;
+  select faith_harbor.get_gathering_catalog_v2(null, 'en', 'Europe/Paris', '2026-01-04T22:59:59Z') into result;
+  if (result #>> '{next_release,available_at}')::timestamptz <> '2026-01-04T23:00:00Z'::timestamptz then
+    raise exception 'Paris winter available_at did not use IANA data: %', result;
+  end if;
+  select faith_harbor.get_gathering_catalog_v2(null, 'en', 'Europe/Paris', '2026-07-05T21:59:59Z') into result;
+  if (result #>> '{next_release,available_at}')::timestamptz <> '2026-07-05T22:00:00Z'::timestamptz then
+    raise exception 'Paris summer available_at did not use IANA data: %', result;
   end if;
   select faith_harbor.get_gathering_catalog_v2(null, 'en', 'Invalid/Zone', '2026-03-02T00:00:00Z') into result;
   if result ->> 'timezone_name' <> 'UTC' or result ->> 'fallback_used' <> 'true' then
@@ -315,11 +344,26 @@ begin
   end if;
   select faith_harbor.record_gathering_operational_event_v1('inventory_checked', 'succeeded', 'monday', 'en', 'under_1s', null) into result;
   if result ->> 'outcome' <> 'recorded' then raise exception 'operational event not recorded'; end if;
+  if faith_harbor.record_gathering_operational_event_v1(null, 'succeeded', 'monday', 'en', null, null) ->> 'outcome' <> 'invalid_request'
+    or faith_harbor.record_gathering_operational_event_v1('inventory_checked', null, 'monday', 'en', null, null) ->> 'outcome' <> 'invalid_request'
+    or faith_harbor.record_gathering_operational_event_v1('inventory_checked', 'succeeded', null, 'en', null, null) ->> 'outcome' <> 'invalid_request'
+    or faith_harbor.record_gathering_operational_event_v1('inventory_checked', 'succeeded', 'monday', null, null, null) ->> 'outcome' <> 'invalid_request' then
+    raise exception 'operational NULL dimensions were not rejected';
+  end if;
   select faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'view', 1) into result;
   perform faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'start', 1);
   perform faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'completion', 1);
-  if (select completions from faith_harbor.gathering_content_metrics_daily where metric_date = current_date and release_id = 'a0000000-0000-4000-8000-000000000001') <> 1 then
-    raise exception 'aggregate metric was not recorded';
+  if (select array[views, starts, completions, resumes, step_dropoffs] from faith_harbor.gathering_content_metrics_daily where metric_date = current_date and release_id = 'a0000000-0000-4000-8000-000000000001' and locale = 'en') <> array[1, 1, 1, 0, 0] then
+    raise exception 'requested metrics did not remain independent';
+  end if;
+  perform faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'pt', 'resume', 1);
+  perform faith_harbor.aggregate_gathering_metrics_v1(current_date + 1, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', 'step_dropout', 1);
+  if (select array[views, starts, completions, resumes, step_dropoffs] from faith_harbor.gathering_content_metrics_daily where metric_date = current_date and release_id = 'a0000000-0000-4000-8000-000000000001' and locale = 'pt') <> array[0, 0, 0, 1, 0]
+    or (select array[views, starts, completions, resumes, step_dropoffs] from faith_harbor.gathering_content_metrics_daily where metric_date = current_date + 1 and release_id = 'a0000000-0000-4000-8000-000000000001' and locale = 'en') <> array[0, 0, 0, 0, 1] then
+    raise exception 'isolated metrics fabricated other counters';
+  end if;
+  if faith_harbor.aggregate_gathering_metrics_v1(current_date, 'a0000000-0000-4000-8000-000000000001', 'monday', 'en', null, 1) ->> 'outcome' <> 'invalid_request' then
+    raise exception 'NULL metric_name was not rejected';
   end if;
   if exists (select 1 from information_schema.columns where table_schema = 'faith_harbor' and table_name = 'gathering_content_metrics_daily' and column_name in ('user_id', 'account_id', 'email')) then
     raise exception 'daily metrics retained identity';
@@ -327,5 +371,34 @@ begin
 end
 $verify_service_rpcs$;
 SQL
+
+run_concurrent_threshold() {
+  local account_id=$1
+  local seeded_release=$2
+  local first_release=$3
+  local second_release=$4
+  local milestone_code=$5
+  local first_output="$GATHERINGS_PG_ROOT/${milestone_code}.first"
+  local second_output="$GATHERINGS_PG_ROOT/${milestone_code}.second"
+  local first_key
+  local second_key
+  printf -v first_key '70000000-0000-4000-8000-%012d' "$first_release"
+  printf -v second_key '80000000-0000-4000-8000-%012d' "$second_release"
+
+  gatherings_psql -d gatherings_clean -v ON_ERROR_STOP=1 -c "do \$\$ declare release_number integer; template_id uuid; begin for release_number in 1..$seeded_release loop select id into template_id from faith_harbor.gathering_templates where slug = format('gathering-%s', release_number) and locale = 'en'; perform faith_harbor.save_gathering_progress_v2('$account_id', template_id, 8, 'completed', gen_random_uuid(), 'UTC'); end loop; end \$\$;" >/dev/null
+
+  gatherings_psql -At -d gatherings_clean -c "select pg_sleep(0.25); select faith_harbor.save_gathering_progress_v2('$account_id', (select id from faith_harbor.gathering_templates where slug = 'gathering-$first_release' and locale = 'en'), 8, 'completed', '$first_key'::uuid, 'UTC');" >"$first_output" &
+  local first_pid=$!
+  gatherings_psql -At -d gatherings_clean -c "select pg_sleep(0.25); select faith_harbor.save_gathering_progress_v2('$account_id', (select id from faith_harbor.gathering_templates where slug = 'gathering-$second_release' and locale = 'en'), 8, 'completed', '$second_key'::uuid, 'UTC');" >"$second_output" &
+  local second_pid=$!
+  wait "$first_pid"
+  wait "$second_pid"
+
+  gatherings_psql -d gatherings_clean -c "do \$\$ begin if (select count(*) from faith_harbor.user_milestones where user_id = '$account_id' and milestone_code = '$milestone_code') <> 1 then raise exception 'concurrent threshold badge was missed or duplicated: $milestone_code'; end if; end \$\$;" >/dev/null
+}
+
+run_concurrent_threshold '33333333-3333-4333-8333-333333333333' 6 7 8 gathering_monthly_rhythm
+run_concurrent_threshold '44444444-4444-4444-8444-444444444444' 22 23 24 gathering_season_keeper
+run_concurrent_threshold '55555555-5555-4555-8555-555555555555' 50 51 52 gathering_long_companion
 
 echo "gatherings v2 PostgreSQL integration passed"

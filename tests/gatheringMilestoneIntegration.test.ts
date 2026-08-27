@@ -27,5 +27,12 @@ describe('gathering v2 milestone integration fixture', () => {
     expect(fixture).toContain('milestone threshold was not awarded exactly once');
     expect(fixture).toContain('new_milestone_codes leaked an unexpected value');
     expect(fixture).toContain('count(distinct release_id)');
+    expect(fixture).toContain('run_concurrent_threshold');
+    expect(fixture).toContain('concurrent threshold badge was missed or duplicated');
+    expect(fixture).toContain('gathering_monthly_rhythm');
+    expect(fixture).toContain('gathering_season_keeper');
+    expect(fixture).toContain('gathering_long_companion');
+    expect(fixture).toContain('pg_sleep(0.25)');
+    expect(fixture).toContain('v1 weekly-rest response was not executable');
   });
 });
