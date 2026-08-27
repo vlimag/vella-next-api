@@ -156,6 +156,7 @@ create table faith_harbor.bible_verses (id uuid primary key, version_id uuid, la
 create table faith_harbor.gathering_template_steps (id uuid primary key default gen_random_uuid(), gathering_template_id uuid not null references faith_harbor.gathering_templates(id), step_order smallint not null, section_type text not null, content_key text not null, editorial_text text, scripture_verse_id uuid, duration_seconds integer, narration_asset_key text, is_required boolean not null default true, unique (gathering_template_id, step_order));
 create table faith_harbor.user_gathering_progress (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id), gathering_template_id uuid not null references faith_harbor.gathering_templates(id), current_step smallint not null default 0, status text not null default 'not_started', started_at timestamptz, completed_at timestamptz, last_seen_at timestamptz, completion_idempotency_key uuid, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique (user_id, gathering_template_id));
 create unique index if not exists idx_user_gathering_progress_completion_key on faith_harbor.user_gathering_progress(user_id, completion_idempotency_key) where completion_idempotency_key is not null;
+create table faith_harbor.practice_sessions (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id), practice_code text not null, source_type text not null, source_key text not null, idempotency_key uuid not null, status text not null, timezone_name text not null, local_day date not null, local_week_start date not null, started_at timestamptz not null, completed_at timestamptz, unique (user_id, source_type, source_key));
 create table faith_harbor.gamification_milestones (code text primary key, title text not null, description text not null, metric text not null check (metric in ('streak', 'completed_days', 'completed_journeys')), target_value integer not null, badge_color text not null, is_premium boolean not null, category text not null, tier text, theme_key text, asset_key text, display_priority integer not null, is_shareable boolean not null, is_active boolean not null);
 create table faith_harbor.user_milestones (id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id), anonymous_profile_id uuid, milestone_code text not null references faith_harbor.gamification_milestones(code), earned_at timestamptz not null default now(), metadata jsonb not null default '{}'::jsonb);
 create unique index user_milestones_owner_code on faith_harbor.user_milestones(user_id, milestone_code) where user_id is not null;
@@ -170,6 +171,7 @@ gatherings_psql -d gatherings_clean -f "$TASK_1_MIGRATION" -f "$TASK_2_MIGRATION
 # Upgrade deployment: preserve an existing v1 row while moving from Task 1 to Task 2.
 gatherings_psql -d gatherings_upgrade -f "$TASK_1_MIGRATION" >/dev/null
 sed -n '/^create or replace function faith_harbor.get_current_gathering_v1(/,/^\$\$;/p' "$V1_GATHERING_MIGRATION" | gatherings_psql -d gatherings_upgrade >/dev/null
+sed -n '/^create or replace function faith_harbor.save_gathering_progress_v1(/,/^\$\$;/p' "$V1_GATHERING_MIGRATION" | gatherings_psql -d gatherings_upgrade >/dev/null
 gatherings_psql -d gatherings_upgrade >/dev/null <<'SQL'
 insert into auth.users (id, is_anonymous) values ('11111111-1111-4111-8111-111111111111', false);
 insert into faith_harbor.gathering_templates (id, slug, version, locale, title, summary, theme_key, estimated_duration_seconds, status, access_tier, editorial_revision)
@@ -177,6 +179,30 @@ values ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'weekly-rest', 1, 'en', 'Legacy 
 insert into faith_harbor.gathering_template_steps (gathering_template_id, step_order, section_type, content_key, editorial_text, duration_seconds)
 select 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', step_order, 'arrival', format('weekly-rest:v1:en:%s', step_order), 'Legacy safe step', 60
 from generate_series(1, 8) as step_order;
+SQL
+gatherings_psql -d gatherings_upgrade >/dev/null <<'SQL'
+do $verify_exact_v1_before_task_2$
+declare
+  result jsonb;
+begin
+  select faith_harbor.save_gathering_progress_v1(
+    '11111111-1111-4111-8111-111111111111',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    1, false, null, 'UTC', '2026-08-27', '2026-08-24', '2026-08-27T00:00:00Z'
+  ) into result;
+  if result ->> 'outcome' <> 'updated'
+    or result #>> '{progress,status}' <> 'in_progress'
+    or not exists (
+      select 1
+      from pg_catalog.pg_indexes as index_definition
+      where index_definition.schemaname = 'faith_harbor'
+        and index_definition.indexname = 'idx_user_gathering_progress_completion_key'
+        and index_definition.indexdef like '%WHERE (completion_idempotency_key IS NOT NULL)%'
+    ) then
+    raise exception 'exact v1 progress function or partial index was not executable';
+  end if;
+end
+$verify_exact_v1_before_task_2$;
 SQL
 gatherings_psql -d gatherings_upgrade -f "$TASK_2_MIGRATION" >/dev/null
 
@@ -213,7 +239,11 @@ insert into auth.users (id, is_anonymous) values
   ('44444444-4444-4444-8444-444444444444', false),
   ('55555555-5555-4555-8555-555555555555', false),
   ('66666666-6666-4666-8666-666666666666', false),
-  ('77777777-7777-4777-8777-777777777777', false);
+  ('77777777-7777-4777-8777-777777777777', false),
+  ('88888888-8888-4888-8888-888888888888', false),
+  ('99999999-9999-4999-8999-999999999999', false),
+  ('12121212-1212-4121-8121-121212121212', false),
+  ('13131313-1313-4131-8131-131313131313', false);
 
 insert into faith_harbor.gathering_releases (id, catalog_code, release_week, slot_type, source_kind, status, content_hash, prompt_revision, editorial_revision, published_at)
 values
@@ -244,6 +274,14 @@ set release_id = case slug
   else release_id
 end
 where slug in ('gathering-1', 'gathering-2');
+
+insert into faith_harbor.gathering_templates (
+  id, slug, version, locale, title, summary, theme_key,
+  estimated_duration_seconds, status, available_from, access_tier, editorial_revision
+) values (
+  'b0000000-0000-4000-8000-000000000001', 'weekly-rest', 1, 'en', 'Legacy v1',
+  'Legacy compatibility template', 'legacy', 900, 'published', '2026-01-01T00:00:00Z', 'premium', 'editorial.1'
+);
 
 insert into faith_harbor.gathering_template_steps (gathering_template_id, step_order, section_type, content_key)
 select template.id, step_order, 'arrival', format('safe.%s.%s', template.slug, step_order)
@@ -372,6 +410,64 @@ begin
 end
 $verify_cross_template_idempotency$;
 
+do $verify_cross_version_idempotency$
+declare
+  v1_template_id uuid := 'b0000000-0000-4000-8000-000000000001';
+  v2_template_id uuid;
+  v1_first jsonb;
+  v1_retry jsonb;
+  v2_conflict jsonb;
+  v2_first jsonb;
+  v1_conflict jsonb;
+begin
+  select id into v2_template_id from faith_harbor.gathering_templates where slug = 'gathering-1' and locale = 'en';
+
+  select faith_harbor.save_gathering_progress_v1(
+    '88888888-8888-4888-8888-888888888888', v1_template_id, 8, true,
+    '90000000-0000-4000-8000-000000000003', 'UTC', '2026-08-27', '2026-08-24', '2026-08-27T00:00:00Z'
+  ) into v1_first;
+  select faith_harbor.save_gathering_progress_v1(
+    '88888888-8888-4888-8888-888888888888', v1_template_id, 8, true,
+    '90000000-0000-4000-8000-000000000003', 'UTC', '2026-08-27', '2026-08-24', '2026-08-27T00:00:00Z'
+  ) into v1_retry;
+  select faith_harbor.save_gathering_progress_v2(
+    '88888888-8888-4888-8888-888888888888', v2_template_id, 8, 'completed',
+    '90000000-0000-4000-8000-000000000003', 'UTC'
+  ) into v2_conflict;
+  if v1_first ->> 'outcome' <> 'completed'
+    or v1_retry ->> 'outcome' <> 'already_completed'
+    or v1_retry ->> 'practice_credit' <> 'guided_prayer' then
+    raise exception 'v1 compatibility response or same-template retry changed: first %, retry %', v1_first, v1_retry;
+  end if;
+  if v2_conflict ->> 'outcome' <> 'idempotency_conflict' then
+    raise exception 'sequential v1-v2 idempotency key did not return a finite conflict: %', v2_conflict;
+  end if;
+  if (select count(*) from faith_harbor.user_gathering_progress where user_id = '88888888-8888-4888-8888-888888888888' and status = 'completed') <> 1
+    or (select count(*) from faith_harbor.user_gathering_progress where user_id = '88888888-8888-4888-8888-888888888888' and completion_idempotency_key = '90000000-0000-4000-8000-000000000003') <> 1
+    or (select count(*) from faith_harbor.user_milestones where user_id = '88888888-8888-4888-8888-888888888888' and milestone_code = 'gathering_first_light') > 1 then
+    raise exception 'sequential v1-v2 idempotency key duplicated progress, completion, or badge';
+  end if;
+
+  select faith_harbor.save_gathering_progress_v2(
+    '99999999-9999-4999-8999-999999999999', v2_template_id, 8, 'completed',
+    '90000000-0000-4000-8000-000000000004', 'UTC'
+  ) into v2_first;
+  select faith_harbor.save_gathering_progress_v1(
+    '99999999-9999-4999-8999-999999999999', v1_template_id, 8, true,
+    '90000000-0000-4000-8000-000000000004', 'UTC', '2026-08-27', '2026-08-24', '2026-08-27T00:00:00Z'
+  ) into v1_conflict;
+  if v2_first ->> 'outcome' <> 'completed'
+    or v1_conflict ->> 'outcome' <> 'idempotency_conflict' then
+    raise exception 'sequential v2-v1 idempotency key did not return a finite conflict: v2 %, v1 %', v2_first, v1_conflict;
+  end if;
+  if (select count(*) from faith_harbor.user_gathering_progress where user_id = '99999999-9999-4999-8999-999999999999' and status = 'completed') <> 1
+    or (select count(*) from faith_harbor.user_gathering_progress where user_id = '99999999-9999-4999-8999-999999999999' and completion_idempotency_key = '90000000-0000-4000-8000-000000000004') <> 1
+    or (select count(*) from faith_harbor.user_milestones where user_id = '99999999-9999-4999-8999-999999999999' and milestone_code = 'gathering_first_light') <> 1 then
+    raise exception 'sequential v2-v1 idempotency key duplicated progress, completion, or badge';
+  end if;
+end
+$verify_cross_version_idempotency$;
+
 do $verify_service_rpcs$
 declare
   result jsonb;
@@ -466,5 +562,49 @@ run_concurrent_cross_template_idempotency() {
 }
 
 run_concurrent_cross_template_idempotency
+
+run_concurrent_cross_version_idempotency() {
+  local account_id=$1
+  local completion_key=$2
+  local first_kind=$3
+  local second_kind=$4
+  local first_output="$GATHERINGS_PG_ROOT/cross-version-${first_kind}-${second_kind}.first"
+  local second_output="$GATHERINGS_PG_ROOT/cross-version-${first_kind}-${second_kind}.second"
+  local v1_call="select faith_harbor.save_gathering_progress_v1('$account_id', 'b0000000-0000-4000-8000-000000000001'::uuid, 8, true, '$completion_key'::uuid, 'UTC', '2026-08-27'::date, '2026-08-24'::date, '2026-08-27T00:00:00Z'::timestamptz);"
+  local v2_call="select faith_harbor.save_gathering_progress_v2('$account_id', (select id from faith_harbor.gathering_templates where slug = 'gathering-1' and locale = 'en'), 8, 'completed', '$completion_key'::uuid, 'UTC');"
+  local first_call=$v1_call
+  local second_call=$v2_call
+
+  if [[ "$first_kind" == 'v2' ]]; then first_call=$v2_call; fi
+  if [[ "$second_kind" == 'v1' ]]; then second_call=$v1_call; fi
+
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); $first_call" >"$first_output" 2>&1 &
+  local first_pid=$!
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); $second_call" >"$second_output" 2>&1 &
+  local second_pid=$!
+  wait "$first_pid"
+  wait "$second_pid"
+
+  if rg -q 'ERROR|23505' "$first_output" "$second_output"; then
+    echo 'concurrent cross-version idempotency key leaked a raw database error' >&2
+    return 1
+  fi
+  if [[ $(rg -l '"outcome": "idempotency_conflict"' "$first_output" "$second_output" | wc -l | tr -d ' ') -ne 1 ]]; then
+    echo 'concurrent cross-version idempotency key did not produce exactly one finite conflict' >&2
+    return 1
+  fi
+  gatherings_psql -d gatherings_clean -v ON_ERROR_STOP=1 -c "do \$\$ begin if (select count(*) from faith_harbor.user_gathering_progress where user_id = '$account_id' and status = 'completed') <> 1 or (select count(*) from faith_harbor.user_gathering_progress where user_id = '$account_id' and completion_idempotency_key = '$completion_key'::uuid) <> 1 or (select count(*) from faith_harbor.user_milestones where user_id = '$account_id' and milestone_code = 'gathering_first_light') > 1 then raise exception 'concurrent cross-version idempotency key did not produce exactly one completion and one conflict'; end if; end \$\$;" >/dev/null
+}
+
+run_concurrent_v1_v2_idempotency() {
+  run_concurrent_cross_version_idempotency '12121212-1212-4121-8121-121212121212' '90000000-0000-4000-8000-000000000005' v1 v2
+}
+
+run_concurrent_v2_v1_idempotency() {
+  run_concurrent_cross_version_idempotency '13131313-1313-4131-8131-131313131313' '90000000-0000-4000-8000-000000000006' v2 v1
+}
+
+run_concurrent_v1_v2_idempotency
+run_concurrent_v2_v1_idempotency
 
 echo "gatherings v2 PostgreSQL integration passed"

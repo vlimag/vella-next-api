@@ -40,5 +40,12 @@ describe('gathering v2 milestone integration fixture', () => {
     expect(fixture).toContain('run_concurrent_cross_template_idempotency');
     expect(fixture).toContain('concurrent cross-template idempotency key did not produce exactly one completion and one conflict');
     expect(fixture).toContain('concurrent cross-template idempotency key leaked a raw database error');
+    expect(fixture).toContain("/^create or replace function faith_harbor.save_gathering_progress_v1(/");
+    expect(fixture).toContain('sequential v1-v2 idempotency key did not return a finite conflict');
+    expect(fixture).toContain('sequential v2-v1 idempotency key did not return a finite conflict');
+    expect(fixture).toContain('run_concurrent_v1_v2_idempotency');
+    expect(fixture).toContain('run_concurrent_v2_v1_idempotency');
+    expect(fixture).toContain('concurrent cross-version idempotency key leaked a raw database error');
+    expect(fixture).toContain('concurrent cross-version idempotency key did not produce exactly one completion and one conflict');
   });
 });

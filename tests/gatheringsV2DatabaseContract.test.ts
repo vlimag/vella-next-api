@@ -69,6 +69,29 @@ describe('gathering catalog v2 database contract', () => {
     expect(progress).not.toMatch(/email|receipt|private_prayer|journal|reflection_text/i);
   });
 
+  it('keeps v1 progress compatible while serializing its completion key with v2', () => {
+    const sql = migration();
+    const progress = functionBody(sql, 'save_gathering_progress_v1');
+
+    expect(progress).toMatch(/p_owner_user_id uuid,[\s\S]*p_occurred_at timestamptz/i);
+    expect(progress).toMatch(/security invoker\s+set search_path = ''/i);
+    expect(progress).toMatch(/p_complete and p_idempotency_key is null/i);
+    expect(progress).toMatch(/'already_completed'[\s\S]*'practice_credit', 'guided_prayer'[\s\S]*'telemetry_events'/i);
+    expect(progress).toMatch(/case\s+when p_complete then 'completed'[\s\S]*when p_current_step > prior_step then 'updated'[\s\S]*else 'already_updated'/i);
+    expect(progress).toMatch(/pg_catalog\.pg_advisory_xact_lock\(pg_catalog\.hashtextextended\(\s*p_owner_user_id::text,\s*1\s*\)\)/i);
+    const accountLock = progress.indexOf('p_owner_user_id::text,\n      1');
+    const progressInsert = progress.indexOf('insert into faith_harbor.user_gathering_progress');
+    const completionWrite = progress.indexOf('completion_idempotency_key = case');
+    expect(accountLock).toBeGreaterThanOrEqual(0);
+    expect(progressInsert).toBeGreaterThanOrEqual(0);
+    expect(completionWrite).toBeGreaterThanOrEqual(0);
+    expect(accountLock).toBeLessThan(progressInsert);
+    expect(accountLock).toBeLessThan(completionWrite);
+    expect(progress).toMatch(/completion_idempotency_key = p_idempotency_key[\s\S]*gathering_template_id <> selected_template\.id[\s\S]*'idempotency_conflict'/i);
+    expect(sql).toMatch(/revoke execute on function faith_harbor\.save_gathering_progress_v1\([\s\S]*from public, anon, authenticated;/i);
+    expect(sql).toMatch(/grant execute on function faith_harbor\.save_gathering_progress_v1\([\s\S]*to service_role;/i);
+  });
+
   it('keeps operational and aggregate writes finite, identity-free, and service-only', () => {
     const sql = migration();
     const operational = functionBody(sql, 'record_gathering_operational_event_v1');
