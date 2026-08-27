@@ -219,6 +219,7 @@ export async function sendGatheringAlert(
   try {
     const response = await fetchImpl(GATHERING_ALERT_EMAIL_URL, {
       method: 'POST',
+      signal: AbortSignal.timeout(10_000),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
