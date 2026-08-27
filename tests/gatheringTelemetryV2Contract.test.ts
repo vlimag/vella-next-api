@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -57,10 +58,10 @@ describe('Gathering telemetry v2 database contract', () => {
     )?.[1] ?? '';
     const eventNames = [...eventList.matchAll(/'([^']+)'/g)].map((match) => match[1]);
 
-    expect(eventNames).toEqual(expect.arrayContaining(GATHERING_EVENTS));
+    expect(eventNames).toEqual(expect.arrayContaining([...GATHERING_EVENTS]));
     expect(new Set(eventNames).size).toBe(eventNames.length);
     expect(eventNames.filter((eventName) => eventName.startsWith('gathering_')))
-      .toEqual(expect.arrayContaining(GATHERING_EVENTS));
+      .toEqual(expect.arrayContaining([...GATHERING_EVENTS]));
     expect(eventNames.filter((eventName) => eventName.startsWith('gathering_')))
       .toHaveLength(12);
   });
@@ -94,6 +95,99 @@ describe('Gathering telemetry v2 database contract', () => {
     expect(sql).toMatch(/countdown_bucket' in \('under_1h', '1_24h', '1_3d', '4_7d', '8d_plus'\)/);
     expect(sql).toMatch(/item_count_bucket' in \('0', '1', '2_5', '6_11', '12_plus'\)/);
     expect(sql).toMatch(/error_code' in \([\s\S]*'network_unavailable'[\s\S]*'invalid_response'[\s\S]*'server_unavailable'[\s\S]*'unknown'[\s\S]*\)/);
+    expect(branch(sql, 'gathering_session_abandoned')).toMatch(
+      /case\s+when\s+jsonb_typeof\(p_properties -> 'step_index'\) = 'number'\s+then[\s\S]*?else\s+false\s+end/i,
+    );
+  });
+
+  it('rejects non-numeric step indexes without a cast exception at the database boundary', () => {
+    const script = String.raw`set -euo pipefail
+for prerequisite in initdb pg_ctl psql; do
+  command -v "$prerequisite" >/dev/null
+done
+
+PG_ROOT=$(mktemp -d)
+PG_DATA="$PG_ROOT/data"
+PG_PORT=55480
+case "$PG_ROOT" in
+  /tmp/*|/var/folders/*) ;;
+  *) exit 1 ;;
+esac
+cleanup() {
+  pg_ctl -D "$PG_DATA" -m immediate stop >/dev/null 2>&1 || true
+  rm -r -- "$PG_ROOT"
+}
+trap cleanup EXIT
+initdb -D "$PG_DATA" --no-locale --encoding=UTF8 >/dev/null
+pg_ctl -D "$PG_DATA" -o "-F -p $PG_PORT -k $PG_ROOT" -w start >/dev/null
+psql_exec() {
+  psql -X -v ON_ERROR_STOP=1 -h "$PG_ROOT" -p "$PG_PORT" postgres "$@"
+}
+psql_exec >/dev/null <<'SQL'
+create role anon noinherit;
+create role authenticated noinherit;
+create role service_role noinherit bypassrls;
+create schema faith_harbor;
+create function faith_harbor.growth_event_properties_are_safe_v7(text, jsonb)
+returns boolean language sql immutable set search_path = '' as $$ select true $$;
+create table faith_harbor.growth_analytics_events (
+  id integer primary key,
+  event_name text not null,
+  properties jsonb not null
+);
+alter table faith_harbor.growth_analytics_events
+  add constraint growth_analytics_events_event_name_check
+  check (event_name in ('legacy_event')) not valid;
+alter table faith_harbor.growth_analytics_events
+  add constraint growth_analytics_properties_check
+  check (faith_harbor.growth_event_properties_are_safe_v7(event_name, properties)) not valid;
+SQL
+psql_exec --single-transaction -f "$V8_PATH" >/dev/null
+psql_exec --single-transaction -f "$MILESTONE_V9_PATH" >/dev/null
+psql_exec --single-transaction -f "$MIGRATION_PATH" >/dev/null
+
+RESULT=$(psql_exec -At <<'SQL'
+select faith_harbor.growth_event_properties_are_safe_v9(
+  'gathering_session_abandoned',
+  '{"catalog_code":"g-2026w35-mon","step_index":4,"abandonment_reason":"backgrounded","elapsed_bucket":"2_4m"}'::jsonb
+);
+select faith_harbor.growth_event_properties_are_safe_v9(
+  'gathering_session_abandoned',
+  '{"catalog_code":"g-2026w35-mon","step_index":9,"abandonment_reason":"backgrounded","elapsed_bucket":"2_4m"}'::jsonb
+);
+select faith_harbor.growth_event_properties_are_safe_v9(
+  'gathering_session_abandoned',
+  '{"catalog_code":"g-2026w35-mon","step_index":"not-a-number","abandonment_reason":"backgrounded","elapsed_bucket":"2_4m"}'::jsonb
+);
+SQL
+)
+test "$RESULT" = $'t\nf\nf'
+psql_exec >/dev/null <<'SQL'
+do $$
+begin
+  begin
+    insert into faith_harbor.growth_analytics_events (id, event_name, properties)
+    values (1, 'gathering_session_abandoned',
+      '{"catalog_code":"g-2026w35-mon","step_index":"not-a-number","abandonment_reason":"backgrounded","elapsed_bucket":"2_4m"}'::jsonb);
+    raise exception 'non-numeric step index accepted';
+  exception
+    when check_violation then null;
+  end;
+end
+$$;
+SQL`;
+
+    expect(() => execFileSync('bash', ['-c', script], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        MIGRATION_PATH: migrationPath,
+        V8_PATH: path.resolve(process.cwd(), '../supabase/migrations/20260826042116_vella_rhythms_telemetry.sql'),
+        MILESTONE_V9_PATH: path.resolve(process.cwd(), '../supabase/migrations/20260826170015_extend_rhythm_milestone_telemetry.sql'),
+      },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })).not.toThrow();
   });
 
   it('keeps the four Gathering milestone codes finite and preserves the previous validator', () => {
