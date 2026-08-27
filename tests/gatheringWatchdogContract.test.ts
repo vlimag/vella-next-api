@@ -87,6 +87,10 @@ describe('gathering watchdog contract', () => {
     expect(sql).toMatch(/vault\.decrypted_secrets[\s\S]*gathering_watchdog_url/i);
     expect(sql).toMatch(/vault\.decrypted_secrets[\s\S]*gathering_watchdog_secret/i);
     expect(sql).toMatch(/net\.http_post\s*\(/i);
+    expect(sql).toContain('configure_gathering_watchdog_vault');
+    expect(sql).toContain('vault.create_secret');
+    expect(sql).toContain('vault.update_secret');
+    expect(sql).toMatch(/grant execute on function faith_harbor\.configure_gathering_watchdog_vault[\s\S]*to service_role/i);
     expect(sql).not.toMatch(/https?:\/\/[^'\s]*supabase\.co/i);
     expect(sql).not.toMatch(/(watchdog_secret|watchdog_url)\s*['"]\s*[:=]\s*['"][^'"$]+/i);
   });
