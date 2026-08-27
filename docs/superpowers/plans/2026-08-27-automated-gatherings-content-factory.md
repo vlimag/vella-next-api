@@ -431,6 +431,7 @@ git commit -m "feat: generate and review gathering drafts"
 
 **Interfaces:**
 - Produces: `runGatheringFactory(deps): Promise<FactoryRunResult>` and daily factory route.
+- Defines: injected `IncidentSink` used for warning/critical events; Task 8 supplies the production incident/email implementation.
 
 - [ ] **Step 1: Write failing orchestration tests**
 
@@ -479,6 +480,7 @@ git commit -m "feat: automate gathering inventory"
 **Files:**
 - Create: `lib/gatheringFactory/alerts.ts`
 - Create: `tests/gatheringFactoryAlerts.test.ts`
+- Modify: `app/api/cron/gathering-content/route.ts`
 - Create: `../supabase/functions/gathering-watchdog/index.ts`
 - Create: `../supabase/migrations/20260827210300_gathering_watchdog_schedule.sql`
 - Create: `tests/gatheringWatchdogContract.test.ts`
@@ -506,7 +508,7 @@ Expected: FAIL because files do not exist.
 
 - [ ] **Step 3: Implement email and monitoring**
 
-Use `https://api.resend.com/emails` with `RESEND_API_KEY`, `OPS_ALERT_EMAIL` defaulting to `support@vella.one`, and idempotency headers. Persist `incident_opened`, `alert_attempted`, `alert_delivered`, `alert_failed`, and `incident_recovered`. The Edge Function flags heartbeat older than 36 hours, low inventory, unsent incidents, and recovery. The schedule invokes the Edge Function hourly through `pg_cron` + `pg_net`; its URL and bearer secret are resolved from `vault.decrypted_secrets` at execution time and never embedded in SQL.
+Use `https://api.resend.com/emails` with `RESEND_API_KEY`, `OPS_ALERT_EMAIL` defaulting to `support@vella.one`, and idempotency headers. Persist `incident_opened`, `alert_attempted`, `alert_delivered`, `alert_failed`, and `incident_recovered`; wire this implementation into Task 7's `IncidentSink`. The Edge Function flags heartbeat older than 36 hours, low inventory, unsent incidents, and recovery. The schedule invokes the Edge Function hourly through `pg_cron` + `pg_net`; its URL and bearer secret are resolved from `vault.decrypted_secrets` at execution time and never embedded in SQL.
 
 - [ ] **Step 4: Run focused tests**
 
@@ -516,7 +518,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit API alert support**
 
 ```bash
-git add lib/gatheringFactory/alerts.ts tests/gatheringFactoryAlerts.test.ts tests/gatheringWatchdogContract.test.ts
+git add lib/gatheringFactory/alerts.ts app/api/cron/gathering-content/route.ts tests/gatheringFactoryAlerts.test.ts tests/gatheringWatchdogContract.test.ts
 git commit -m "feat: alert on gathering automation failures"
 ```
 
@@ -592,7 +594,7 @@ Expected: FAIL because the script does not exist.
 
 - [ ] **Step 3: Implement bounded bootstrap**
 
-Add `"gatherings:seed": "node --env-file=.env scripts/seed-gathering-inventory.mjs"`. Require `--apply`, reuse production validation/review/publish, create two reviewed evergreen fallbacks, and log only slot keys, run IDs, counts, and safe outcomes.
+Add `"gatherings:seed": "node --env-file=.env scripts/seed-gathering-inventory.mjs"`. Require `--apply`; call the protected Task 7 cron route with explicit dry-run/apply and `max_slots` parameters so generation still executes the exact production validation/review/publish path without importing TypeScript into Node. Create two reviewed evergreen fallbacks and log only slot keys, run IDs, counts, and safe outcomes.
 
 - [ ] **Step 4: Run tests and dry-run**
 
