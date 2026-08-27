@@ -6,6 +6,7 @@ import {
   type FactoryRepository,
 } from '@/lib/gatheringFactory/inventory';
 import type { GeneratedGathering } from '@/lib/gatheringFactory/contracts';
+import { GATHERING_THEME_KEYS } from '@/lib/gatheringFactory/contracts';
 
 const draft = (themeKey: GeneratedGathering['theme_key'] = 'peace'): GeneratedGathering => ({
   schema_version: 1,
@@ -161,16 +162,25 @@ describe('Gathering factory inventory', () => {
   });
 
   it('uses balanced rotation until the candidate and comparison thresholds are met', () => {
+    expect(chooseTheme(GATHERING_THEME_KEYS.map((themeKey) => ({
+      themeKey,
+      starts: themeKey === 'hope' ? 0 : 29,
+      completions: themeKey === 'hope' ? 0 : 20,
+    })))).toBe('hope');
+  });
+
+  it('keeps themes with no historical metrics in the balanced rotation', () => {
     expect(chooseTheme([
-      { themeKey: 'peace', starts: 29, completions: 29 },
-      { themeKey: 'hope', starts: 0, completions: 0 },
-    ])).toBe('hope');
+      { themeKey: 'peace', starts: 1, completions: 1 },
+      { themeKey: 'hope', starts: 1, completions: 1 },
+    ])).not.toBe('hope');
   });
 
   it('uses the smoothed completion score only after 30 candidate starts and 100 comparison starts', () => {
-    expect(chooseTheme([
-      { themeKey: 'peace', starts: 50, completions: 20 },
-      { themeKey: 'hope', starts: 50, completions: 45 },
-    ])).toBe('hope');
+    expect(chooseTheme(GATHERING_THEME_KEYS.map((themeKey) => ({
+      themeKey,
+      starts: 50,
+      completions: themeKey === 'hope' ? 45 : 20,
+    })))).toBe('hope');
   });
 });

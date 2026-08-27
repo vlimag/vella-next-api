@@ -94,7 +94,12 @@ export function planMissingSlots(now: Date, existing: readonly GatheringSlot[]):
 }
 
 export function chooseTheme(metrics: readonly ThemeMetric[]): GeneratedGathering['theme_key'] {
-  const normalized = metrics.length > 0 ? [...metrics] : GATHERING_THEME_KEYS.map((themeKey) => ({ themeKey, starts: 0, completions: 0 }));
+  const byTheme = new Map(metrics.map((metric) => [metric.themeKey, metric]));
+  const normalized = GATHERING_THEME_KEYS.map((themeKey) => byTheme.get(themeKey) ?? ({
+    themeKey,
+    starts: 0,
+    completions: 0,
+  }));
   const totalStarts = normalized.reduce((total, metric) => total + Math.max(0, metric.starts), 0);
   const allCandidatesMature = normalized.every((metric) => metric.starts >= 30);
 

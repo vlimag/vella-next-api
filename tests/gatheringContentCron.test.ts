@@ -34,7 +34,14 @@ describe('Gathering content cron', () => {
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ planned: 1, published: 1, rejected: 0, future_inventory: 12 });
-    expect(mocks.runGatheringFactory).toHaveBeenCalledWith(expect.objectContaining({ dryRun: false, maxSlots: 12 }));
+    expect(mocks.runGatheringFactory).toHaveBeenCalledWith(expect.objectContaining({
+      dryRun: false,
+      maxSlots: 12,
+      evergreenFallbacks: [
+        { key: 'evergreen-monday-quiet-beginning', slotType: 'monday', reviewed: true },
+        { key: 'evergreen-thursday-gentle-renewal', slotType: 'thursday', reviewed: true },
+      ],
+    }));
   });
 
   it('accepts the Task 10 sidecar body and returns only safe counts', async () => {

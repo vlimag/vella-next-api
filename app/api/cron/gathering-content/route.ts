@@ -8,6 +8,11 @@ import type { GeneratedGathering, GatheringLocale } from '@/lib/gatheringFactory
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
+const REVIEWED_EVERGREEN_FALLBACKS = [
+  { key: 'evergreen-monday-quiet-beginning', slot_type: 'monday', reviewed: true },
+  { key: 'evergreen-thursday-gentle-renewal', slot_type: 'thursday', reviewed: true },
+] as const;
+
 const bodySchema = z.object({
   dry_run: z.boolean(),
   max_slots: z.number().int().min(1).max(12),
@@ -32,7 +37,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   if (!authorized(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  return execute({ dry_run: false, max_slots: 12, evergreen_fallbacks: [] });
+  return execute({ dry_run: false, max_slots: 12, evergreen_fallbacks: [...REVIEWED_EVERGREEN_FALLBACKS] });
 }
 
 async function execute(parsed: z.infer<typeof bodySchema>) {
