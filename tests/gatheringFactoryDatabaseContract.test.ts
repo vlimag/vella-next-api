@@ -111,4 +111,16 @@ describe('gathering content factory database contract', () => {
       ));
     }
   });
+
+  it('parses canonical Scripture references into book, chapter, and verse captures', () => {
+    const sql = executableSql(migration('20260827210400_fix_gathering_scripture_resolution.sql'));
+
+    expect(sql).toMatch(/v_parts := regexp_match\(trim\(p_reference\), '\^\(\.\*\) \(\[0-9\]\{1,3\}\):\(\[0-9\]\{1,3\}\)/i);
+    expect(sql).toContain('v_book := v_parts[1]');
+    expect(sql).toContain('v_chapter := v_parts[2]::integer');
+    expect(sql).toContain('v_verse := v_parts[3]::integer');
+    expect(sql).not.toContain('regexp_replace');
+    expect(sql).toMatch(/revoke all on function faith_harbor\.gathering_factory_resolve_scripture\(text\) from public, anon, authenticated/i);
+    expect(sql).toMatch(/grant execute on function faith_harbor\.gathering_factory_resolve_scripture\(text\) to service_role/i);
+  });
 });
