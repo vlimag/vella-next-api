@@ -3,10 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
   runGatheringFactory: vi.fn(),
+  createGatheringIncidentRepository: vi.fn(),
+  openGatheringIncident: vi.fn(),
+  sendGatheringAlert: vi.fn(),
 }));
 
 vi.mock('@/lib/supabase', () => ({ createServiceClient: mocks.createServiceClient }));
 vi.mock('@/lib/gatheringFactory/inventory', () => ({ runGatheringFactory: mocks.runGatheringFactory }));
+vi.mock('@/lib/gatheringFactory/alerts', () => ({
+  createGatheringIncidentRepository: mocks.createGatheringIncidentRepository,
+  openGatheringIncident: mocks.openGatheringIncident,
+  sendGatheringAlert: mocks.sendGatheringAlert,
+}));
 
 import { GET, POST } from '@/app/api/cron/gathering-content/route';
 
@@ -16,6 +24,12 @@ describe('Gathering content cron', () => {
     process.env.CRON_SECRET = 'cron-secret';
     process.env.OPENAI_API_KEY = 'openai-key';
     mocks.createServiceClient.mockReturnValue({ rpc: vi.fn() });
+    mocks.createGatheringIncidentRepository.mockReturnValue({});
+    mocks.openGatheringIncident.mockResolvedValue({
+      created: true,
+      incident: { incidentKey: 'factory.inventory_low.inventory', alertState: 'pending' },
+    });
+    mocks.sendGatheringAlert.mockResolvedValue({ delivered: true, skipped: false });
     mocks.runGatheringFactory.mockResolvedValue({ planned: 1, published: 1, rejected: 0, futureInventory: 12 });
   });
 
@@ -62,6 +76,25 @@ describe('Gathering content cron', () => {
       dryRun: false,
       evergreenFallbacks: [{ key: 'evergreen-rest', slotType: 'monday', reviewed: true }],
     }));
+  });
+
+  it('delivers a persisted alert immediately when the factory reports an incident', async () => {
+    mocks.runGatheringFactory.mockImplementationOnce(async (dependencies) => {
+      await dependencies.incidentSink.report({
+        severity: 'warning', code: 'inventory_low', inventoryDepth: 3,
+      });
+      return { planned: 0, published: 0, rejected: 0, futureInventory: 3 };
+    });
+
+    const response = await GET(new Request('https://vella.one/api/cron/gathering-content', {
+      headers: { authorization: 'Bearer cron-secret' },
+    }));
+
+    expect(response.status).toBe(200);
+    expect(mocks.openGatheringIncident).toHaveBeenCalledWith(expect.objectContaining({
+      incidentType: 'inventory_low', safeErrorCode: 'inventory_low', inventoryDepth: 3,
+    }), expect.anything());
+    expect(mocks.sendGatheringAlert).toHaveBeenCalledWith(expect.objectContaining({ kind: 'open' }), expect.objectContaining({ repository: expect.anything() }));
   });
 
   it('rejects malformed and unknown sidecar fields without echoing fallback content', async () => {

@@ -3,6 +3,11 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase';
 import { runGatheringFactory, type FactoryRepository, type IncidentSink, type SlotType } from '@/lib/gatheringFactory/inventory';
+import {
+  createGatheringIncidentRepository,
+  openGatheringIncident,
+  sendGatheringAlert,
+} from '@/lib/gatheringFactory/alerts';
 import type { GeneratedGathering, GatheringLocale } from '@/lib/gatheringFactory/contracts';
 
 export const dynamic = 'force-dynamic';
@@ -44,10 +49,11 @@ async function execute(parsed: z.infer<typeof bodySchema>) {
   if (!process.env.OPENAI_API_KEY && !parsed.dry_run) return NextResponse.json({ error: 'Unavailable' }, { status: 503 });
 
   try {
-    const client = createServiceClient() as unknown as Supabase;
+    const serviceClient = createServiceClient();
+    const client = serviceClient as unknown as Supabase;
     const result = await runGatheringFactory({
       repository: repository(client),
-      incidentSink: incidentSink(client),
+      incidentSink: incidentSink(serviceClient),
       now: () => new Date(),
       apiKey: process.env.OPENAI_API_KEY,
       dryRun: parsed.dry_run,
@@ -125,9 +131,18 @@ function repository(client: Supabase): FactoryRepository {
   };
 }
 
-function incidentSink(client: Supabase): IncidentSink {
+function incidentSink(client: ReturnType<typeof createServiceClient>): IncidentSink {
+  const repository = createGatheringIncidentRepository(client);
   return { report: async (incident) => {
-    await client.from('gathering_generation_incidents').upsert({ incident_key: `factory.${incident.code}.${incident.slot?.weekStart ?? 'inventory'}`, incident_type: incident.code === 'generation_failed' ? 'generation_failed' : 'inventory_low', incident_state: 'open', safe_error_code: incident.code, inventory_depth: incident.inventoryDepth }, { onConflict: 'incident_key' });
+    const opened = await openGatheringIncident({
+      incidentKey: `factory.${incident.code}.${incident.slot?.weekStart ?? 'inventory'}`,
+      incidentType: incident.code === 'generation_failed' ? 'generation_failed' : 'inventory_low',
+      safeErrorCode: incident.code,
+      inventoryDepth: incident.inventoryDepth,
+    }, repository);
+    await sendGatheringAlert({ incident: opened.incident, kind: 'open', stage: 'factory' }, {
+      repository,
+    });
   } };
 }
 
