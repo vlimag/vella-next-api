@@ -34,5 +34,11 @@ describe('gathering v2 milestone integration fixture', () => {
     expect(fixture).toContain('gathering_long_companion');
     expect(fixture).toContain('pg_sleep(0.25)');
     expect(fixture).toContain('v1 weekly-rest response was not executable');
+    expect(fixture).toContain('idx_user_gathering_progress_completion_key');
+    expect(fixture).toContain('cross-template idempotency key did not return a finite conflict');
+    expect(fixture).toContain('same-template idempotent retry was not preserved');
+    expect(fixture).toContain('run_concurrent_cross_template_idempotency');
+    expect(fixture).toContain('concurrent cross-template idempotency key did not produce exactly one completion and one conflict');
+    expect(fixture).toContain('concurrent cross-template idempotency key leaked a raw database error');
   });
 });

@@ -50,6 +50,15 @@ describe('gathering catalog v2 database contract', () => {
     expect(progress).toMatch(/pg_catalog\.pg_advisory_xact_lock/i);
     expect(progress).toMatch(/hashtextextended\(\s*p_owner_user_id::text,\s*1\s*\)/i);
     expect(progress.match(/pg_catalog\.pg_advisory_xact_lock/gi)).toHaveLength(2);
+    const accountLock = progress.indexOf('p_owner_user_id::text,\n      1');
+    const progressInsert = progress.indexOf('insert into faith_harbor.user_gathering_progress');
+    const completionWrite = progress.indexOf('completion_idempotency_key = case');
+    expect(accountLock).toBeGreaterThanOrEqual(0);
+    expect(progressInsert).toBeGreaterThanOrEqual(0);
+    expect(completionWrite).toBeGreaterThanOrEqual(0);
+    expect(accountLock).toBeLessThan(progressInsert);
+    expect(accountLock).toBeLessThan(completionWrite);
+    expect(progress).toMatch(/completion_idempotency_key = p_idempotency_key[\s\S]*gathering_template_id <> p_template_id[\s\S]*'idempotency_conflict'/i);
     expect(progress).toMatch(/count\(distinct completed_template\.release_id\)/i);
     expect(progress).toMatch(/'gathering_first_light'/i);
     expect(progress).toMatch(/'gathering_monthly_rhythm'/i);

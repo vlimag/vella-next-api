@@ -155,6 +155,7 @@ create table faith_harbor.bible_versions (id uuid primary key, code text not nul
 create table faith_harbor.bible_verses (id uuid primary key, version_id uuid, language_code text not null, text_content text not null, chapter integer not null, verse integer not null);
 create table faith_harbor.gathering_template_steps (id uuid primary key default gen_random_uuid(), gathering_template_id uuid not null references faith_harbor.gathering_templates(id), step_order smallint not null, section_type text not null, content_key text not null, editorial_text text, scripture_verse_id uuid, duration_seconds integer, narration_asset_key text, is_required boolean not null default true, unique (gathering_template_id, step_order));
 create table faith_harbor.user_gathering_progress (id uuid primary key default gen_random_uuid(), user_id uuid not null references auth.users(id), gathering_template_id uuid not null references faith_harbor.gathering_templates(id), current_step smallint not null default 0, status text not null default 'not_started', started_at timestamptz, completed_at timestamptz, last_seen_at timestamptz, completion_idempotency_key uuid, created_at timestamptz not null default now(), updated_at timestamptz not null default now(), unique (user_id, gathering_template_id));
+create unique index if not exists idx_user_gathering_progress_completion_key on faith_harbor.user_gathering_progress(user_id, completion_idempotency_key) where completion_idempotency_key is not null;
 create table faith_harbor.gamification_milestones (code text primary key, title text not null, description text not null, metric text not null check (metric in ('streak', 'completed_days', 'completed_journeys')), target_value integer not null, badge_color text not null, is_premium boolean not null, category text not null, tier text, theme_key text, asset_key text, display_priority integer not null, is_shareable boolean not null, is_active boolean not null);
 create table faith_harbor.user_milestones (id uuid primary key default gen_random_uuid(), user_id uuid references auth.users(id), anonymous_profile_id uuid, milestone_code text not null references faith_harbor.gamification_milestones(code), earned_at timestamptz not null default now(), metadata jsonb not null default '{}'::jsonb);
 create unique index user_milestones_owner_code on faith_harbor.user_milestones(user_id, milestone_code) where user_id is not null;
@@ -210,7 +211,9 @@ insert into auth.users (id, is_anonymous) values
   ('22222222-2222-4222-8222-222222222222', true),
   ('33333333-3333-4333-8333-333333333333', false),
   ('44444444-4444-4444-8444-444444444444', false),
-  ('55555555-5555-4555-8555-555555555555', false);
+  ('55555555-5555-4555-8555-555555555555', false),
+  ('66666666-6666-4666-8666-666666666666', false),
+  ('77777777-7777-4777-8777-777777777777', false);
 
 insert into faith_harbor.gathering_releases (id, catalog_code, release_week, slot_type, source_kind, status, content_hash, prompt_revision, editorial_revision, published_at)
 values
@@ -332,6 +335,43 @@ begin
 end
 $verify_milestones$;
 
+do $verify_cross_template_idempotency$
+declare
+  first_template_id uuid;
+  second_template_id uuid;
+  completion_key uuid := '90000000-0000-4000-8000-000000000001';
+  first_result jsonb;
+  retry_result jsonb;
+  conflict_result jsonb;
+begin
+  select id into first_template_id from faith_harbor.gathering_templates where slug = 'gathering-1' and locale = 'en';
+  select id into second_template_id from faith_harbor.gathering_templates where slug = 'gathering-2' and locale = 'en';
+  select faith_harbor.save_gathering_progress_v2(
+    '66666666-6666-4666-8666-666666666666', first_template_id, 8, 'completed', completion_key, 'UTC'
+  ) into first_result;
+  select faith_harbor.save_gathering_progress_v2(
+    '66666666-6666-4666-8666-666666666666', first_template_id, 8, 'completed', completion_key, 'UTC'
+  ) into retry_result;
+  select faith_harbor.save_gathering_progress_v2(
+    '66666666-6666-4666-8666-666666666666', second_template_id, 8, 'completed', completion_key, 'UTC'
+  ) into conflict_result;
+
+  if first_result ->> 'outcome' <> 'completed'
+    or retry_result ->> 'outcome' <> 'already_completed' then
+    raise exception 'same-template idempotent retry was not preserved: first %, retry %', first_result, retry_result;
+  end if;
+  if conflict_result ->> 'outcome' <> 'idempotency_conflict'
+    or jsonb_array_length(conflict_result -> 'new_milestone_codes') <> 0 then
+    raise exception 'cross-template idempotency key did not return a finite conflict: %', conflict_result;
+  end if;
+  if (select count(*) from faith_harbor.user_gathering_progress where user_id = '66666666-6666-4666-8666-666666666666' and status = 'completed') <> 1
+    or (select count(*) from faith_harbor.user_gathering_progress where user_id = '66666666-6666-4666-8666-666666666666' and completion_idempotency_key = completion_key) <> 1
+    or (select count(*) from faith_harbor.user_milestones where user_id = '66666666-6666-4666-8666-666666666666' and milestone_code = 'gathering_first_light') <> 1 then
+    raise exception 'cross-template idempotency key created an extra completion or badge';
+  end if;
+end
+$verify_cross_template_idempotency$;
+
 do $verify_service_rpcs$
 declare
   result jsonb;
@@ -400,5 +440,31 @@ run_concurrent_threshold() {
 run_concurrent_threshold '33333333-3333-4333-8333-333333333333' 6 7 8 gathering_monthly_rhythm
 run_concurrent_threshold '44444444-4444-4444-8444-444444444444' 22 23 24 gathering_season_keeper
 run_concurrent_threshold '55555555-5555-4555-8555-555555555555' 50 51 52 gathering_long_companion
+
+run_concurrent_cross_template_idempotency() {
+  local account_id='77777777-7777-4777-8777-777777777777'
+  local completion_key='90000000-0000-4000-8000-000000000002'
+  local first_output="$GATHERINGS_PG_ROOT/cross-template-idempotency.first"
+  local second_output="$GATHERINGS_PG_ROOT/cross-template-idempotency.second"
+
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); select faith_harbor.save_gathering_progress_v2('$account_id', (select id from faith_harbor.gathering_templates where slug = 'gathering-1' and locale = 'en'), 8, 'completed', '$completion_key'::uuid, 'UTC');" >"$first_output" 2>&1 &
+  local first_pid=$!
+  gatherings_psql -At -d gatherings_clean -v ON_ERROR_STOP=1 -c "select pg_sleep(0.25); select faith_harbor.save_gathering_progress_v2('$account_id', (select id from faith_harbor.gathering_templates where slug = 'gathering-2' and locale = 'en'), 8, 'completed', '$completion_key'::uuid, 'UTC');" >"$second_output" 2>&1 &
+  local second_pid=$!
+  wait "$first_pid"
+  wait "$second_pid"
+
+  if rg -q 'ERROR|23505' "$first_output" "$second_output"; then
+    echo 'concurrent cross-template idempotency key leaked a raw database error' >&2
+    return 1
+  fi
+  if [[ $(rg -l '"outcome": "idempotency_conflict"' "$first_output" "$second_output" | wc -l | tr -d ' ') -ne 1 ]]; then
+    echo 'concurrent cross-template idempotency key did not produce exactly one conflict' >&2
+    return 1
+  fi
+  gatherings_psql -d gatherings_clean -v ON_ERROR_STOP=1 -c "do \$\$ begin if (select count(*) from faith_harbor.user_gathering_progress where user_id = '$account_id' and status = 'completed') <> 1 or (select count(*) from faith_harbor.user_gathering_progress where user_id = '$account_id' and completion_idempotency_key = '$completion_key'::uuid) <> 1 or (select count(*) from faith_harbor.user_milestones where user_id = '$account_id' and milestone_code = 'gathering_first_light') <> 1 then raise exception 'concurrent cross-template idempotency key did not produce exactly one completion and one conflict'; end if; end \$\$;" >/dev/null
+}
+
+run_concurrent_cross_template_idempotency
 
 echo "gatherings v2 PostgreSQL integration passed"
