@@ -45,7 +45,7 @@ The experience must be Christian, warm, denomination-neutral, non-manipulative, 
 
 ### 2.3 Rewards
 
-Completion feeds the existing milestones and badges system. Rewards recognize meaningful consistency and longer paths; they do not punish missed days or use loss aversion. The same Gathering can be replayed, but unique-completion badges count it only once.
+Completion feeds the existing milestones and badges system. Rewards recognize meaningful consistency and longer paths; they do not punish missed days or use loss aversion. The same Gathering can be replayed, but unique-completion badges count it only once. The initial progression is explicit: first unique Gathering, 8 unique Gatherings (about one month at the intended cadence), 24 unique Gatherings (one season), and 52 unique Gatherings (a durable long-term rhythm). These badges use the existing privacy controls and may be featured on Profile and projected to Community posts only when the user chooses them.
 
 ## 3. Architecture
 
@@ -181,6 +181,18 @@ The factory may use only aggregate product telemetry:
 It must never send raw prayers, journal entries, searches, posts, emails, account identifiers, receipts, or user-level event trails to the generation prompt.
 
 At low volume, themes rotate through a balanced editorial palette. Performance-based selection remains disabled until a candidate has at least 30 starts and its comparison set has at least 100 relevant starts. Later selection uses smoothed scores and diversity constraints; it never optimizes solely for time spent or compulsive return.
+
+### 8.1 End-to-end telemetry contract
+
+Telemetry is a release requirement across every layer, not a follow-up:
+
+- **App:** catalog load/result, card impression/selection, next-release visibility, start, resume, each completed step, early exit/backgrounding, replay, completion, fallback/cache use, and privacy-safe load/mutation errors.
+- **API:** v2 catalog and progress requests record route, outcome, latency bucket, schema version, locale, and safe error stage/code without account or template UUIDs.
+- **Content factory:** inventory check, generation start/result, validator result, reviewer result, publish result, retry, run completion/failure, duration, model/prompt revision, tokens, and cost.
+- **Cron/watchdog/alerts:** invocation, authorization failure, lock contention, heartbeat, inventory level, incident open/recovery, alert attempt/delivery/failure, and watchdog health.
+- **Database:** authoritative start/checkpoint/completion facts and daily aggregate content/slot/locale metrics are derived server-side so client retries cannot inflate conversion.
+
+All event names and property shapes are centrally allowlisted and tested in mobile TypeScript, API validation, and PostgreSQL constraints. Completion remains authoritative and idempotent. Operational traces use random per-request/run correlation IDs only; no user ID, email, receipt, private text, search, prayer, journal content, or raw generated prose is emitted. Telemetry delivery must never block the devotional experience or content publishing; failures are bounded, recorded through safe fallbacks, and surfaced in operator diagnostics.
 
 ## 9. Inventory and Failure Handling
 
