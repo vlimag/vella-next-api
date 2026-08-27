@@ -47,10 +47,15 @@ describe('gathering factory Responses API adapter', () => {
     }));
 
     const request = result.request as Record<string, any>;
-    expect(request.model).toBe('gpt-5.6-sol');
+    expect(request.model).toBe('gpt-5.6-luna');
     expect(request.store).toBe(false);
     expect(request.text.format.type).toBe('json_schema');
     expect(request.text.format.strict).toBe(true);
+    const stepSchema = request.text.format.schema.properties.locales.properties.en.properties.steps;
+    expect(stepSchema.items.anyOf).toHaveLength(8);
+    for (const step of stepSchema.prefixItems) {
+      expect(step.properties.section_type.type).toBe('string');
+    }
     expect(request.metadata).toEqual({ prompt_revision: 'gathering-factory.1' });
     expect(JSON.stringify(request)).not.toContain('user_id');
     expect(result.usage).toEqual({ inputTokens: 1_200, outputTokens: 900 });

@@ -235,7 +235,7 @@ async function generate(deps: RunGatheringFactoryDeps, input: { themeKey: Genera
     fetch: deps.fetch ?? fetch,
     apiKey: deps.apiKey,
     now: deps.now,
-    timeoutMs: 25_000,
+    timeoutMs: 45_000,
     maxInputTokens: 20_000,
     maxOutputTokens: 10_000,
   });
@@ -249,7 +249,7 @@ async function review(deps: RunGatheringFactoryDeps, candidate: GeneratedGatheri
     fetch: deps.fetch ?? fetch,
     apiKey: deps.apiKey,
     now: deps.now,
-    timeoutMs: 25_000,
+    timeoutMs: 45_000,
     maxInputTokens: 20_000,
     maxOutputTokens: 10_000,
   });

@@ -11,7 +11,7 @@ import {
 import { validateReviewDecision } from './validators';
 
 export const GATHERING_PROMPT_REVISION = 'gathering-factory.1' as const;
-export const GATHERING_MODEL = 'gpt-5.6-sol' as const;
+export const GATHERING_MODEL = 'gpt-5.6-luna' as const;
 
 export type FactoryDeps = {
   fetch: typeof fetch;
@@ -88,19 +88,37 @@ const generatedGatheringJsonSchema = {
             type: 'array',
             minItems: 8,
             maxItems: 8,
+            items: {
+              anyOf: GATHERING_SECTION_TYPES.map((sectionType) => sectionType === 'scripture'
+                ? {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['section_type'],
+                  properties: { section_type: { type: 'string', const: 'scripture' } },
+                }
+                : {
+                  type: 'object',
+                  additionalProperties: false,
+                  required: ['section_type', 'body'],
+                  properties: {
+                    section_type: { type: 'string', const: sectionType },
+                    body: { type: 'string', maxLength: 4_000 },
+                  },
+                }),
+            },
             prefixItems: GATHERING_SECTION_TYPES.map((sectionType) => sectionType === 'scripture'
               ? {
                 type: 'object',
                 additionalProperties: false,
                 required: ['section_type'],
-                properties: { section_type: { const: 'scripture' } },
+                properties: { section_type: { type: 'string', const: 'scripture' } },
               }
               : {
                 type: 'object',
                 additionalProperties: false,
                 required: ['section_type', 'body'],
                 properties: {
-                  section_type: { const: sectionType },
+                  section_type: { type: 'string', const: sectionType },
                   body: { type: 'string', maxLength: 4_000 },
                 },
               }),

@@ -4,6 +4,9 @@ import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase';
 import { runGatheringFactory, type FactoryRepository, type IncidentSink, type SlotType } from '@/lib/gatheringFactory/inventory';
 import {
+  GATHERING_MODEL,
+} from '@/lib/gatheringFactory/openai';
+import {
   createGatheringIncidentRepository,
   openGatheringIncident,
   sendGatheringAlert,
@@ -11,7 +14,7 @@ import {
 import type { GeneratedGathering, GatheringLocale } from '@/lib/gatheringFactory/contracts';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const REVIEWED_EVERGREEN_FALLBACKS = [
   { key: 'evergreen-monday-quiet-beginning', slot_type: 'monday', reviewed: true },
@@ -111,7 +114,7 @@ function repository(client: Supabase): FactoryRepository {
     createRun: async (slot, attempt) => {
       const result = await client.from('gathering_generation_runs').insert({
         target_week: slot.weekStart, slot_type: slot.slotType, attempt, lifecycle_state: 'started',
-        model_identifier: 'gpt-5.6-sol', prompt_revision: 'gathering-factory.1', validation_result: 'pending', reviewer_result: 'pending',
+        model_identifier: GATHERING_MODEL, prompt_revision: 'gathering-factory.1', validation_result: 'pending', reviewer_result: 'pending',
       }).select('id').single();
       if (result.error || !result.data?.id) throw new Error('db');
       return { id: result.data.id as string };
