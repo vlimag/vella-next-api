@@ -428,6 +428,28 @@ describe('growth operator routes', () => {
         failures: { idempotency_conflicts: 0, server_errors: 0 },
         cohorts: { minimum_installations: 20, releases: [], runtimes: [], builds: [] },
       },
+      gathering_automation: {
+        audit_available: true,
+        future_inventory: 0,
+        weeks_covered: 0,
+        next_monday_at: null,
+        next_thursday_at: null,
+        last_run: null,
+        last_successful_publish: null,
+        last_heartbeat: null,
+        model_revision: null,
+        token_totals: { input: 0, output: 0, total: 0 },
+        cost_totals: { microunits: 0 },
+        rejection_codes: [],
+        open_incidents: [],
+        alert_delivery: { pending: 0, delivered: 0, failed: 0, not_needed: 0, attempts: 0 },
+        telemetry: {
+          app: { views: 0, catalog_views: 0, starts: 0, step_dropoffs: 0, completions: 0, resumes: 0, replays: 0, fallbacks: 0 },
+          api: { requests: 0, successes: 0, failures: 0 },
+          cron: { invocations: 0, successes: 0, failures: 0, heartbeats: 0, publishes: 0, alerts: 0 },
+        },
+        aggregate_metrics: { views: 0, starts: 0, completions: 0, resumes: 0, step_dropoffs: 0 },
+      },
       onboarding_diagnostics: {
         audit_available: true,
         by_step_duration: [],
@@ -482,7 +504,7 @@ describe('growth operator routes', () => {
       p_to: '2026-07-31',
       p_cohort_days: 14,
     });
-    expect(from).toHaveBeenCalledTimes(29);
+    expect(from).toHaveBeenCalledTimes(36);
   });
 
   it('projects ordered truth and independently enforces every 20-unit privacy threshold', async () => {

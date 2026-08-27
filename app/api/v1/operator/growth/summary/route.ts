@@ -1547,6 +1547,384 @@ function firstExperienceDiagnostics(groups: {
   };
 }
 
+const GATHERING_DIAGNOSTIC_LIMIT = 5_000;
+const GATHERING_INCIDENT_LIMIT = 100;
+const GATHERING_SLOT_TYPES = new Set(['monday', 'thursday']);
+const GATHERING_RELEASE_SOURCES = new Set(['generated', 'evergreen']);
+const GATHERING_RUN_STATES = new Set(['started', 'validated', 'published', 'failed']);
+const GATHERING_VALIDATION_RESULTS = new Set(['pending', 'accepted', 'rejected']);
+const GATHERING_REVIEWER_RESULTS = new Set(['pending', 'approved', 'rejected', 'not_run']);
+const GATHERING_HEARTBEAT_SOURCES = new Set(['vercel_cron', 'supabase_watchdog']);
+const GATHERING_HEARTBEAT_STATES = new Set(['healthy', 'degraded', 'failed']);
+const GATHERING_INCIDENT_TYPES = new Set(['generation_failed', 'inventory_low', 'heartbeat_stale', 'publish_failed']);
+const GATHERING_INCIDENT_STATES = new Set(['open', 'alerted', 'recovered']);
+const GATHERING_ALERT_STATES = new Set(['pending', 'delivered', 'failed', 'not_needed']);
+const GATHERING_OPERATIONAL_EVENTS = new Set([
+  'inventory_checked', 'generation_started', 'generation_finished', 'validation_finished',
+  'review_finished', 'publish_finished', 'retry_scheduled', 'heartbeat_recorded',
+  'incident_opened', 'incident_recovered', 'alert_attempted', 'alert_delivered',
+  'alert_failed', 'watchdog_checked',
+  'api_catalog_requested', 'api_catalog_succeeded', 'api_catalog_failed',
+  'api_progress_requested', 'api_progress_succeeded', 'api_progress_failed',
+  'run_started', 'run_completed', 'run_failed', 'generation_succeeded',
+  'validation_succeeded', 'validation_failed', 'review_succeeded', 'review_failed',
+  'publish_succeeded', 'publish_failed', 'heartbeat_written', 'watchdog_failed',
+]);
+const GATHERING_APP_EVENTS = new Set([
+  'gathering_viewed', 'gathering_catalog_loaded', 'gathering_card_viewed',
+  'gathering_started', 'gathering_session_abandoned', 'gathering_completed',
+  'gathering_resumed', 'gathering_replayed', 'gathering_fallback_used',
+  'rhythms_asset_fallback_used',
+]);
+const GATHERING_SAFE_CODE = /^[a-z][a-z0-9_.-]{0,63}$/;
+const GATHERING_REVISION = /^[A-Za-z0-9._+~-]{1,128}$/;
+const GATHERING_TIMESTAMP = (value: unknown) => typeof value === 'string' &&
+  value.length <= 64 && Number.isFinite(Date.parse(value));
+
+type GatheringQueryFilter = {
+  method: 'eq' | 'in' | 'gte' | 'lt';
+  column: string;
+  value: string | readonly string[];
+};
+
+type GatheringQueryOrder = { column: string; ascending: boolean };
+
+async function loadBoundedGatheringRows(
+  supabase: ReturnType<typeof createServiceClient>,
+  table: string,
+  columns: string,
+  filters: GatheringQueryFilter[] = [],
+  orders: GatheringQueryOrder[] = [],
+  limit = GATHERING_DIAGNOSTIC_LIMIT,
+): Promise<DiagnosticRow[] | null> {
+  try {
+    let query = supabase.from(table).select(columns, { count: 'exact' });
+    for (const filter of filters) {
+      if (filter.method === 'eq') query = query.eq(filter.column, filter.value as string);
+      if (filter.method === 'in') query = query.in(filter.column, [...filter.value as readonly string[]]);
+      if (filter.method === 'gte') query = query.gte(filter.column, filter.value as string);
+      if (filter.method === 'lt') query = query.lt(filter.column, filter.value as string);
+    }
+    for (const order of orders) query = query.order(order.column, { ascending: order.ascending });
+    const result = await query.limit(limit);
+    const count = result.count;
+    if (result.error || !Array.isArray(result.data) || typeof count !== 'number' ||
+      !Number.isSafeInteger(count) || count < 0 || count > limit ||
+      result.data.length > limit) return null;
+    const rows = result.data.map(diagnosticRow);
+    return rows.every((row): row is DiagnosticRow => row !== null) ? rows : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeGatheringRevision(value: unknown) {
+  return typeof value === 'string' && GATHERING_REVISION.test(value) ? value : null;
+}
+
+function safeGatheringDate(value: unknown) {
+  return typeof value === 'string' && dateSchema.safeParse(value).success ? value : null;
+}
+
+function safeGatheringTimestamp(value: unknown) {
+  return GATHERING_TIMESTAMP(value) ? value as string : null;
+}
+
+function safeGatheringCounter(value: unknown, maximum: number) {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= maximum
+    ? value
+    : null;
+}
+
+function addGatheringCounter(current: number, value: number) {
+  const next = current + value;
+  return Number.isSafeInteger(next) ? next : null;
+}
+
+function gatheringSlotTimestamp(row: DiagnosticRow) {
+  const releaseWeek = safeGatheringDate(row.release_week);
+  if (!releaseWeek || !GATHERING_SLOT_TYPES.has(String(row.slot_type))) return null;
+  const date = new Date(`${releaseWeek}T00:00:00.000Z`);
+  if (row.slot_type === 'thursday') date.setUTCDate(date.getUTCDate() + 3);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function validateGatheringRelease(row: DiagnosticRow) {
+  return GATHERING_SLOT_TYPES.has(String(row.slot_type)) &&
+    GATHERING_RELEASE_SOURCES.has(String(row.source_kind)) && row.status === 'published' &&
+    safeGatheringRevision(row.prompt_revision) !== null &&
+    safeGatheringRevision(row.editorial_revision) !== null &&
+    safeGatheringTimestamp(row.published_at) !== null &&
+    (row.source_kind === 'evergreen'
+      ? row.release_week === null || row.release_week === undefined
+      : safeGatheringDate(row.release_week) !== null);
+}
+
+function validateGatheringRun(row: DiagnosticRow) {
+  return safeGatheringDate(row.target_week) !== null && GATHERING_SLOT_TYPES.has(String(row.slot_type)) &&
+    GATHERING_RUN_STATES.has(String(row.lifecycle_state)) &&
+    safeGatheringRevision(row.model_identifier) !== null &&
+    safeGatheringRevision(row.prompt_revision) !== null &&
+    GATHERING_VALIDATION_RESULTS.has(String(row.validation_result)) &&
+    GATHERING_REVIEWER_RESULTS.has(String(row.reviewer_result)) &&
+    (row.safe_error_code === null || row.safe_error_code === undefined || GATHERING_SAFE_CODE.test(String(row.safe_error_code))) &&
+    safeGatheringCounter(row.input_tokens, 2_000_000) !== null &&
+    safeGatheringCounter(row.output_tokens, 2_000_000) !== null &&
+    safeGatheringCounter(row.cost_microunits, 1_000_000_000) !== null &&
+    safeGatheringTimestamp(row.started_at) !== null &&
+    (row.completed_at === null || row.completed_at === undefined || safeGatheringTimestamp(row.completed_at) !== null);
+}
+
+function validateGatheringHeartbeat(row: DiagnosticRow) {
+  return GATHERING_HEARTBEAT_SOURCES.has(String(row.heartbeat_source)) &&
+    GATHERING_HEARTBEAT_STATES.has(String(row.heartbeat_state)) &&
+    safeGatheringCounter(row.inventory_depth, 52) !== null &&
+    (row.safe_error_code === null || row.safe_error_code === undefined || GATHERING_SAFE_CODE.test(String(row.safe_error_code))) &&
+    safeGatheringTimestamp(row.observed_at) !== null;
+}
+
+function validateGatheringIncident(row: DiagnosticRow) {
+  return GATHERING_INCIDENT_TYPES.has(String(row.incident_type)) &&
+    GATHERING_INCIDENT_STATES.has(String(row.incident_state)) &&
+    GATHERING_SAFE_CODE.test(String(row.safe_error_code)) &&
+    GATHERING_ALERT_STATES.has(String(row.alert_state)) &&
+    safeGatheringCounter(row.alert_attempts, 99) !== null &&
+    (row.inventory_depth === null || row.inventory_depth === undefined || safeGatheringCounter(row.inventory_depth, 52) !== null) &&
+    safeGatheringTimestamp(row.first_detected_at) !== null;
+}
+
+function validateGatheringMetric(row: DiagnosticRow) {
+  return safeGatheringDate(row.metric_date) !== null && GATHERING_SLOT_TYPES.has(String(row.slot_type)) &&
+    ['views', 'starts', 'completions', 'resumes', 'step_dropoffs']
+    .every((column) => safeGatheringCounter(row[column], 100_000_000) !== null);
+}
+
+function validateGatheringOperationalEvent(row: DiagnosticRow) {
+  return GATHERING_OPERATIONAL_EVENTS.has(String(row.event_name)) &&
+    new Set(['started', 'succeeded', 'failed', 'skipped']).has(String(row.event_state)) &&
+    (row.safe_error_code === null || row.safe_error_code === undefined || GATHERING_SAFE_CODE.test(String(row.safe_error_code))) &&
+    safeGatheringTimestamp(row.occurred_at) !== null;
+}
+
+function validateGatheringAppEvent(row: DiagnosticRow) {
+  return GATHERING_APP_EVENTS.has(String(row.event_name)) &&
+    (row.properties === null || row.properties === undefined || diagnosticRow(row.properties) !== null);
+}
+
+function countGatheringEvents(rows: DiagnosticRow[], names: ReadonlySet<string>) {
+  return rows.filter((row) => names.has(String(row.event_name))).length;
+}
+
+function sumGatheringMetrics(rows: DiagnosticRow[]) {
+  const totals = { views: 0, starts: 0, completions: 0, resumes: 0, step_dropoffs: 0 };
+  for (const row of rows) {
+    for (const column of Object.keys(totals) as Array<keyof typeof totals>) {
+      const next = addGatheringCounter(totals[column], row[column] as number);
+      if (next === null) return null;
+      totals[column] = next;
+    }
+  }
+  return totals;
+}
+
+function gatheringAutomationUnavailable() {
+  return { audit_available: false };
+}
+
+async function loadGatheringAutomationDiagnostics(
+  supabase: ReturnType<typeof createServiceClient>,
+  fromTimestamp: string,
+  toTimestamp: string,
+  fromDate: string,
+  toDate: string,
+) {
+  const [releaseRows, runRows, heartbeatRows, incidentRows, metricRows, operationalRows, appRows] =
+    await Promise.all([
+      loadBoundedGatheringRows(
+        supabase,
+        'gathering_releases',
+        'release_week,slot_type,source_kind,status,published_at,prompt_revision,editorial_revision',
+        [{ method: 'eq', column: 'status', value: 'published' }],
+        [{ column: 'release_week', ascending: true }, { column: 'slot_type', ascending: true }],
+      ),
+      loadBoundedGatheringRows(
+        supabase,
+        'gathering_generation_runs',
+        'target_week,slot_type,lifecycle_state,model_identifier,prompt_revision,validation_result,reviewer_result,safe_error_code,input_tokens,output_tokens,cost_microunits,started_at,completed_at',
+        [],
+        [{ column: 'started_at', ascending: false }],
+      ),
+      loadBoundedGatheringRows(
+        supabase,
+        'gathering_automation_heartbeats',
+        'heartbeat_source,heartbeat_state,inventory_depth,safe_error_code,observed_at',
+        [],
+        [{ column: 'observed_at', ascending: false }],
+        100,
+      ),
+      loadBoundedGatheringRows(
+        supabase,
+        'gathering_generation_incidents',
+        'incident_type,incident_state,safe_error_code,inventory_depth,first_detected_at,alert_state,alert_attempts',
+        [{ method: 'in', column: 'incident_state', value: ['open', 'alerted'] }],
+        [{ column: 'first_detected_at', ascending: false }],
+        GATHERING_INCIDENT_LIMIT,
+      ),
+      loadBoundedGatheringRows(
+        supabase,
+        'gathering_content_metrics_daily',
+        'metric_date,slot_type,views,starts,completions,resumes,step_dropoffs',
+        [{ method: 'gte', column: 'metric_date', value: fromDate }, { method: 'lt', column: 'metric_date', value: toDate }],
+      ),
+      loadBoundedGatheringRows(
+        supabase,
+        'gathering_operational_events',
+        'event_name,event_state,safe_error_code,occurred_at',
+        [{ method: 'in', column: 'event_name', value: [...GATHERING_OPERATIONAL_EVENTS] }, { method: 'gte', column: 'occurred_at', value: fromTimestamp }, { method: 'lt', column: 'occurred_at', value: toTimestamp }],
+      ),
+      loadBoundedGatheringRows(
+        supabase,
+        'growth_analytics_events',
+        'event_name,properties',
+        [{ method: 'in', column: 'event_name', value: [...GATHERING_APP_EVENTS] }, { method: 'gte', column: 'received_at', value: fromTimestamp }, { method: 'lt', column: 'received_at', value: toTimestamp }],
+      ),
+    ]);
+
+  if (!releaseRows || !runRows || !heartbeatRows || !incidentRows || !metricRows || !operationalRows || !appRows ||
+    releaseRows.some((row) => !validateGatheringRelease(row)) ||
+    runRows.some((row) => !validateGatheringRun(row)) ||
+    heartbeatRows.some((row) => !validateGatheringHeartbeat(row)) ||
+    incidentRows.some((row) => !validateGatheringIncident(row)) ||
+    metricRows.some((row) => !validateGatheringMetric(row)) ||
+    operationalRows.some((row) => !validateGatheringOperationalEvent(row)) ||
+    appRows.some((row) => !validateGatheringAppEvent(row))) {
+    return gatheringAutomationUnavailable();
+  }
+
+  const now = Date.now();
+  const futureReleases = releaseRows.filter((row) => row.source_kind === 'generated' &&
+    gatheringSlotTimestamp(row) !== null && Date.parse(gatheringSlotTimestamp(row) as string) >= now);
+  const futureInventory = futureReleases.length;
+  const nextSlot = (slotType: string) => futureReleases
+    .filter((row) => row.slot_type === slotType)
+    .map((row) => gatheringSlotTimestamp(row))
+    .filter((value): value is string => value !== null)
+    .sort()[0] ?? null;
+  const latestRun = [...runRows].sort((left, right) =>
+    Date.parse(String(right.started_at)) - Date.parse(String(left.started_at)))[0];
+  const latestSuccessfulPublish = [...releaseRows]
+    .filter((row) => row.source_kind === 'generated' && row.published_at !== null)
+    .sort((left, right) => Date.parse(String(right.published_at)) - Date.parse(String(left.published_at)))[0];
+  const latestHeartbeat = [...heartbeatRows]
+    .sort((left, right) => Date.parse(String(right.observed_at)) - Date.parse(String(left.observed_at)))[0];
+  const tokenTotals = runRows.reduce<{ input: number; output: number }>((totals, row) => ({
+    input: totals.input + (row.input_tokens as number),
+    output: totals.output + (row.output_tokens as number),
+  }), { input: 0, output: 0 });
+  const costMicrounits = runRows.reduce((total, row) => total + (row.cost_microunits as number), 0);
+  const rejectionCounts = new Map<string, number>();
+  for (const row of runRows.filter((value) => value.validation_result === 'rejected')) {
+    const code = typeof row.safe_error_code === 'string' ? row.safe_error_code : 'unknown';
+    rejectionCounts.set(code, (rejectionCounts.get(code) ?? 0) + 1);
+  }
+  const openIncidents = incidentRows.map((row) => ({
+    type: row.incident_type,
+    state: row.incident_state,
+    safe_error_code: row.safe_error_code,
+    inventory_depth: row.inventory_depth ?? null,
+    first_detected_at: row.first_detected_at,
+    alert_state: row.alert_state,
+    alert_attempts: row.alert_attempts,
+  }));
+  const emailState = incidentRows.reduce<{
+    pending: number;
+    delivered: number;
+    failed: number;
+    not_needed: number;
+    attempts: number;
+  }>((state, row) => {
+    const key = row.alert_state as 'pending' | 'delivered' | 'failed' | 'not_needed';
+    state[key] += 1;
+    state.attempts += row.alert_attempts as number;
+    return state;
+  }, { pending: 0, delivered: 0, failed: 0, not_needed: 0, attempts: 0 });
+  const metrics = sumGatheringMetrics(metricRows);
+  if (!metrics || !Number.isSafeInteger(tokenTotals.input) || !Number.isSafeInteger(tokenTotals.output) ||
+    !Number.isSafeInteger(costMicrounits)) return gatheringAutomationUnavailable();
+  const app = {
+    views: countGatheringEvents(appRows, new Set(['gathering_viewed'])),
+    catalog_views: countGatheringEvents(appRows, new Set(['gathering_catalog_loaded', 'gathering_card_viewed'])),
+    starts: countGatheringEvents(appRows, new Set(['gathering_started'])),
+    step_dropoffs: countGatheringEvents(appRows, new Set(['gathering_session_abandoned'])),
+    completions: countGatheringEvents(appRows, new Set(['gathering_completed'])),
+    resumes: countGatheringEvents(appRows, new Set(['gathering_resumed'])),
+    replays: countGatheringEvents(appRows, new Set(['gathering_replayed'])),
+    fallbacks: countGatheringEvents(appRows, new Set(['gathering_fallback_used', 'rhythms_asset_fallback_used'])),
+  };
+  const api = {
+    requests: countGatheringEvents(operationalRows, new Set(['api_catalog_requested', 'api_progress_requested'])),
+    successes: countGatheringEvents(operationalRows, new Set(['api_catalog_succeeded', 'api_progress_succeeded'])),
+    failures: countGatheringEvents(operationalRows, new Set(['api_catalog_failed', 'api_progress_failed'])),
+  };
+  const cron = {
+    invocations: countGatheringEvents(operationalRows, new Set(['inventory_checked', 'watchdog_checked', 'run_started'])),
+    successes: operationalRows.filter((row) => row.event_state === 'succeeded').length,
+    failures: operationalRows.filter((row) => row.event_state === 'failed').length,
+    heartbeats: countGatheringEvents(operationalRows, new Set(['heartbeat_recorded', 'heartbeat_written'])),
+    publishes: countGatheringEvents(operationalRows, new Set(['publish_finished', 'publish_succeeded'])),
+    alerts: countGatheringEvents(operationalRows, new Set(['alert_attempted', 'alert_delivered', 'alert_failed'])),
+  };
+
+  return {
+    audit_available: true,
+    future_inventory: futureInventory,
+    weeks_covered: Math.ceil(futureInventory / 2),
+    next_monday_at: nextSlot('monday'),
+    next_thursday_at: nextSlot('thursday'),
+    last_run: latestRun ? {
+      outcome: latestRun.lifecycle_state === 'published' ? 'succeeded' : latestRun.lifecycle_state,
+      model: latestRun.model_identifier,
+      prompt_revision: latestRun.prompt_revision,
+      slot_type: latestRun.slot_type,
+      target_week: latestRun.target_week,
+      validation_result: latestRun.validation_result,
+      reviewer_result: latestRun.reviewer_result,
+      started_at: latestRun.started_at,
+      completed_at: latestRun.completed_at ?? null,
+    } : null,
+    last_successful_publish: latestSuccessfulPublish ? {
+      outcome: 'succeeded',
+      slot_type: latestSuccessfulPublish.slot_type,
+      release_week: latestSuccessfulPublish.release_week,
+      published_at: latestSuccessfulPublish.published_at,
+      prompt_revision: latestSuccessfulPublish.prompt_revision,
+    } : null,
+    last_heartbeat: latestHeartbeat ? {
+      source: latestHeartbeat.heartbeat_source,
+      state: latestHeartbeat.heartbeat_state,
+      inventory_depth: latestHeartbeat.inventory_depth,
+      observed_at: latestHeartbeat.observed_at,
+    } : null,
+    model_revision: latestRun ? {
+      model: latestRun.model_identifier,
+      prompt_revision: latestRun.prompt_revision,
+    } : null,
+    token_totals: {
+      input: tokenTotals.input,
+      output: tokenTotals.output,
+      total: tokenTotals.input + tokenTotals.output,
+    },
+    cost_totals: { microunits: costMicrounits },
+    rejection_codes: [...rejectionCounts.entries()]
+      .map(([code, count]) => ({ code, count }))
+      .sort((left, right) => right.count - left.count || left.code.localeCompare(right.code)),
+    open_incidents: openIncidents,
+    alert_delivery: emailState,
+    telemetry: { app, api, cron },
+    aggregate_metrics: metrics,
+  };
+}
+
 export async function GET(req: Request) {
   const operator = requireOperatorAccess(req);
   if ('response' in operator) return operator.response;
@@ -1635,6 +2013,13 @@ export async function GET(req: Request) {
     fromTimestamp,
     toExclusive.toISOString(),
   );
+  const gatheringAutomationDiagnostics = await loadGatheringAutomationDiagnostics(
+    supabase,
+    fromTimestamp,
+    toExclusive.toISOString(),
+    parsed.data.from,
+    toExclusive.toISOString().slice(0, 10),
+  );
   const attributionAuditAvailable = !attributionTruthResult.rpcQueryFailed &&
     !attributionTruthResult.rowLimitReached && !attributionTruthResult.malformedResult;
   if (!attributionAuditAvailable) {
@@ -1711,6 +2096,7 @@ export async function GET(req: Request) {
   return ok({
     ...projectedSummary,
     rhythms_diagnostics: rhythmsDiagnostics,
+    gathering_automation: gatheringAutomationDiagnostics,
     attribution_economics: projectAttributionEconomics(
       attributionTruthResult,
       spendLedgerResult,
