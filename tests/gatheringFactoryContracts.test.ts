@@ -6,10 +6,9 @@ import {
   reviewDecisionSchema,
 } from '@/lib/gatheringFactory/contracts';
 
-const validStep = (section_type: (typeof GATHERING_SECTION_TYPES)[number]) => ({
-  section_type,
-  body: `A short editorial invitation for ${section_type}.`,
-});
+const validStep = (section_type: (typeof GATHERING_SECTION_TYPES)[number]) => section_type === 'scripture'
+  ? { section_type }
+  : { section_type, body: `A short editorial invitation for ${section_type}.` };
 
 const validCandidate = {
   schema_version: 1,
@@ -31,13 +30,47 @@ describe('gathering factory contracts', () => {
     expect(parsed.locales.en.steps.map((step) => step.section_type)).toEqual([...GATHERING_SECTION_TYPES]);
   });
 
-  it('contains a Scripture reference but has no Scripture body field', () => {
+  it('rejects duplicate and reordered section types at schema parse time', () => {
+    const reordered = GATHERING_SECTION_TYPES.map((section_type, index) => index === 0
+      ? 'opening_prayer'
+      : index === 1 ? 'arrival' : section_type);
+    const duplicate = GATHERING_SECTION_TYPES.map((section_type, index) => index === 7
+      ? 'action' : section_type);
+
+    for (const sections of [reordered, duplicate]) {
+      expect(() => generatedGatheringSchema.parse({
+        ...validCandidate,
+        locales: {
+          ...validCandidate.locales,
+          en: { ...validCandidate.locales.en, steps: sections.map(validStep) },
+        },
+      })).toThrow();
+    }
+  });
+
+  it('contains a strict canonical Scripture reference and no Scripture body field', () => {
     expect(generatedGatheringSchema.parse(validCandidate)).toMatchObject({
       scripture_reference: 'John 14:27',
     });
     expect(() => generatedGatheringSchema.parse({
       ...validCandidate,
       scripture_text: 'In the beginning...',
+    })).toThrow();
+    expect(() => generatedGatheringSchema.parse({
+      ...validCandidate,
+      scripture_reference: 'In the beginning God created the heavens and the earth.',
+    })).toThrow();
+    expect(() => generatedGatheringSchema.parse({
+      ...validCandidate,
+      locales: {
+        ...validCandidate.locales,
+        en: {
+          ...validCandidate.locales.en,
+          steps: validCandidate.locales.en.steps.map((step, index) => index === 2
+            ? { section_type: 'scripture', body: 'Blessed are the peacemakers.' }
+            : step),
+        },
+      },
     })).toThrow();
   });
 

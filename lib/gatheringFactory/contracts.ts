@@ -28,16 +28,52 @@ export const GATHERING_THEME_KEYS = [
 ] as const;
 export type GatheringThemeKey = (typeof GATHERING_THEME_KEYS)[number];
 
-const editorialTextSchema = z.string().trim().min(1).max(4_000);
-const localizedStepSchema = z.object({
-  section_type: z.enum(GATHERING_SECTION_TYPES),
-  body: editorialTextSchema,
+const editorialTextSchema = (max: number) => z.string()
+  .max(max)
+  .refine((value) => value.trim().length > 0, 'must contain non-whitespace text');
+
+const editorialStepSchema = (section_type: Exclude<GatheringSectionType, 'scripture'>) => z.object({
+  section_type: z.literal(section_type),
+  body: editorialTextSchema(4_000),
 }).strict();
 
+const scriptureStepSchema = z.object({
+  section_type: z.literal('scripture'),
+}).strict();
+
+const localizedStepsSchema = z.tuple([
+  editorialStepSchema('arrival'),
+  editorialStepSchema('opening_prayer'),
+  scriptureStepSchema,
+  editorialStepSchema('reflection'),
+  editorialStepSchema('silence'),
+  editorialStepSchema('private_prayer'),
+  editorialStepSchema('action'),
+  editorialStepSchema('closing'),
+]);
+
+const SCRIPTURE_BOOKS = [
+  'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
+  '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra',
+  'Nehemiah', 'Esther', 'Job', 'Psalm', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon',
+  'Isaiah', 'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel', 'Amos', 'Obadiah',
+  'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah', 'Malachi',
+  'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians', '2 Corinthians',
+  'Galatians', 'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians', '2 Thessalonians',
+  '1 Timothy', '2 Timothy', 'Titus', 'Philemon', 'Hebrews', 'James', '1 Peter', '2 Peter',
+  '1 John', '2 John', '3 John', 'Jude', 'Revelation',
+] as const;
+
+export const SCRIPTURE_REFERENCE_PATTERN = new RegExp(
+  `^(?:${SCRIPTURE_BOOKS.map((book) => book.replaceAll(' ', '\\s+')).join('|')})\\s+\\d{1,3}:\\d{1,3}(?:-\\d{1,3})?$`,
+);
+
+const scriptureReferenceSchema = z.string().max(160).regex(SCRIPTURE_REFERENCE_PATTERN);
+
 const localizedGatheringSchema = z.object({
-  title: z.string().trim().min(1).max(160),
-  summary: z.string().trim().min(1).max(800),
-  steps: z.array(localizedStepSchema).length(GATHERING_SECTION_TYPES.length),
+  title: editorialTextSchema(160),
+  summary: editorialTextSchema(800),
+  steps: localizedStepsSchema,
 }).strict();
 
 const localizedGatheringFields = Object.fromEntries(
@@ -47,7 +83,7 @@ const localizedGatheringFields = Object.fromEntries(
 export const generatedGatheringSchema = z.object({
   schema_version: z.literal(1),
   theme_key: z.enum(GATHERING_THEME_KEYS),
-  scripture_reference: z.string().trim().min(1).max(160),
+  scripture_reference: scriptureReferenceSchema,
   estimated_duration_seconds: z.number().int().min(720).max(1_080),
   locales: z.object(localizedGatheringFields).strict(),
 }).strict();
@@ -57,7 +93,7 @@ export type GeneratedGatheringLocale = GeneratedGathering['locales'][GatheringLo
 
 export const reviewDecisionSchema = z.object({
   approved: z.boolean(),
-  reasons: z.array(z.string().trim().min(1).max(500)).max(12),
+  reasons: z.array(editorialTextSchema(500)).max(12),
 }).strict();
 
 export type ReviewDecision = z.infer<typeof reviewDecisionSchema>;

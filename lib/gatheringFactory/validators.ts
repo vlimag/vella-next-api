@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 import {
   GATHERING_LOCALES,
   GATHERING_SECTION_TYPES,
@@ -15,20 +16,22 @@ export type GatheringValidationFailureCode =
   | 'theme_key_invalid'
   | 'bounded_field_invalid'
   | 'scripture_text_forbidden'
+  | 'scripture_reference_invalid'
   | 'prohibited_content'
-  | 'similarity_too_high';
+  | 'similarity_too_high'
+  | 'release_history_invalid';
 
 export type GatheringValidationResult =
   | { ok: true }
   | { ok: false; code: GatheringValidationFailureCode };
 
+export type RecentGatheringRelease = {
+  published_at: string;
+  content: GeneratedGathering;
+};
+
 export type GatheringValidationContext = {
-  recentReleases?: readonly unknown[];
-  last12Releases?: readonly unknown[];
-  priorReleases?: readonly unknown[];
-  recentContent?: readonly unknown[];
-  similarityThreshold?: number;
-  [key: string]: unknown;
+  recentReleases: readonly RecentGatheringRelease[];
 };
 
 const SIMILARITY_THRESHOLD = 0.82;
@@ -47,6 +50,7 @@ const prohibitedPatterns: readonly RegExp[] = [
   /\b(?:harm yourself|hurt yourself|end your life|take your own life|do not seek help)\b/i,
   /\b(?:vote for|political party|politician|election campaign|court order|lawsuit)\b/i,
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
+  /(?<!\w)\+?\d(?:[\s().-]*\d){7,}(?!\w)/i,
   /\b(?:user[_ -]?id|account[_ -]?id|receipt|purchase[_ -]?token|raw[_ -]?(?:prayer|journal)|private (?:prayer|journal|note))\b/i,
 ];
 
@@ -59,11 +63,22 @@ const forbiddenScriptureKeys = new Set([
   'bible_body',
 ]);
 
+const recentReleaseSchema = z.object({
+  published_at: z.string().datetime({ offset: true }),
+  content: generatedGatheringSchema,
+}).strict();
+
 export function validateGatheringCandidate(
   candidate: unknown,
-  context: GatheringValidationContext = {},
+  context: GatheringValidationContext,
 ): GatheringValidationResult {
   if (containsForbiddenScriptureKey(candidate)) return { ok: false, code: 'scripture_text_forbidden' };
+
+  if (hasScriptureStepBody(candidate)) return { ok: false, code: 'scripture_text_forbidden' };
+
+  if (containsProhibitedPattern(candidateStrings(candidate))) {
+    return { ok: false, code: 'prohibited_content' };
+  }
 
   const structuralFailure = inspectStructure(candidate);
   if (structuralFailure) return structuralFailure;
@@ -71,20 +86,10 @@ export function validateGatheringCandidate(
   const parsed = generatedGatheringSchema.safeParse(candidate);
   if (!parsed.success) return classifySchemaFailure(candidate, parsed.error.issues);
 
-  const prose = editorialProse(parsed.data);
-  if (prohibitedPatterns.some((pattern) => pattern.test(prose))) {
-    return { ok: false, code: 'prohibited_content' };
-  }
+  const history = validateRecentReleases(isRecord(context) ? context.recentReleases : undefined);
+  if (!history.ok) return history;
 
-  const priorReleases = getPriorReleases(context).slice(0, 12);
-  const threshold = typeof context.similarityThreshold === 'number'
-    && Number.isFinite(context.similarityThreshold)
-    && context.similarityThreshold >= 0
-    && context.similarityThreshold <= 1
-    ? context.similarityThreshold
-    : SIMILARITY_THRESHOLD;
-  const candidateHash = candidateContentHash(parsed.data);
-  if (priorReleases.some((prior) => releaseSimilarity(parsed.data, candidateHash, prior) > threshold)) {
+  if (history.releases.some((prior) => releaseSimilarity(parsed.data, prior.content) > SIMILARITY_THRESHOLD)) {
     return { ok: false, code: 'similarity_too_high' };
   }
 
@@ -92,8 +97,9 @@ export function validateGatheringCandidate(
 }
 
 export function candidateContentHash(candidate: unknown): string {
-  const normalized = canonicalize(candidate);
-  return createHash('sha256').update(JSON.stringify(normalized) ?? 'null', 'utf8').digest('hex');
+  const parsed = generatedGatheringSchema.parse(candidate);
+  const normalized = canonicalize(contentProjection(parsed));
+  return createHash('sha256').update(JSON.stringify(normalized), 'utf8').digest('hex');
 }
 
 function inspectStructure(candidate: unknown): GatheringValidationResult | null {
@@ -117,6 +123,9 @@ function inspectStructure(candidate: unknown): GatheringValidationResult | null 
     if (sectionTypes.some((section, index) => section !== GATHERING_SECTION_TYPES[index])) {
       return { ok: false, code: 'step_contract_invalid' };
     }
+    if (isRecord(localized.steps[2]) && Object.keys(localized.steps[2]).some((key) => key !== 'section_type')) {
+      return { ok: false, code: 'scripture_text_forbidden' };
+    }
   }
 
   return null;
@@ -132,6 +141,9 @@ function classifySchemaFailure(
   if (issues.some(({ path }) => path.includes('theme_key'))) {
     return { ok: false, code: 'theme_key_invalid' };
   }
+  if (issues.some(({ path }) => path.includes('scripture_reference'))) {
+    return { ok: false, code: 'scripture_reference_invalid' };
+  }
   if (issues.some(({ path }) => path.includes('title') || path.includes('summary') || path.includes('body'))) {
     return { ok: false, code: 'bounded_field_invalid' };
   }
@@ -141,42 +153,25 @@ function classifySchemaFailure(
   return { ok: false, code: 'schema_invalid' };
 }
 
-function editorialProse(candidate: GeneratedGathering): string {
-  const localized = GATHERING_LOCALES.flatMap((locale) => {
-    const content = candidate.locales[locale];
-    return [content.title, content.summary, ...content.steps.map((step) => step.body)];
-  });
-  return localized.join('\n');
+function contentProjection(candidate: GeneratedGathering) {
+  return {
+    theme_key: candidate.theme_key,
+    scripture_reference: candidate.scripture_reference,
+    estimated_duration_seconds: candidate.estimated_duration_seconds,
+    locales: Object.fromEntries(GATHERING_LOCALES.map((locale) => [locale, {
+      title: candidate.locales[locale].title,
+      summary: candidate.locales[locale].summary,
+      steps: candidate.locales[locale].steps,
+    }])),
+  };
 }
 
-function getPriorReleases(context: GatheringValidationContext): readonly unknown[] {
-  for (const key of ['recentReleases', 'last12Releases', 'priorReleases', 'recentContent'] as const) {
-    if (Array.isArray(context[key])) return context[key];
-  }
-  return [];
+function releaseSimilarity(candidate: GeneratedGathering, prior: GeneratedGathering): number {
+  return jaccardSimilarity(canonicalContentText(candidate), canonicalContentText(prior));
 }
 
-function releaseSimilarity(candidate: GeneratedGathering, candidateHash: string, prior: unknown): number {
-  if (typeof prior === 'string') {
-    if (/^[0-9a-f]{64}$/.test(prior) && prior === candidateHash) return 1;
-    return jaccardSimilarity(editorialProse(candidate), prior);
-  }
-  if (!isRecord(prior)) return 0;
-
-  const parsedPrior = generatedGatheringSchema.safeParse(prior);
-  if (parsedPrior.success) return jaccardSimilarity(editorialProse(candidate), editorialProse(parsedPrior.data));
-
-  if (typeof prior.similarity === 'number' && Number.isFinite(prior.similarity)) {
-    return prior.similarity;
-  }
-
-  for (const key of ['content_hash', 'contentHash', 'hash'] as const) {
-    if (typeof prior[key] === 'string' && prior[key] === candidateHash) return 1;
-  }
-  for (const key of ['candidate', 'content', 'payload', 'draft'] as const) {
-    if (prior[key] !== undefined) return releaseSimilarity(candidate, candidateHash, prior[key]);
-  }
-  return jaccardSimilarity(editorialProse(candidate), flattenStrings(prior));
+function canonicalContentText(candidate: GeneratedGathering): string {
+  return JSON.stringify(canonicalize(contentProjection(candidate)));
 }
 
 function jaccardSimilarity(left: string, right: string): number {
@@ -194,13 +189,6 @@ function tokens(value: string): string[] {
   return words.slice(0, -2).map((_, index) => words.slice(index, index + 3).join(' '));
 }
 
-function flattenStrings(value: unknown): string {
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value.map(flattenStrings).join('\n');
-  if (isRecord(value)) return Object.values(value).map(flattenStrings).join('\n');
-  return '';
-}
-
 function containsForbiddenScriptureKey(value: unknown): boolean {
   if (Array.isArray(value)) return value.some(containsForbiddenScriptureKey);
   if (!isRecord(value)) return false;
@@ -209,9 +197,60 @@ function containsForbiddenScriptureKey(value: unknown): boolean {
   });
 }
 
+function hasScriptureStepBody(value: unknown): boolean {
+  if (!isRecord(value) || !isRecord(value.locales)) return false;
+  const locales = value.locales;
+  return GATHERING_LOCALES.some((locale) => {
+    const localized = locales[locale];
+    if (!isRecord(localized) || !Array.isArray(localized.steps)) return false;
+    const scriptureStep = localized.steps[2];
+    return isRecord(scriptureStep)
+      && scriptureStep.section_type === 'scripture'
+      && Object.keys(scriptureStep).some((key) => key !== 'section_type');
+  });
+}
+
+function candidateStrings(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.map(candidateStrings).join('\n');
+  if (isRecord(value)) return Object.entries(value)
+    .map(([key, entry]) => `${key}\n${candidateStrings(entry)}`)
+    .join('\n');
+  return '';
+}
+
+function containsProhibitedPattern(value: string): boolean {
+  return prohibitedPatterns.some((pattern) => pattern.test(value));
+}
+
+function validateRecentReleases(
+  releases: unknown,
+): { ok: true; releases: readonly RecentGatheringRelease[] } | { ok: false; code: 'release_history_invalid' } {
+  if (!Array.isArray(releases) || releases.length > 12) {
+    return { ok: false, code: 'release_history_invalid' };
+  }
+
+  let previousPublishedAt: number | undefined;
+  const parsedReleases: RecentGatheringRelease[] = [];
+  for (const release of releases) {
+    if (!isRecord(release) || Object.keys(release).some((key) => key !== 'published_at' && key !== 'content')) {
+      return { ok: false, code: 'release_history_invalid' };
+    }
+    const parsedRelease = recentReleaseSchema.safeParse(release);
+    if (!parsedRelease.success) return { ok: false, code: 'release_history_invalid' };
+    const publishedAt = Date.parse(parsedRelease.data.published_at);
+    if (previousPublishedAt !== undefined && previousPublishedAt <= publishedAt) {
+      return { ok: false, code: 'release_history_invalid' };
+    }
+    previousPublishedAt = publishedAt;
+    parsedReleases.push(parsedRelease.data);
+  }
+  return { ok: true, releases: parsedReleases };
+}
+
 function canonicalize(value: unknown): unknown {
   if (typeof value === 'string') {
-    return value.trim().replace(/\r\n?/g, '\n').replace(/[ \t]+/g, ' ');
+    return value.normalize('NFC').replace(/\u00a0/gu, ' ').replace(/\s+/gu, ' ').trim();
   }
   if (Array.isArray(value)) return value.map(canonicalize);
   if (isRecord(value)) {
