@@ -4,8 +4,10 @@ import {
   GATHERING_LOCALES,
   GATHERING_SECTION_TYPES,
   generatedGatheringSchema,
+  reviewDecisionSchema,
   type GeneratedGathering,
   type GatheringLocale,
+  type ReviewDecision,
 } from './contracts';
 
 export type GatheringValidationFailureCode =
@@ -33,6 +35,10 @@ export type RecentGatheringRelease = {
 export type GatheringValidationContext = {
   recentReleases: readonly RecentGatheringRelease[];
 };
+
+export type ReviewValidationResult =
+  | { ok: true; decision: ReviewDecision }
+  | { ok: false; code: 'schema_invalid' };
 
 const SIMILARITY_THRESHOLD = 0.82;
 
@@ -94,6 +100,13 @@ export function validateGatheringCandidate(
   }
 
   return { ok: true };
+}
+
+export function validateReviewDecision(value: unknown): ReviewValidationResult {
+  const parsed = reviewDecisionSchema.safeParse(value);
+  return parsed.success
+    ? { ok: true, decision: parsed.data }
+    : { ok: false, code: 'schema_invalid' };
 }
 
 export function candidateContentHash(candidate: unknown): string {

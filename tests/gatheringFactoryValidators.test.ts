@@ -7,6 +7,7 @@ import {
 } from '@/lib/gatheringFactory/contracts';
 import {
   candidateContentHash,
+  validateReviewDecision,
   validateGatheringCandidate,
 } from '@/lib/gatheringFactory/validators';
 
@@ -38,6 +39,17 @@ const release = (content: LooseCandidate, published_at: string) => ({
 });
 
 describe('gathering factory validators', () => {
+  it('validates reviewer decisions through the shared bounded contract', () => {
+    expect(validateReviewDecision({ approved: true, reasons: ['Safe and complete.'] })).toEqual({
+      ok: true,
+      decision: { approved: true, reasons: ['Safe and complete.'] },
+    });
+    expect(validateReviewDecision({ approved: false, reasons: ['x'.repeat(501)] })).toEqual({
+      ok: false,
+      code: 'schema_invalid',
+    });
+  });
+
   it('accepts a complete safe candidate', () => {
     expect(validateGatheringCandidate(validCandidate(), { recentReleases: [] })).toEqual({ ok: true });
   });
