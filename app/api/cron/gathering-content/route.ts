@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
 export async function GET(request: Request) {
   if (!authorized(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  return execute({ dry_run: false, max_slots: 12, evergreen_fallbacks: [...REVIEWED_EVERGREEN_FALLBACKS] });
+  return execute({ dry_run: false, max_slots: 1, evergreen_fallbacks: [...REVIEWED_EVERGREEN_FALLBACKS] });
 }
 
 async function execute(parsed: z.infer<typeof bodySchema>) {
