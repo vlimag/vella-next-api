@@ -72,10 +72,12 @@ for the same small audience.
 
 ## Current controlled learning sequence — 2026-09-07
 
-Campaign `Vella_BR_Android_202608_PrayerDaily` is currently paused. Its configured
-budget remains R$30/day and bidding remains Install volume (All users) / Maximize
-conversions, without target CPI. The single install/download action remains the
-sole Primary action.
+Campaign `Vella_BR_Android_202608_PrayerDaily` (ID `24120421103`) was re-enabled
+by explicit operator override on 2026-09-07 and is now Enabled / Eligible. Its
+configured budget remains R$30/day and bidding remains Install volume (All
+users) / Maximize conversions, without target CPI. Brazil/Portuguese targeting
+is unchanged, and the single install/download action remains the sole Primary
+action.
 
 `begin_checkout` is now marked as a GA4 key event and imported into Google Ads as
 Secondary/observation-only, excluded from account-level goals. The Google Play
@@ -84,20 +86,22 @@ purchase action also remains Secondary. Do not import or optimize toward
 
 API main commit `52c5bac` is deployed on `vella.one`; the production health,
 missing-bearer protection, and real anonymous-bearer diagnostic smoke checks
-passed. The campaign must nevertheless remain paused until a licensed physical
-Android test records one intentional cancellation and verifies annual and
-monthly purchases through authoritative receipt validation and Premium
-entitlement.
+passed. The licensed physical Android test has not run: the intentional
+cancellation plus annual and monthly purchase cases remain pending and are
+deferred to 2026-09-08. The operator explicitly accepted that risk for the
+immediate re-enable; this override does not count the test as completed.
 
 Use this sequence:
 
-1. **Stage 0 — finish the purchase gate:** complete and record the cancellation,
-   annual, and monthly physical-device cases. Do not resume spend before all
-   three are green.
-2. **Stage A — qualified install learning:** after the gate passes, resume the
-   single production campaign at R$30/day for at most 14 campaign days (R$420),
-   retaining Install volume (All users), no target CPI, and install as the sole
-   Primary action.
+1. **Stage 0 — complete the deferred purchase validation:** on 2026-09-08,
+   complete and record the cancellation, annual, and monthly physical-device
+   cases. They remain outstanding despite the operator's risk acceptance and
+   must not be marked green before they actually pass.
+2. **Stage A — qualified install learning is live:** the controlled window began
+   with the 2026-09-07 re-enable at R$30/day and has an explicit 2026-09-19 end
+   date. That 13-date span is nominally R$390; retain the R$420 operator ceiling
+   because Google may vary daily delivery. Keep Install volume (All users), no
+   target CPI, and install as the sole Primary action.
 3. **Stage B — conversion observation:** observe `begin_checkout` as Secondary
    without changing bidding, budget, goals, geography, or creatives in the same
    learning window. Reconcile every later trial with authoritative server/store
@@ -118,7 +122,8 @@ https://support.google.com/google-ads/answer/14104492
 
 The month-by-month sections below are a strategic sequencing framework. The
 2026-09-07 live state and gate above control campaign operations; older day
-labels or allocations do not authorize a restart or configuration change.
+labels or allocations do not authorize a configuration change or extension of
+the current controlled learning window.
 
 ## Month 1 — prove the message
 
@@ -155,9 +160,10 @@ Each creator receives one brief but keeps their own voice:
 Do not script theological claims or guaranteed outcomes. Collect qualified
 traffic and identify the strongest hook.
 
-### Next controlled Google test after the physical gate
+### Current controlled Google test — started 2026-09-07 by operator override
 
-Budget: up to R$420, exactly R$30 per campaign day for at most 14 campaign days.
+Budget: R$30/day through the explicit 2026-09-19 end date; nominally R$390 over
+the 13-date span, with a R$420 operator ceiling.
 
 - One Google Android App Campaign.
 - Brazil only, Portuguese assets only.
