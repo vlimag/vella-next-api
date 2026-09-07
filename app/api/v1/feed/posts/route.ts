@@ -12,7 +12,7 @@ import {
   safeSocialAvatarUrl,
 } from '@/lib/social';
 import { moderateFaithPostContent } from '@/lib/socialModeration';
-import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import { requireActiveSubscription, resolveReadOnlyContentViewer } from '@/lib/subscriptionAccess';
 import {
   tryLoadFeaturedMilestonesByUser,
   type MilestoneClient,
@@ -109,7 +109,7 @@ function decodeBase64Image(base64: string) {
 }
 
 export async function GET(req: Request) {
-  const access = await requireActiveSubscription();
+  const access = await resolveReadOnlyContentViewer();
   if ('response' in access) return access.response;
 
   const { searchParams } = new URL(req.url);

@@ -2,9 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const CURRENT_USER_ID = '11111111-1111-4111-8111-111111111111';
 const OTHER_USER_ID = '22222222-2222-4222-8222-222222222222';
+const SIGNED_PROOF = 'header.payload.signature';
 
 const mocks = vi.hoisted(() => ({
   getUserIdFromAuthHeader: vi.fn(),
+  purchaseAccountCanBeClaimedByUser: vi.fn(),
+  verifyAppleReceipt: vi.fn(),
   verifyAppleSignedTransaction: vi.fn(),
   syncIapEntitlement: vi.fn(),
   recordFailedIapAttempt: vi.fn(),
@@ -15,7 +18,7 @@ vi.mock('@/lib/auth', () => ({
 }));
 
 vi.mock('@/lib/appStore', () => ({
-  verifyAppleReceipt: vi.fn(),
+  verifyAppleReceipt: mocks.verifyAppleReceipt,
   verifyAppleSignedTransaction: mocks.verifyAppleSignedTransaction,
 }));
 
@@ -24,10 +27,7 @@ vi.mock('@/lib/googlePlay', () => ({
 }));
 
 vi.mock('@/lib/iap', () => ({
-  purchaseAccountMatchesUser: (
-    verified: { appAccountToken?: string | null },
-    userId: string,
-  ) => !verified.appAccountToken || verified.appAccountToken.toLowerCase() === userId.toLowerCase(),
+  purchaseAccountCanBeClaimedByUser: mocks.purchaseAccountCanBeClaimedByUser,
   syncIapEntitlement: mocks.syncIapEntitlement,
 }));
 
@@ -48,7 +48,7 @@ function request() {
     body: JSON.stringify({
       platform: 'ios',
       productId: 'vella.premium.monthly',
-      signedTransaction: 'header.payload.signature',
+      signedTransaction: SIGNED_PROOF,
     }),
   });
 }
@@ -69,8 +69,12 @@ function verifiedPurchase(appAccountToken: string | null) {
 describe('IAP validation account binding', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getUserIdFromAuthHeader.mockResolvedValue({ userId: CURRENT_USER_ID });
+    mocks.getUserIdFromAuthHeader.mockResolvedValue({
+      userId: CURRENT_USER_ID,
+      isAnonymous: false,
+    });
     mocks.recordFailedIapAttempt.mockResolvedValue(undefined);
+    mocks.purchaseAccountCanBeClaimedByUser.mockResolvedValue(true);
     mocks.syncIapEntitlement.mockResolvedValue({
       active: true,
       entitlementCode: 'premium_individual',
@@ -79,8 +83,9 @@ describe('IAP validation account binding', () => {
     });
   });
 
-  it('rejects a signed Apple transaction bound to a different Vella account', async () => {
+  it('rejects a signed Apple transaction bound to a permanent different Vella account', async () => {
     mocks.verifyAppleSignedTransaction.mockResolvedValue(verifiedPurchase(OTHER_USER_ID));
+    mocks.purchaseAccountCanBeClaimedByUser.mockResolvedValue(false);
 
     const response = await POST(request());
 
@@ -101,5 +106,54 @@ describe('IAP validation account binding', () => {
       userId: CURRENT_USER_ID,
       platform: 'ios',
     }));
+    expect(mocks.getUserIdFromAuthHeader).toHaveBeenCalledWith({ allowAnonymous: true });
+  });
+
+  it('accepts a mismatched token only after the server confirms its owner is anonymous', async () => {
+    mocks.verifyAppleSignedTransaction.mockResolvedValue(verifiedPurchase(OTHER_USER_ID));
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.purchaseAccountCanBeClaimedByUser).toHaveBeenCalledWith(
+      expect.objectContaining({ appAccountToken: OTHER_USER_ID }),
+      CURRENT_USER_ID,
+      { currentUserIsAnonymous: false },
+    );
+    expect(mocks.syncIapEntitlement).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks a signed-out installation as anonymous during store reconciliation', async () => {
+    mocks.getUserIdFromAuthHeader.mockResolvedValue({
+      userId: CURRENT_USER_ID,
+      isAnonymous: true,
+    });
+    mocks.verifyAppleSignedTransaction.mockResolvedValue(verifiedPurchase(OTHER_USER_ID));
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(200);
+    expect(mocks.purchaseAccountCanBeClaimedByUser).toHaveBeenCalledWith(
+      expect.objectContaining({ appAccountToken: OTHER_USER_ID }),
+      CURRENT_USER_ID,
+      { currentUserIsAnonymous: true },
+    );
+  });
+
+  it('does not expose account identifiers or signed proof when verification fails', async () => {
+    mocks.verifyAppleSignedTransaction.mockRejectedValue(
+      new Error(`invalid ${SIGNED_PROOF} for ${CURRENT_USER_ID}`),
+    );
+    mocks.verifyAppleReceipt.mockResolvedValue(null);
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const response = await POST(request());
+    const responseJson = await response.json();
+    const visible = JSON.stringify({ responseJson, logs: warning.mock.calls });
+
+    expect(response.status).toBe(402);
+    expect(visible).not.toContain(SIGNED_PROOF);
+    expect(visible).not.toContain(CURRENT_USER_ID);
+    expect(visible).not.toContain(OTHER_USER_ID);
   });
 });

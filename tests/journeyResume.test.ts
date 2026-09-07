@@ -155,7 +155,7 @@ describe('journey resume route', () => {
     const { response, json } = await post({ journey_id: JOURNEY_ID });
 
     expect(response.status).toBe(409);
-    expect(json).toEqual({ error: { message: 'Another journey is already active', details: { code: 'journey_active_conflict' } } });
+    expect(json).toEqual({ error: { message: 'This journey is already active', details: { code: 'journey_template_active' } } });
     expect(client.write.update).toHaveBeenCalledTimes(1);
   });
 

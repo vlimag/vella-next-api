@@ -102,7 +102,8 @@ accept exactly their listed properties and no attribution fields.
 | `trial_terms_viewed` | anonymous | `plan: yearly`, `trial_days_bucket: 14_days\|other` |
 | `subscription_management_opened` | bearer | `source: paywall\|settings`, `result: opened\|failed` |
 | `plan_selected` | anonymous | `plan: monthly\|yearly` |
-| `checkout_started` | bearer | `plan: monthly\|yearly` |
+| `checkout_started` | bearer | `plan: monthly\|yearly`; current clients also send a random `attempt_id` UUID (legacy `{plan}` remains accepted) |
+| `checkout_result` | bearer | matching `attempt_id`, plan, terminal `outcome: succeeded\|cancelled\|failed\|timed_out`, and finite technical stage |
 | `purchase_validation_result` | bearer | `result: verified_active\|rejected`, `plan: monthly\|yearly` |
 | `trial_started` | bearer | `plan: monthly\|yearly` |
 | `subscription_paid_started` | bearer | `plan: monthly\|yearly` |
@@ -307,7 +308,16 @@ counts become zero and invalid nullable campaign metrics become `null`.
   or logged. Query-failure logs contain only fixed per-query failure booleans.
   Client issue, server error, and verified phase dimensions use explicit closed
   allowlists; any missing, malformed, or unexpected value is grouped under the
-  fixed `unknown` label rather than echoed from storage;
+  fixed `unknown` label rather than echoed from storage. The client-diagnostic
+  endpoint accepts both permanent-account and Supabase anonymous-session bearer
+  tokens so account-optional purchases retain their finite stage/outcome trail;
+  requests without a valid bearer remain rejected, and receipts, purchase
+  tokens, prices, messages, and devotional content are never accepted;
+  `checkout_lifecycle` correlates new `checkout_started`/`checkout_result`
+  pairs without returning installation or account identifiers. An
+  `open_over_2m` value above zero means a native checkout has no terminal event
+  after two minutes; `legacy_uncorrelated_starts` contains older app events that
+  cannot be paired and must not be classified as cancellation or failure;
 - `rhythms_diagnostics`: count-only discovery and presentation totals from
   `growth_analytics_events`, plus authoritative journey/session, practice,
   Gathering, and milestone completion/award totals from their product tables.

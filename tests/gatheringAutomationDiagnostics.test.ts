@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createServiceClient: vi.fn(),
@@ -165,7 +165,13 @@ function request() {
 
 describe('gathering automation operator diagnostics', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-07T00:00:00.000Z'));
     vi.stubEnv('VELLA_OPERATOR_API_KEY', OPERATOR_KEY);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('reports bounded inventory, factory health, telemetry, and no private fields', async () => {

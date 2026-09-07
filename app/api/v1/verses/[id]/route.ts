@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import { resolveReadOnlyContentViewer } from '@/lib/subscriptionAccess';
 
 const paramsSchema = z.object({ id: z.string().uuid() });
 
@@ -10,7 +10,7 @@ type RouteParams = {
 };
 
 export async function GET(_req: Request, { params }: RouteParams) {
-  const access = await requireActiveSubscription();
+  const access = await resolveReadOnlyContentViewer();
   if ('response' in access) return access.response;
 
   const parsed = paramsSchema.safeParse(await params);

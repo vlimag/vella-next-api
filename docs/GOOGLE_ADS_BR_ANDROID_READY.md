@@ -1,12 +1,67 @@
 # Google Ads — Vella Brazil Android setup
 
-Last updated: 2026-08-25
+Last updated: 2026-08-30
 
 This records the ended historical campaign separately from the approved setup
 for a new controlled Google learning campaign. Do not reactivate the historical
 campaign. Create the replacement in a paused state only after the readiness
 gates in `GROWTH_LAUNCH_BOARD_BR.md` are green, and do not enable spend without
 an explicit final go/no-go.
+
+## Current production refinement — 2026-08-30
+
+This section records the current production state and supersedes the older
+pre-launch plan below wherever they differ.
+
+- `Vella_BR_Android_202608_PrayerDaily` is enabled at **R$30/day**, Brazil only,
+  Portuguese, with status **Eligible (Limited)**. The known religious-belief
+  limitation is expected for this product; it is not a disapproval.
+- Bidding remains **Install volume (All users)** / Maximize conversions, with no
+  target CPI. There was no budget, bidding, targeting, billing, or access change
+  in this refinement.
+- Google Play and the intended GA4 property are linked. The Google Play purchase
+  conversion remains Secondary, Awaiting conversions, with zero recorded
+  conversions. No verified trials currently exist, so Vella must not optimize
+  bidding to trial or purchase yet.
+- First-party Vella telemetry for 2026-08-23 through 2026-08-30 recorded 122
+  first opens, 47 installs reaching the paywall, 15 installs starting checkout,
+  zero verified trials, and zero verified paid subscription starts. These
+  aggregates diagnose product quality; they are not Google Ads conversions.
+- GA4 automatic events were arriving, while mapped custom events were absent.
+  The root cause was native Analytics consent missing an explicit
+  `analytics_storage` grant. Runtime 1.4 now grants analytics storage while
+  retaining `ad_storage`, `ad_user_data`, and `ad_personalization` as denied.
+  This privacy-safe JavaScript correction was published to production for iOS
+  and Android by OTA on 2026-08-30.
+- After the first corrected production events arrive in GA4, import
+  `begin_checkout` and `verified_trial_start` into Google Ads as Secondary,
+  observation-only conversions. Do not change bidding at import time.
+- The exact current Brazilian annual renewal price was not proven in the local
+  release evidence during this refinement. Trial duration and exact price were
+  therefore intentionally omitted from ad copy rather than risk a stale or
+  misleading offer.
+
+Current text assets saved on 2026-08-30:
+
+Headlines:
+
+1. `Sua fé, todos os dias`
+2. `Vella Premium: ore e reflita`
+3. `Planos mensal e anual`
+4. `Jornadas guiadas de oração`
+5. `Versículos para cada momento`
+
+Descriptions:
+
+1. `Versículos, oração e reflexões para cultivar sua fé todos os dias.`
+2. `Vella é Premium: escolha o plano mensal ou anual e confira os termos antes de assinar.`
+3. `Encontre passagens bíblicas, salve favoritos e acompanhe jornadas guiadas.`
+4. `Assinatura necessária após a experiência inicial. Veja preços e condições no app.`
+5. `Ore, busque versículos e siga jornadas guiadas com todos os recursos Premium.`
+
+The three new headlines and three new descriptions are under asset review. Keep
+the campaign at its current budget and bid mode while Google reviews them and
+while corrected conversion signals begin accumulating.
 
 ## Account and historical campaign evidence
 

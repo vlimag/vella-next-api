@@ -33,4 +33,43 @@ describe('deterministic verse search intent', () => {
     expect(normalizeSearchText('Стихи о силе!')).toBe('стихи о силе');
     expect(resolveSearchIntent('стихи о силе')).toBe('strength');
   });
+
+  it.each([
+    ['en', 'verses about forgiveness', 'forgive'],
+    ['pt', 'versículos sobre perdão', 'perdoar'],
+    ['es', 'versículos sobre el perdón', 'perdonar'],
+    ['fr', 'versets sur le pardon', 'pardonner'],
+    ['de', 'Verse über Vergebung', 'vergeben'],
+    ['it', 'versetti sul perdono', 'perdonare'],
+    ['ru', 'стихи о прощении', 'простить'],
+    ['pl', 'wersety o przebaczeniu', 'przebaczyć'],
+  ])('resolves forgiveness deterministically in %s', (language, query, localizedTerm) => {
+    const intent = resolveSearchIntent(query);
+
+    expect(intent).toBe('forgiveness');
+    expect(fallbackTermsFromQuery(query, language)).toContain(localizedTerm);
+    expect(referencesForIntent(intent)).toContainEqual({ bookCode: 'MAT', chapter: 18, verse: 22 });
+  });
+
+  it('does not confuse forgiveness with grief in Portuguese', () => {
+    expect(resolveSearchIntent('versículos sobre perdão')).toBe('forgiveness');
+    expect(resolveSearchIntent('versículos sobre perda')).toBe('grief');
+  });
+
+  it.each([
+    ['en', 'psalms about liars', 'liar'],
+    ['pt', 'salmos sobre pessoas mentirosas', 'mentira'],
+    ['es', 'salmos sobre personas mentirosas', 'mentira'],
+    ['fr', 'psaumes sur les menteurs', 'mensonge'],
+    ['de', 'Psalmen über Lügner', 'Lüge'],
+    ['it', 'salmi sulle persone bugiarde', 'bugia'],
+    ['ru', 'псалмы о лжецах', 'ложь'],
+    ['pl', 'psalmy o kłamcach', 'kłamstwo'],
+  ])('resolves lying and deception deterministically in %s', (language, query, localizedTerm) => {
+    const intent = resolveSearchIntent(query);
+
+    expect(intent).toBe('deception');
+    expect(fallbackTermsFromQuery(query, language)).toContain(localizedTerm);
+    expect(referencesForIntent(intent)).toContainEqual({ bookCode: 'PSA', chapter: 116, verse: 11 });
+  });
 });

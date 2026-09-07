@@ -21,7 +21,7 @@ const earnedSchema = z.object({
   id: uuidSchema,
   user_id: uuidSchema,
   milestone_code: codeSchema,
-  earned_at: z.string().datetime().optional(),
+  earned_at: z.string().datetime({ offset: true }).optional(),
 });
 
 const featuredSchema = z.object({

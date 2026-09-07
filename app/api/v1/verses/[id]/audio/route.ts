@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
-import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import { resolveReadOnlyContentViewer } from '@/lib/subscriptionAccess';
 import {
   generateVerseNarration,
   resolveVerseNarrationVoice,
@@ -21,7 +21,7 @@ type RouteParams = {
 export const maxDuration = 20;
 
 export async function GET(req: Request, { params }: RouteParams) {
-  const access = await requireActiveSubscription();
+  const access = await resolveReadOnlyContentViewer();
   if ('response' in access) return access.response;
 
   const parsedParams = paramsSchema.safeParse(await params);

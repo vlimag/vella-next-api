@@ -420,6 +420,16 @@ const growthEventUnionSchema = z.union([
     event_name: z.literal('checkout_started'),
     properties: z.object({
       plan: billingPeriodSchema,
+      attempt_id: uuidSchema.optional(),
+    }).strict(),
+  }).strict(),
+  eventBase.extend({
+    event_name: z.literal('checkout_result'),
+    properties: z.object({
+      plan: billingPeriodSchema,
+      attempt_id: uuidSchema,
+      outcome: z.enum(['succeeded', 'cancelled', 'failed', 'timed_out']),
+      stage: z.enum(['store_request', 'store_callback', 'validation', 'access_refresh', 'unexpected']),
     }).strict(),
   }).strict(),
   eventBase.extend({

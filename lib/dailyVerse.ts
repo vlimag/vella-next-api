@@ -253,21 +253,26 @@ async function runReflectionCompletion(verses: ApprovedCorpusVerse[], day: strin
   return parseReflectionItems(parsed, verses.map((verse) => verse.language_code));
 }
 
-async function selectDeterministicEnglishVerse(supabase: AppSupabaseClient, day: string) {
+async function selectDeterministicVerse(
+  supabase: AppSupabaseClient,
+  day: string,
+  language: SupportedLanguage,
+) {
   const countResult = await supabase
     .from('bible_verses')
     .select('id, bible_versions!inner(is_active)', { count: 'exact', head: true })
-    .eq('language_code', 'en')
+    .eq('language_code', language)
     .eq('bible_versions.is_active', true);
 
   if (countResult.error) throw new Error(`Failed to count approved Scripture corpus: ${countResult.error.message}`);
-  if (!countResult.count) throw new Error('Approved Scripture corpus has no active English verse');
+  if (!countResult.count) throw new Error(`Approved Scripture corpus has no active ${language} verse`);
 
-  const offset = stableIndex(`daily-verse:${day}`, countResult.count);
+  const seed = language === 'en' ? `daily-verse:${day}` : `daily-verse:${language}:${day}`;
+  const offset = stableIndex(seed, countResult.count);
   const { data, error } = await supabase
     .from('bible_verses')
     .select(CORPUS_SELECT)
-    .eq('language_code', 'en')
+    .eq('language_code', language)
     .eq('bible_versions.is_active', true)
     .order('id', { ascending: true })
     .range(offset, offset)
@@ -291,7 +296,7 @@ function existingReference(rows: ExistingDailyVerse[]) {
   return normalized[0] ?? null;
 }
 
-async function translatedCorpusRows(supabase: AppSupabaseClient, base: ApprovedCorpusVerse) {
+async function translatedCorpusRows(supabase: AppSupabaseClient, base: ApprovedCorpusVerse, day: string) {
   const { data, error } = await supabase
     .from('bible_verses')
     .select(CORPUS_SELECT)
@@ -315,6 +320,16 @@ async function translatedCorpusRows(supabase: AppSupabaseClient, base: ApprovedC
   for (const verse of verses) {
     if (!byLanguage.has(verse.language_code)) byLanguage.set(verse.language_code, verse);
   }
+
+  // Verse numbering differs slightly between approved editions. Prefer the
+  // same reference everywhere, but never substitute English for a requested
+  // locale: a deterministic verse from that locale's approved corpus is the
+  // safe fallback for the rare references absent from one edition.
+  const missingLanguages = SUPPORTED_LANGUAGES.filter((language) => !byLanguage.has(language));
+  const localizedFallbacks = await Promise.all(
+    missingLanguages.map((language) => selectDeterministicVerse(supabase, day, language)),
+  );
+  for (const verse of localizedFallbacks) byLanguage.set(verse.language_code, verse);
   return [...byLanguage.values()];
 }
 
@@ -331,8 +346,8 @@ export async function ensureDailyVersesForDay(supabase: AppSupabaseClient, day: 
 
   if (existingError) throw new Error(`Failed to inspect daily verses: ${existingError.message}`);
   const existingRows = (existingData ?? []) as unknown as ExistingDailyVerse[];
-  const base = existingReference(existingRows) ?? (await selectDeterministicEnglishVerse(supabase, day));
-  const corpusRows = await translatedCorpusRows(supabase, base);
+  const base = existingReference(existingRows) ?? (await selectDeterministicVerse(supabase, day, 'en'));
+  const corpusRows = await translatedCorpusRows(supabase, base, day);
   const existingLanguages = new Set(existingRows.map((row) => row.language_code));
   const missingRows = corpusRows.filter((row) => !existingLanguages.has(row.language_code));
 

@@ -1152,16 +1152,27 @@ describe('growth analytics ingestion', () => {
       '../supabase/migrations',
       telemetryMigrationName!,
     ), 'utf8');
-    const eventConstraint = telemetryMigration.match(
-      /growth_analytics_events_event_name_v8_check check \(event_name in \(([\s\S]*?)\n  \)\) not valid;/,
+    const checkoutMigration = fs.readFileSync(path.resolve(
+      process.cwd(),
+      '../supabase/migrations/20260828132000_checkout_lifecycle_telemetry.sql',
+    ), 'utf8');
+    const eventConstraint = checkoutMigration.match(
+      /growth_analytics_events_event_name_v10_check check \(event_name in \(([\s\S]*?)\n  \)\) not valid;/,
     )?.[1] ?? '';
     const databaseEventNames = [...eventConstraint.matchAll(/'([^']+)'/g)]
       .map((match) => match[1]);
     const rhythmsEventNames = new Set(Object.keys(RHYTHMS_EVENT_PROPERTIES));
-    expect(GROWTH_EVENT_NAMES).toHaveLength(72);
+    const apiEventNames = new Set<string>(GROWTH_EVENT_NAMES);
+    expect(GROWTH_EVENT_NAMES).toHaveLength(73);
     expect(rhythmsEventNames.size).toBe(33);
-    expect(GROWTH_EVENT_NAMES.filter((eventName) => !rhythmsEventNames.has(eventName))).toHaveLength(39);
-    expect([...databaseEventNames].sort()).toEqual([...GROWTH_EVENT_NAMES].sort());
+    expect(GROWTH_EVENT_NAMES.filter((eventName) => !rhythmsEventNames.has(eventName))).toHaveLength(40);
+    expect(databaseEventNames).toEqual(expect.arrayContaining(GROWTH_EVENT_NAMES));
+    expect(databaseEventNames.filter((eventName) => !apiEventNames.has(eventName)).sort())
+      .toEqual([
+        'gathering_card_selected', 'gathering_card_viewed', 'gathering_catalog_loaded',
+        'gathering_fallback_used', 'gathering_next_release_viewed',
+        'gathering_replayed', 'gathering_session_abandoned',
+      ]);
     expect(new Set(databaseEventNames).size).toBe(databaseEventNames.length);
     expect(observabilityMigration).toContain('growth_event_properties_are_safe_v7');
     expect(observabilityMigration).toContain('select count(*) from jsonb_object_keys(p_properties)');
@@ -1435,8 +1446,8 @@ describe('growth analytics ingestion', () => {
   });
 
   it('keeps the existing API analytics catalog additive while Gathering v2 is database-scoped', () => {
-    expect(GROWTH_EVENT_NAMES).toHaveLength(72);
-    expect(new Set(GROWTH_EVENT_NAMES).size).toBe(72);
+    expect(GROWTH_EVENT_NAMES).toHaveLength(73);
+    expect(new Set(GROWTH_EVENT_NAMES).size).toBe(73);
     expect(GROWTH_EVENT_NAMES).toEqual(expect.arrayContaining(Object.keys(RHYTHMS_EVENT_PROPERTIES)));
     expect(GROWTH_EVENT_NAMES).not.toContain('gathering_catalog_loaded');
     expect(GROWTH_EVENT_NAMES).not.toContain('gathering_card_selected');

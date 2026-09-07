@@ -61,7 +61,7 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult, locale: str
     if (status === 'completed' && completedTimestamp === null) return [];
     const pausedAt = status === 'paused' ? completedAt(row.paused_at) : null;
     const timezoneName = status === 'paused' && validTimezone(row.timezone_name) ? row.timezone_name : null;
-    const journeyId = status === 'paused' && typeof row.id === 'string' && uuidSchema.safeParse(row.id).success
+    const journeyId = typeof row.id === 'string' && uuidSchema.safeParse(row.id).success
       ? row.id
       : null;
     if (status === 'paused' && (journeyId === null || pausedAt === null || timezoneName === null)) return [];
@@ -81,6 +81,13 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult, locale: str
       current_session: active.currentSession,
       completed_sessions: active.completedSessions,
     };
+    summary.active_journeys = journeys
+      .filter((journey) => journey.status === 'active')
+      .map((journey) => ({
+        template_key: journey.templateKey,
+        current_session: journey.currentSession,
+        completed_sessions: journey.completedSessions,
+      }));
     summary.next_action = { kind: 'continue_journey', target_key: active.templateKey };
   }
   if (completed) {
@@ -107,6 +114,7 @@ function applyJourneys(summary: RhythmsSummary, result: QueryResult, locale: str
       completed: journeys.filter((journey) => journey.status === 'completed').map((journey) => journey.templateKey),
       goals: [],
       locale,
+      paused: paused?.templateKey,
     });
     if (recommendation) summary.next_journey_recommendation = recommendation;
   }
@@ -173,7 +181,8 @@ async function querySections(
       const result = await supabase
         .from('user_journeys')
         .select('id, status, current_day, total_completed_days, completed_at, paused_at, timezone_name, journey_templates!inner(slug)')
-        .eq('user_id', userId) as QueryResult;
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false }) as QueryResult;
       available = applyJourneys(summary, result, locale);
       if (!available) logSectionFailure('journeys', result.error);
     } catch (error) {
@@ -232,6 +241,7 @@ function disableAll(capabilities: RhythmsCapability, summary: RhythmsSummary) {
   const enabled = Object.keys(capabilities) as Array<keyof RhythmsCapability>;
   for (const key of enabled) capabilities[key] = false;
   delete summary.active_journey;
+  delete summary.active_journeys;
   delete summary.latest_completed_journey;
   delete summary.paused_journey;
   delete summary.next_journey_recommendation;

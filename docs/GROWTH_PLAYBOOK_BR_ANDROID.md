@@ -1,6 +1,6 @@
 # Vella Brazil Android Growth Playbook
 
-Last updated: 2026-08-06
+Last updated: 2026-08-30
 
 ## Objective
 
@@ -69,6 +69,30 @@ Google recommends meaningful bid-to-budget ratios for automated App Campaigns.
 At this budget, use one campaign with Maximize Conversions and no artificial
 target bid during the initial learning period. Do not create multiple campaigns
 for the same small audience.
+
+## Current controlled learning sequence — 2026-08-30
+
+Vella currently has installs and checkout activity but no verified trial starts.
+Use this sequence instead of asking Google to optimize against an event that has
+not yet occurred:
+
+1. **Stage A — qualified install learning:** keep the single production campaign
+   at R$30/day, Install volume (All users), with no target CPI. Use truthful
+   Premium-focused assets so the traffic self-qualifies before install.
+2. **Stage B — conversion observation:** after corrected GA4 events are visibly
+   arriving, import `begin_checkout` and `verified_trial_start` as Secondary
+   conversions only. Reconcile trial starts with authoritative server/store
+   validation. Do not change bidding at the same time.
+3. **Stage C — value optimization:** optimize solely toward
+   `verified_trial_start` only after it is stable, unique, reconciled, and has
+   enough volume for automated learning. Paid subscription starts remain the
+   later business-quality check.
+
+Change one material variable at a time and normally allow 7–14 days for learning
+before judging it. Roll back a creative or optimization change if delivery
+collapses or qualified downstream activity materially worsens. Never construct
+advertiser-curated audiences from religion, denomination, prayer behavior,
+Scripture searches, or other sensitive spiritual signals.
 
 Reference:
 https://support.google.com/google-ads/answer/14104492

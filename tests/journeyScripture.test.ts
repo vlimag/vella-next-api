@@ -6,6 +6,9 @@ import {
   selectApprovedJourneyScripture,
   type JourneyStepPayload,
 } from '../lib/journeys';
+import { steadyFlame14 } from '../content/rhythms/steadyFlame14';
+import { rooted21 } from '../content/rhythms/rooted21';
+import { pilgrim40 } from '../content/rhythms/pilgrim40';
 
 const verseStep: JourneyStepPayload = {
   stepOrder: 1,
@@ -204,5 +207,17 @@ describe('journey Scripture provenance boundary', () => {
         cta_text: 'Leia devagar',
       },
     ]);
+  });
+
+  it('keeps every long-journey verse as a canonical corpus lookup without seeded wording', () => {
+    for (const journey of [steadyFlame14, rooted21, pilgrim40]) {
+      for (const session of journey.sessions) {
+        const verse = session.steps[0];
+        expect(verse.type).toBe('verse');
+        expect(parseJourneyScriptureReference(verse.scriptureRef)).not.toBeNull();
+        expect('scriptureText' in verse).toBe(false);
+        for (const copy of Object.values(verse.localizations)) expect(copy.body).toBe('');
+      }
+    }
   });
 });

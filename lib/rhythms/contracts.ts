@@ -8,6 +8,11 @@ export type RhythmsSummary = {
     current_session: number;
     completed_sessions: number;
   };
+  active_journeys?: Array<{
+    template_key: string;
+    current_session: number;
+    completed_sessions: number;
+  }>;
   latest_completed_journey?: {
     template_key: string;
     completed_sessions: number;
@@ -22,7 +27,7 @@ export type RhythmsSummary = {
   };
   next_journey_recommendation?: {
     template_slug: string;
-    reason_code: 'onboarding_goal_match' | 'next_available';
+    reason_code: 'onboarding_goal_match' | 'theme_match' | 'resume_paused' | 'next_available';
   };
   practices?: Array<{
     code: string;

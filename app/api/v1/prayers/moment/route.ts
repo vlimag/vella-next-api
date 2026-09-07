@@ -10,7 +10,7 @@ import {
   type PrayerMomentLanguage,
   type PrayerMomentVerseRow,
 } from '@/lib/prayerSpace';
-import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import { resolveReadOnlyContentViewer } from '@/lib/subscriptionAccess';
 import { createServiceClient } from '@/lib/supabase';
 import { parseQuery } from '@/lib/validation';
 
@@ -20,7 +20,7 @@ const querySchema = z.object({
 }).strict();
 
 export async function GET(req: Request) {
-  const access = await requireActiveSubscription();
+  const access = await resolveReadOnlyContentViewer();
   if ('response' in access) return access.response;
 
   const { searchParams } = new URL(req.url);

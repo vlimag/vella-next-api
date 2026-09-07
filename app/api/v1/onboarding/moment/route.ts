@@ -52,7 +52,11 @@ export async function GET(req: Request) {
       return fail('Approved first moment is unavailable', 404, { code: 'content_unavailable' });
     }
 
-    return ok(moment);
+    return ok(moment, {
+      headers: {
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+      },
+    });
   } catch {
     return fail('Could not load the first moment', 500, { code: 'content_lookup_failed' });
   }

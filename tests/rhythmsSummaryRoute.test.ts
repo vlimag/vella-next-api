@@ -423,6 +423,10 @@ describe('Vella Rhythms summary capability boundary', () => {
             journey_templates: { slug: 'active-path' },
           },
           {
+            status: 'active', current_day: 4, total_completed_days: 3, completed_at: null,
+            journey_templates: { slug: 'second-path' },
+          },
+          {
             status: 'completed', current_day: 14, total_completed_days: 14, completed_at: '2026-08-20T00:00:00.000Z',
             journey_templates: { slug: 'newer-path' },
           },
@@ -438,6 +442,10 @@ describe('Vella Rhythms summary capability boundary', () => {
     expect(json.data.active_journey).toEqual({
       template_key: 'active-path', current_session: 2, completed_sessions: 1,
     });
+    expect(json.data.active_journeys).toEqual([
+      { template_key: 'active-path', current_session: 2, completed_sessions: 1 },
+      { template_key: 'second-path', current_session: 4, completed_sessions: 3 },
+    ]);
     expect(json.data.latest_completed_journey).toEqual({
       template_key: 'newer-path', completed_sessions: 14,
     });

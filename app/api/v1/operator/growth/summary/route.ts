@@ -4,6 +4,7 @@ import { requireOperatorAccess } from '@/lib/operatorAuth';
 import { VELLA_SUBSCRIPTION_PRODUCT_IDS } from '@/lib/iapProducts';
 import { createServiceClient } from '@/lib/supabase';
 import { parseQuery } from '@/lib/validation';
+import { checkoutLifecycleDiagnostics } from '@/lib/checkoutLifecycleDiagnostics';
 
 const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
   const parsed = new Date(`${value}T00:00:00.000Z`);
@@ -1967,6 +1968,13 @@ export async function GET(req: Request) {
     .gte('received_at', fromTimestamp)
     .lt('received_at', toExclusive.toISOString())
     .limit(5000);
+  const loadCheckoutEvent = (eventName: 'checkout_started' | 'checkout_result') => supabase
+    .from('growth_analytics_events')
+    .select('event_name,received_at,properties')
+    .eq('event_name', eventName)
+    .gte('received_at', fromTimestamp)
+    .lt('received_at', toExclusive.toISOString())
+    .limit(5000);
   const [
     attributionTruthResult,
     spendLedgerResult,
@@ -1987,6 +1995,8 @@ export async function GET(req: Request) {
     firstExperienceStepResult,
     firstExperienceCompletedResult,
     firstExperienceErrorResult,
+    checkoutStartedLifecycleResult,
+    checkoutResultLifecycleResult,
   ] = await Promise.all([
     loadSubscriptionAttributionTruth(supabase, fromTimestamp, toExclusive.toISOString()),
     loadSpendLedger(supabase, parsed.data.from, toExclusive.toISOString().slice(0, 10)),
@@ -2007,6 +2017,8 @@ export async function GET(req: Request) {
     loadGrowthEvent('first_experience_step'),
     loadGrowthEvent('first_experience_completed'),
     loadGrowthEvent('first_experience_error'),
+    loadCheckoutEvent('checkout_started'),
+    loadCheckoutEvent('checkout_result'),
   ]);
   const rhythmsDiagnostics = await loadRhythmsDiagnostics(
     supabase,
@@ -2052,6 +2064,11 @@ export async function GET(req: Request) {
       receiptQueryFailed: Boolean(receiptResult.error),
     });
   }
+  if (checkoutStartedLifecycleResult.error || checkoutResultLifecycleResult.error) {
+    console.error('[operator.growth] checkout_lifecycle_unavailable', {
+      queryFailed: true,
+    });
+  }
   if (!funnelAuditAvailable) {
     console.error('[operator.growth] funnel_diagnostics_unavailable', {
       onboardingStepQueryFailed: Boolean(onboardingStepResult.error),
@@ -2086,7 +2103,14 @@ export async function GET(req: Request) {
   const firstExperienceStepRows = (firstExperienceStepResult.data ?? []) as unknown as DiagnosticRow[];
   const firstExperienceCompletedRows = (firstExperienceCompletedResult.data ?? []) as unknown as DiagnosticRow[];
   const firstExperienceErrorRows = (firstExperienceErrorResult.data ?? []) as unknown as DiagnosticRow[];
+  const checkoutStartedLifecycleRows = (checkoutStartedLifecycleResult.data ?? []) as unknown as DiagnosticRow[];
+  const checkoutResultLifecycleRows = (checkoutResultLifecycleResult.data ?? []) as unknown as DiagnosticRow[];
+  const checkoutLifecycleRows = [...checkoutStartedLifecycleRows, ...checkoutResultLifecycleRows];
   const clientFailures = clientRows.filter((row) => !['started', 'succeeded'].includes(String(row.outcome)));
+  const checkoutLifecycle = checkoutStartedLifecycleResult.error || checkoutResultLifecycleResult.error ||
+    checkoutStartedLifecycleRows.length >= 5000 || checkoutResultLifecycleRows.length >= 5000
+    ? { audit_available: false }
+    : checkoutLifecycleDiagnostics(checkoutLifecycleRows);
 
   const projectedSummary = projectGrowthSummary(data, {
     ...parsed.data,
@@ -2210,7 +2234,9 @@ export async function GET(req: Request) {
         { column: 'platform', allowed: IAP_PLATFORMS },
         { column: 'billing_phase', allowed: IAP_BILLING_PHASES },
       ]),
-      row_limit_reached: [clientRows, failureRows, receiptRows].some((rows) => rows.length >= 5000),
+      checkout_lifecycle: checkoutLifecycle,
+      row_limit_reached: [clientRows, failureRows, receiptRows, checkoutLifecycleRows]
+        .some((rows) => rows.length >= 5000),
     },
   }, { headers: { 'Cache-Control': 'no-store' } });
 }

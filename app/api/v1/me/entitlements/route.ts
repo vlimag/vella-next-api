@@ -1,9 +1,10 @@
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
 import { getUserIdFromAuthHeader } from '@/lib/auth';
+import { entitlementIsUsableForIdentity } from '@/lib/entitlements';
 
 export async function GET() {
-  const auth = await getUserIdFromAuthHeader();
+  const auth = await getUserIdFromAuthHeader({ allowAnonymous: true });
   if (!('userId' in auth)) return fail(auth.error, 401);
 
   const supabase = createServiceClient();
@@ -11,7 +12,7 @@ export async function GET() {
 
   const { data: ownEntitlements, error: ownError } = await supabase
     .from('entitlements')
-    .select('id, entitlement_code, source, starts_at, ends_at, active, group_id')
+    .select('id, entitlement_code, source, starts_at, ends_at, active, group_id, metadata')
     .eq('user_id', auth.userId)
     .eq('active', true)
     .lte('starts_at', nowIso)
@@ -42,7 +43,16 @@ export async function GET() {
     groupEntitlements = groupData ?? [];
   }
 
-  const merged = [...(ownEntitlements ?? []), ...groupEntitlements];
+  const visibleOwnEntitlements = (ownEntitlements ?? [])
+    .filter((entitlement) => entitlementIsUsableForIdentity(entitlement, {
+      isAnonymous: auth.isAnonymous,
+    }))
+    .map((entitlement) => {
+      const visible = { ...entitlement } as typeof entitlement & { metadata?: unknown };
+      delete visible.metadata;
+      return visible;
+    });
+  const merged = [...visibleOwnEntitlements, ...groupEntitlements];
   const hasPremium = merged.some((ent) => String(ent.entitlement_code).startsWith('premium'));
 
   return ok({ hasPremium, items: merged });

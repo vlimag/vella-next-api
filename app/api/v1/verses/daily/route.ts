@@ -4,9 +4,9 @@ import { createServiceClient } from '@/lib/supabase';
 import { isoDaySchema, localeSchema, parseQuery } from '@/lib/validation';
 import { ensureDailyVersesForDay } from '@/lib/dailyVerse';
 import { toDailyVersePayload, type DailyVerseLookupRow } from '@/lib/dailyVersePayload';
-import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import { resolveReadOnlyContentViewer } from '@/lib/subscriptionAccess';
 
-const FALLBACK_LANG = 'en';
+const DEFAULT_LANG = 'en';
 
 const querySchema = z.object({
   lang: localeSchema.optional(),
@@ -14,7 +14,7 @@ const querySchema = z.object({
 });
 
 export async function GET(req: Request) {
-  const access = await requireActiveSubscription();
+  const access = await resolveReadOnlyContentViewer();
   if ('response' in access) return access.response;
 
   const { searchParams } = new URL(req.url);
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
   if ('error' in parsed) return parsed.error;
 
-  const lang = parsed.data.lang ?? FALLBACK_LANG;
+  const lang = parsed.data.lang ?? DEFAULT_LANG;
   const day = parsed.data.day ?? new Date().toISOString().slice(0, 10);
 
   const supabase = createServiceClient();
@@ -65,22 +65,6 @@ export async function GET(req: Request) {
     .maybeSingle();
 
   if (error) return fail('Failed to fetch daily verse', 500, error.message);
-
-  if (!data && lang !== FALLBACK_LANG) {
-    const { data: fallback, error: fallbackError } = await supabase
-      .from('daily_verses')
-      .select(selectColumns)
-      .eq('language_code', FALLBACK_LANG)
-      .eq('day', day)
-      .eq('bible_verses.bible_versions.is_active', true)
-      .maybeSingle();
-
-    if (fallbackError) return fail('Fallback daily verse lookup failed', 500, fallbackError.message);
-    const fallbackRow = fallback as unknown as DailyVerseLookupRow | null;
-    if (fallbackRow) {
-      return ok(toDailyVersePayload(fallbackRow));
-    }
-  }
 
   if (!data && cacheError) return fail('Could not generate daily verse cache', 500, cacheError);
   if (!data) return fail('No daily verse found for this date', 404);

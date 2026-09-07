@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ok, fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
 import { localeSchema, parseQuery } from '@/lib/validation';
-import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import { resolveReadOnlyContentViewer } from '@/lib/subscriptionAccess';
 import {
   detectSearchLanguage,
   fallbackTermsFromQuery,
@@ -81,6 +81,9 @@ const BOOK_ALIASES: Record<string, Record<string, string>> = {
     jude: 'JUD', revelation: 'REV', rev: 'REV',
   },
   pt: {
+    mateus: 'MAT',
+    matheus: 'MAT',
+    mt: 'MAT',
     joao: 'JHN',
     jo: 'JHN',
     salmo: 'PSA',
@@ -88,6 +91,8 @@ const BOOK_ALIASES: Record<string, Record<string, string>> = {
     sl: 'PSA',
   },
   es: {
+    mateo: 'MAT',
+    mt: 'MAT',
     juan: 'JHN',
     jn: 'JHN',
     salmo: 'PSA',
@@ -95,6 +100,8 @@ const BOOK_ALIASES: Record<string, Record<string, string>> = {
     sal: 'PSA',
   },
   fr: {
+    matthieu: 'MAT',
+    mt: 'MAT',
     jean: 'JHN',
     jn: 'JHN',
     psaume: 'PSA',
@@ -102,6 +109,8 @@ const BOOK_ALIASES: Record<string, Record<string, string>> = {
     ps: 'PSA',
   },
   de: {
+    matthaus: 'MAT',
+    mt: 'MAT',
     johannes: 'JHN',
     joh: 'JHN',
     psalm: 'PSA',
@@ -109,6 +118,8 @@ const BOOK_ALIASES: Record<string, Record<string, string>> = {
     ps: 'PSA',
   },
   it: {
+    matteo: 'MAT',
+    mt: 'MAT',
     giovanni: 'JHN',
     gv: 'JHN',
     salmo: 'PSA',
@@ -116,13 +127,22 @@ const BOOK_ALIASES: Record<string, Record<string, string>> = {
     sal: 'PSA',
   },
   ru: {
+    'матфей': 'MAT',
+    'матфея': 'MAT',
+    'мф': 'MAT',
     ioann: 'JHN',
     ioan: 'JHN',
+    'псалом': 'PSA',
+    'псалмы': 'PSA',
+    'пс': 'PSA',
     psalom: 'PSA',
     psalmy: 'PSA',
     ps: 'PSA',
   },
   pl: {
+    mateusz: 'MAT',
+    mateusza: 'MAT',
+    mt: 'MAT',
     jan: 'JHN',
     j: 'JHN',
     psalm: 'PSA',
@@ -131,8 +151,47 @@ const BOOK_ALIASES: Record<string, Record<string, string>> = {
   },
 };
 
+const BOOK_SCOPE_CONNECTORS: Record<string, string[]> = {
+  en: ['about', 'on'],
+  pt: ['sobre'],
+  es: ['sobre'],
+  fr: ['sur'],
+  de: ['uber'],
+  it: ['su', 'sul', 'sulla', 'sulle', 'sui', 'sugli'],
+  ru: ['о', 'об', 'про'],
+  pl: ['o'],
+};
+
 function normalizeForLookup(value: string) {
   return normalizeSearchText(value);
+}
+
+function parseBookScope(query: string, lang: string) {
+  const normalized = normalizeForLookup(query);
+  const aliases = Object.entries({ ...BOOK_ALIASES.en, ...(BOOK_ALIASES[lang] ?? {}) })
+    .map(([alias, bookCode]) => [normalizeForLookup(alias), bookCode] as const)
+    .sort(([left], [right]) => right.length - left.length);
+
+  for (const [alias, bookCode] of aliases) {
+    if (normalized !== alias && !normalized.startsWith(`${alias} `)) continue;
+
+    let semanticQuery = normalized.slice(alias.length).trim();
+    for (const connector of BOOK_SCOPE_CONNECTORS[lang] ?? BOOK_SCOPE_CONNECTORS.en) {
+      const normalizedConnector = normalizeForLookup(connector);
+      if (semanticQuery === normalizedConnector) {
+        semanticQuery = '';
+        break;
+      }
+      if (semanticQuery.startsWith(`${normalizedConnector} `)) {
+        semanticQuery = semanticQuery.slice(normalizedConnector.length).trim();
+        break;
+      }
+    }
+
+    return { bookCode, semanticQuery: semanticQuery || query };
+  }
+
+  return { bookCode: undefined, semanticQuery: query };
 }
 
 function uniqueById(items: VerseRow[]) {
@@ -164,6 +223,10 @@ function parseReferenceQuery(query: string, lang: string) {
   const normalizedBook = normalizeForLookup(match.groups.book ?? '');
   const bookCode = normalizedBook ? BOOK_ALIASES[lang]?.[normalizedBook] ?? BOOK_ALIASES.en[normalizedBook] : undefined;
 
+  if (normalizedBook && !bookCode) {
+    return null;
+  }
+
   return {
     chapter,
     verse,
@@ -171,14 +234,16 @@ function parseReferenceQuery(query: string, lang: string) {
   };
 }
 
-async function queryLexical(lang: string, term: string, limit: number) {
+async function queryLexical(lang: string, term: string, limit: number, bookCode?: string) {
   const supabase = createServiceClient();
-  const { data, error } = await supabase
+  const qb = supabase
     .from('bible_verses')
     .select(SELECT_COLUMNS)
     .eq('language_code', lang)
     .ilike('text_content', `%${term}%`)
     .limit(limit);
+
+  const { data, error } = bookCode ? await qb.eq('bible_books.code', bookCode) : await qb;
 
   if (error) {
     return { error, data: [] as VerseRow[] };
@@ -300,7 +365,7 @@ async function expandQueryWithAI(query: string, lang: string, requestId: string)
 }
 
 export async function GET(req: Request) {
-  const access = await requireActiveSubscription();
+  const access = await resolveReadOnlyContentViewer();
   if ('response' in access) return access.response;
 
   const { searchParams } = new URL(req.url);
@@ -357,34 +422,43 @@ export async function GET(req: Request) {
     }
   }
 
-  const lexical = await queryLexical(lang, query, limit);
+  const scope = parseBookScope(query, lang);
+  if (scope.bookCode) {
+    logSearch(requestId, 'book_scope_detected', { book_code: scope.bookCode });
+  }
+
+  const lexical = await queryLexical(lang, scope.semanticQuery, limit, scope.bookCode);
   if (lexical.error) {
     logSearch(requestId, 'lexical_query_failed', { error: lexical.error.message });
     return fail('Verse search failed', 500, lexical.error.message);
   }
   logSearch(requestId, 'lexical_query_done', { count: lexical.data.length, language: lang });
-  if (lexical.data.length >= Math.min(3, limit)) {
+  const intent = resolveSearchIntent(scope.semanticQuery);
+  if (!intent && lexical.data.length >= Math.min(3, limit)) {
     return ok({ query, count: lexical.data.length, items: lexical.data, strategy: 'lexical' as const, request_id: requestId });
   }
 
-  const intent = resolveSearchIntent(query);
   if (intent) {
     logSearch(requestId, 'intent_detected', { intent });
+    const scopedReferences = referencesForIntent(intent, lang)
+      .filter((reference) => !scope.bookCode || reference.bookCode === scope.bookCode);
     const intentReferenceResults = await Promise.all(
-      referencesForIntent(intent).map((reference) =>
+      scopedReferences.map((reference) =>
         queryByReference(lang, reference.chapter, reference.verse, reference.bookCode, 2),
       ),
     );
     let deterministicResults = uniqueById([
-      ...lexical.data,
       ...intentReferenceResults.flatMap((result) => result.data),
+      ...lexical.data,
     ]).slice(0, limit);
     let intentFallbackLanguage: string | null = null;
 
     if (deterministicResults.length === 0 && lang !== 'en') {
       intentFallbackLanguage = 'en';
+      const englishScopedReferences = referencesForIntent(intent, 'en')
+        .filter((reference) => !scope.bookCode || reference.bookCode === scope.bookCode);
       const englishReferenceResults = await Promise.all(
-        referencesForIntent(intent).map((reference) =>
+        englishScopedReferences.map((reference) =>
           queryByReference('en', reference.chapter, reference.verse, reference.bookCode, 2),
         ),
       );
@@ -405,13 +479,13 @@ export async function GET(req: Request) {
     }
   }
 
-  const expanded = await expandQueryWithAI(query, lang, requestId);
+  const expanded = await expandQueryWithAI(scope.semanticQuery, lang, requestId);
   logSearch(requestId, 'ai_terms_ready', { provider: expanded.provider, term_count: expanded.terms.length });
   const aiResults: VerseRow[] = [...lexical.data];
 
   for (const term of expanded.terms) {
     if (aiResults.length >= limit) break;
-    const partial = await queryLexical(lang, term, Math.max(5, limit - aiResults.length));
+    const partial = await queryLexical(lang, term, Math.max(5, limit - aiResults.length), scope.bookCode);
     if (partial.error) continue;
     aiResults.push(...partial.data);
   }
@@ -423,7 +497,7 @@ export async function GET(req: Request) {
     fallbackLanguage = 'en';
     for (const term of expanded.terms) {
       if (deduped.length >= limit) break;
-      const partial = await queryLexical('en', term, Math.max(5, limit - deduped.length));
+      const partial = await queryLexical('en', term, Math.max(5, limit - deduped.length), scope.bookCode);
       if (partial.error) continue;
       deduped = uniqueById([...deduped, ...partial.data]).slice(0, limit);
     }

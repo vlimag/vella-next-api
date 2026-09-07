@@ -14,7 +14,7 @@ import {
   safeSocialAvatarUrl,
 } from '@/lib/social';
 import { moderateFaithContent } from '@/lib/socialModeration';
-import { requireActiveSubscription } from '@/lib/subscriptionAccess';
+import { requireActiveSubscription, resolveReadOnlyContentViewer } from '@/lib/subscriptionAccess';
 import {
   tryLoadFeaturedMilestonesByUser,
   type MilestoneClient,
@@ -39,7 +39,7 @@ function primaryMilestoneField(
 }
 
 export async function GET(_req: Request, { params }: RouteParams) {
-  const access = await requireActiveSubscription();
+  const access = await resolveReadOnlyContentViewer();
   if ('response' in access) return access.response;
 
   const { postId } = await params;

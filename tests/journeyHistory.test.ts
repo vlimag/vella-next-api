@@ -22,6 +22,7 @@ function historyClient(result: { data: unknown; error: unknown }) {
   const query: Record<string, ReturnType<typeof vi.fn> | ((resolve: (value: typeof result) => unknown) => Promise<unknown>)> = {};
   query.select = vi.fn(() => query);
   query.eq = vi.fn(() => query);
+  query.in = vi.fn(() => query);
   query.order = vi.fn(() => query);
   query.limit = vi.fn(() => query);
   query.then = (resolve: (value: typeof result) => unknown) => Promise.resolve(result).then(resolve);
@@ -84,6 +85,7 @@ describe('journey history route', () => {
         user_id: USER_ID,
         anonymous_profile_id: '33333333-3333-4333-8333-333333333333',
         status: 'completed',
+        current_day: 7,
         start_date: '2026-08-01',
         completed_at: '2026-08-08T10:00:00.000Z',
         total_completed_days: 7,
@@ -117,6 +119,8 @@ describe('journey history route', () => {
           locale: 'en',
           title: 'Seven Days',
           summary: 'Private-safe template summary',
+          status: 'completed',
+          current_session: 7,
           session_count: 7,
           started_at: '2026-08-01',
           completed_at: '2026-08-08T10:00:00.000Z',
@@ -127,6 +131,40 @@ describe('journey history route', () => {
     expect(serialized).not.toContain(USER_ID);
     expect(serialized).not.toContain(privateNote);
     expect(serialized).not.toContain('anonymous_profile_id');
+  });
+
+  it('returns active, paused, and completed journeys only when the new client explicitly requests all', async () => {
+    const client = historyClient({
+      data: [{
+        id: JOURNEY_ID,
+        status: 'active',
+        current_day: 3,
+        start_date: '2026-08-24',
+        completed_at: null,
+        total_completed_days: 2,
+        journey_templates: {
+          slug: 'daily-faith-journey', version: 1, language_code: 'pt', title: 'Sete dias',
+          description: 'Uma jornada privada e contínua', theme_tags: ['hope'],
+        },
+      }],
+      error: null,
+    });
+    mocks.createServiceClient.mockReturnValue(client);
+
+    const { response, json } = await get('?limit=20&scope=all');
+
+    expect(response.status).toBe(200);
+    expect(client.query.in).toHaveBeenCalledWith('status', ['active', 'paused', 'completed']);
+    expect(client.query.eq).not.toHaveBeenCalledWith('status', 'completed');
+    expect(json.data.journeys[0]).toMatchObject({
+      status: 'active', current_session: 3, session_count: 2, completed_at: null,
+    });
+  });
+
+  it.each(['unknown', 'active', ' completed'])('rejects unsupported history scope %s', async (scope) => {
+    const { response } = await get(`?scope=${encodeURIComponent(scope)}`);
+    expect(response.status).toBe(400);
+    expect(mocks.createServiceClient).not.toHaveBeenCalled();
   });
 
   it('contains database failures in a finite no-store response and safe logs', async () => {

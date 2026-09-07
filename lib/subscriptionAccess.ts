@@ -4,6 +4,7 @@ import { fail } from '@/lib/http';
 
 type SubscriptionAccessGranted = {
   userId: string;
+  isAnonymous: boolean;
 };
 
 type SubscriptionAccessDenied = {
@@ -11,6 +12,34 @@ type SubscriptionAccessDenied = {
 };
 
 export type SubscriptionAccessResult = SubscriptionAccessGranted | SubscriptionAccessDenied;
+
+type ReadOnlyContentGranted = {
+  userId: string | null;
+  isAnonymous: boolean;
+};
+
+export type ReadOnlyContentAccessResult = ReadOnlyContentGranted | SubscriptionAccessDenied;
+
+/**
+ * Resolves an optional viewer for account-neutral, read-only content.
+ *
+ * Vella Premium can be purchased and used without creating a permanent Vella
+ * account. The app enforces the device's store entitlement, while these GET
+ * routes expose only non-account-specific content. A malformed bearer still
+ * fails closed instead of silently becoming a signed-out viewer.
+ */
+export async function resolveReadOnlyContentViewer(): Promise<ReadOnlyContentAccessResult> {
+  const auth = await getUserIdFromAuthHeader({ allowAnonymous: true });
+  if ('userId' in auth) {
+    return { userId: auth.userId, isAnonymous: auth.isAnonymous };
+  }
+  if (auth.error === 'Missing bearer token') {
+    return { userId: null, isAnonymous: true };
+  }
+  return {
+    response: fail(auth.error, 401, { code: 'authentication_required' }),
+  };
+}
 
 /**
  * Central server-side gate for Vella's subscription-only product routes.
@@ -20,7 +49,7 @@ export type SubscriptionAccessResult = SubscriptionAccessGranted | SubscriptionA
  * expires. Authentication alone never grants product access.
  */
 export async function requireActiveSubscription(): Promise<SubscriptionAccessResult> {
-  const auth = await getUserIdFromAuthHeader();
+  const auth = await getUserIdFromAuthHeader({ allowAnonymous: true });
   if (!('userId' in auth)) {
     return {
       response: fail(auth.error, 401, { code: 'authentication_required' }),
@@ -28,8 +57,8 @@ export async function requireActiveSubscription(): Promise<SubscriptionAccessRes
   }
 
   try {
-    if (await userHasActivePremium(auth.userId)) {
-      return { userId: auth.userId };
+    if (await userHasActivePremium(auth.userId, { isAnonymous: auth.isAnonymous })) {
+      return { userId: auth.userId, isAnonymous: auth.isAnonymous };
     }
   } catch {
     console.error('[subscription-access]', {

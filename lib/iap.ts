@@ -26,6 +26,33 @@ export function purchaseAccountMatchesUser(verified: VerifiedPurchase, userId: s
   return !token || token.toLowerCase() === userId.trim().toLowerCase();
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/**
+ * A different StoreKit appAccountToken can be recovered only from an
+ * anonymous Supabase owner. Permanent identities always fail closed and the
+ * database RPC independently arbitrates the transaction's persisted owner.
+ */
+export async function purchaseAccountCanBeClaimedByUser(
+  verified: VerifiedPurchase,
+  userId: string,
+  options: { currentUserIsAnonymous?: boolean } = {},
+) {
+  if (purchaseAccountMatchesUser(verified, userId)) return true;
+
+  // A verified store receipt may keep this installation unlocked after the
+  // user signs out of Vella. The database grants only guest access here; it
+  // never changes a permanent Vella account's canonical ownership.
+  if (options.currentUserIsAnonymous === true) return true;
+
+  const token = verified.appAccountToken?.trim();
+  if (!token || !UUID_PATTERN.test(token)) return false;
+
+  const supabase = createServiceClient();
+  const { data, error } = await supabase.auth.admin.getUserById(token);
+  return !error && data.user?.is_anonymous === true;
+}
+
 export function toEntitlementCode(productId: string) {
   return productId.toLowerCase().includes('family') ? 'premium_family' : 'premium_individual';
 }

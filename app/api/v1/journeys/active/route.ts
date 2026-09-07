@@ -11,7 +11,8 @@ import { localDateKey, normalizeTimeZone } from '@/lib/rhythms/time';
 
 const querySchema = z.object({
   lang: localeSchema.optional(),
-});
+  journey_id: z.string().uuid().optional(),
+}).strict();
 
 type ActiveJourneyRow = {
   id: string;
@@ -95,6 +96,7 @@ async function getActiveJourney(req: Request) {
   const { searchParams } = new URL(req.url);
   const parsed = parseQuery(querySchema, {
     lang: searchParams.get('lang') ?? undefined,
+    journey_id: searchParams.get('journey_id') ?? undefined,
   });
   if ('error' in parsed) return noStore(parsed.error);
 
@@ -117,6 +119,7 @@ async function getActiveJourney(req: Request) {
     } else {
       query = query.eq('anonymous_profile_id', actor.anonymousProfileId);
     }
+    if (parsed.data.journey_id) query = query.eq('id', parsed.data.journey_id);
 
     return query.maybeSingle();
   };

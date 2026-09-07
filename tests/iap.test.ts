@@ -4,10 +4,12 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   atomicMaybeSingle: vi.fn(),
   receiptUpsert: vi.fn(),
+  getUserById: vi.fn(),
 }));
 
 vi.mock('../lib/supabase', () => ({
   createServiceClient: () => ({
+    auth: { admin: { getUserById: mocks.getUserById } },
     rpc: mocks.rpc,
     from: (table: string) => {
       if (table === 'in_app_purchase_receipts') {
@@ -19,6 +21,7 @@ vi.mock('../lib/supabase', () => ({
 }));
 
 import {
+  purchaseAccountCanBeClaimedByUser,
   purchaseAccountMatchesUser,
   syncIapEntitlement,
   toEntitlementCode,
@@ -48,6 +51,7 @@ describe('IAP entitlement synchronization', () => {
       error: null,
     });
     mocks.receiptUpsert.mockReset().mockResolvedValue({ error: null });
+    mocks.getUserById.mockReset();
   });
 
   it('maps only explicitly family-named products to the family entitlement', () => {
@@ -65,6 +69,70 @@ describe('IAP entitlement synchronization', () => {
       ...verified,
       appAccountToken: '22222222-2222-4222-8222-222222222222',
     }, '11111111-1111-4111-8111-111111111111')).toBe(false);
+  });
+
+  it('allows a mismatched StoreKit token only when Supabase confirms an anonymous owner', async () => {
+    const purchase = {
+      ...verified,
+      appAccountToken: '22222222-2222-4222-8222-222222222222',
+    };
+    mocks.getUserById.mockResolvedValue({
+      data: { user: { id: purchase.appAccountToken, is_anonymous: true } },
+      error: null,
+    });
+
+    await expect(purchaseAccountCanBeClaimedByUser(
+      purchase,
+      '11111111-1111-4111-8111-111111111111',
+    )).resolves.toBe(true);
+  });
+
+  it('allows an anonymous installation to use a verified store purchase without moving ownership', async () => {
+    const purchase = {
+      ...verified,
+      appAccountToken: '22222222-2222-4222-8222-222222222222',
+    };
+
+    await expect(purchaseAccountCanBeClaimedByUser(
+      purchase,
+      '11111111-1111-4111-8111-111111111111',
+      { currentUserIsAnonymous: true },
+    )).resolves.toBe(true);
+    expect(mocks.getUserById).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for a permanent, missing, invalid, or unavailable mismatched owner', async () => {
+    const currentUserId = '11111111-1111-4111-8111-111111111111';
+    const permanentPurchase = {
+      ...verified,
+      appAccountToken: '22222222-2222-4222-8222-222222222222',
+    };
+    mocks.getUserById.mockResolvedValueOnce({
+      data: { user: { id: permanentPurchase.appAccountToken, is_anonymous: false } },
+      error: null,
+    });
+    await expect(purchaseAccountCanBeClaimedByUser(permanentPurchase, currentUserId)).resolves.toBe(false);
+
+    mocks.getUserById.mockResolvedValueOnce({ data: { user: null }, error: null });
+    await expect(purchaseAccountCanBeClaimedByUser(permanentPurchase, currentUserId)).resolves.toBe(false);
+
+    await expect(purchaseAccountCanBeClaimedByUser({
+      ...verified,
+      appAccountToken: 'not-a-uuid',
+    }, currentUserId)).resolves.toBe(false);
+
+    mocks.getUserById.mockResolvedValueOnce({ data: { user: null }, error: { message: 'unavailable' } });
+    await expect(purchaseAccountCanBeClaimedByUser(permanentPurchase, currentUserId)).resolves.toBe(false);
+  });
+
+  it('does not query Supabase for a matching or absent StoreKit token', async () => {
+    const currentUserId = '11111111-1111-4111-8111-111111111111';
+    await expect(purchaseAccountCanBeClaimedByUser({
+      ...verified,
+      appAccountToken: currentUserId,
+    }, currentUserId)).resolves.toBe(true);
+    await expect(purchaseAccountCanBeClaimedByUser(verified, currentUserId)).resolves.toBe(true);
+    expect(mocks.getUserById).not.toHaveBeenCalled();
   });
 
   it('uses the stable Google purchase token as the subscription identity', async () => {

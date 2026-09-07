@@ -91,7 +91,7 @@ export async function POST(request: Request) {
       .select(JOURNEY_FIELDS)
       .maybeSingle();
     if (isUniqueViolation(error)) {
-      return noStore(fail('Another journey is already active', 409, { code: 'journey_active_conflict' }));
+      return noStore(fail('This journey is already active', 409, { code: 'journey_template_active' }));
     }
     if (error) throw error;
     if (!data) {

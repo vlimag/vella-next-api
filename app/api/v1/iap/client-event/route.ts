@@ -39,7 +39,7 @@ const bodySchema = z.object({
 }).strict();
 
 export async function POST(req: Request) {
-  const auth = await getUserIdFromAuthHeader();
+  const auth = await getUserIdFromAuthHeader({ allowAnonymous: true });
   if (!('userId' in auth)) return fail(auth.error, 401);
 
   const body = await req.json().catch(() => null);
@@ -81,4 +81,3 @@ export async function POST(req: Request) {
     headers: { 'Cache-Control': 'no-store' },
   });
 }
-

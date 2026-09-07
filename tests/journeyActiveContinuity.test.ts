@@ -46,7 +46,7 @@ function activeClient(options: { error?: unknown; journey?: Record<string, unkno
   milestones.order = vi.fn(() => milestones);
   milestones.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(resolve);
   const from = vi.fn(() => from.mock.calls.length === 1 ? first : milestones);
-  return { from };
+  return { from, first };
 }
 
 describe('active journey continuity', () => {
@@ -80,6 +80,18 @@ describe('active journey continuity', () => {
       source: 'onboarding', completion_version: 1,
     });
     expect(JSON.stringify(json)).not.toContain(USER_ID);
+  });
+
+  it('selects an exact owned active journey by id for parallel-path sessions', async () => {
+    const client = activeClient();
+    mocks.createServiceClient.mockReturnValue(client);
+    const module = await activeModule();
+
+    const response = await module.GET!(new Request(`https://vella.one/api/v1/journeys/active?lang=en&journey_id=${JOURNEY_ID}`));
+
+    expect(response.status).toBe(200);
+    expect(client.first.eq).toHaveBeenCalledWith('id', JOURNEY_ID);
+    expect((await response.json()).data.journey.id).toBe(JOURNEY_ID);
   });
 
   it('contains an active-journey dependency failure in a finite no-store response', async () => {

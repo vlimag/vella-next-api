@@ -5,7 +5,7 @@ import { ok, fail } from '@/lib/http';
 import { verifyAppleReceipt, verifyAppleSignedTransaction } from '@/lib/appStore';
 import { verifyGooglePlaySubscription } from '@/lib/googlePlay';
 import {
-  purchaseAccountMatchesUser,
+  purchaseAccountCanBeClaimedByUser,
   syncIapEntitlement,
   type VerifiedPurchase,
 } from '@/lib/iap';
@@ -23,7 +23,7 @@ const bodySchema = z.object({
 
 export async function POST(req: Request) {
   const requestId = randomUUID();
-  const auth = await getUserIdFromAuthHeader();
+  const auth = await getUserIdFromAuthHeader({ allowAnonymous: true });
   if (!('userId' in auth)) return fail(auth.error, 401);
 
   const body = await req.json().catch(() => null);
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
           verified = await verifyAppleSignedTransaction(signedTransaction, productId);
         } catch (error) {
           console.warn('[iap.apple] signed_transaction_rejected', {
-            message: error instanceof Error ? error.message : String(error),
+            errorName: error instanceof Error ? error.name : 'UnknownError',
           });
         }
       }
@@ -133,7 +133,12 @@ export async function POST(req: Request) {
     // StoreKit returns the appAccountToken from the signed purchase. Never let
     // a transaction explicitly bound to one Vella account unlock another one;
     // recovery must go through the visible, authenticated transfer flow.
-    if (platform === 'ios' && !purchaseAccountMatchesUser(verified, auth.userId)) {
+    if (
+      platform === 'ios' &&
+      !(await purchaseAccountCanBeClaimedByUser(verified, auth.userId, {
+        currentUserIsAnonymous: auth.isAnonymous,
+      }))
+    ) {
       return reject({
         message: 'This store subscription is linked to another Vella account',
         status: 409,
@@ -193,7 +198,6 @@ export async function POST(req: Request) {
       platform,
       productId,
       errorName: error instanceof Error ? error.name : 'UnknownError',
-      message: error instanceof Error ? error.message.slice(0, 160) : 'Unknown validation failure',
     });
     return reject({
       message: 'Receipt validation is temporarily unavailable',

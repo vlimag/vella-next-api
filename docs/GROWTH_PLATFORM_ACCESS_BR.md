@@ -115,6 +115,10 @@ creator asset.
 - Check `iap_diagnostics.row_limit_reached`. When it is `true`, the underlying
   5,000-row query cap was reached, so all IAP counts and breakdowns are lower
   bounds for the requested window.
+- Check `iap_diagnostics.checkout_lifecycle.audit_available` before classifying
+  checkout outcomes. `open_over_2m > 0` is an alert for a missing terminal
+  callback; use `by_outcome` to distinguish success, user cancellation, failure,
+  and timeout. Never infer an outcome from `legacy_uncorrelated_starts`.
 - Google Play Console and Google Ads remain the authoritative modeled view of
   Google ad-to-install performance. Runtime 1.3 now includes the native Install
   Referrer bridge for privacy-safe first-party measurement: only allowlisted

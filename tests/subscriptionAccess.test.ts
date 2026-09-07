@@ -10,17 +10,20 @@ const { getUserIdFromAuthHeader, userHasActivePremium } = vi.hoisted(() => ({
 vi.mock('../lib/auth', () => ({ getUserIdFromAuthHeader }));
 vi.mock('../lib/entitlements', () => ({ userHasActivePremium }));
 
-import { requireActiveSubscription } from '../lib/subscriptionAccess';
+import { requireActiveSubscription, resolveReadOnlyContentViewer } from '../lib/subscriptionAccess';
 
-const AUTH_ONLY_ROUTES = new Set([
+const PERMANENT_AUTH_ONLY_ROUTES = new Set([
   'attribution/install/link',
   'billing/checkout-session',
-  'iap/client-event',
-  'iap/validate-receipt',
   'me',
-  'me/entitlements',
   'me/subscription-transitions/ack',
   'me/subscription-transitions/claim',
+]);
+
+const ANONYMOUS_AUTH_ALLOWED_ROUTES = new Set([
+  'iap/client-event',
+  'iap/validate-receipt',
+  'me/entitlements',
 ]);
 
 const PUBLIC_CALLBACK_ROUTES = new Set([
@@ -71,6 +74,15 @@ describe('subscription-only access', () => {
     userHasActivePremium.mockResolvedValue(true);
 
     await expect(requireActiveSubscription()).resolves.toEqual({ userId: 'subscribed-user' });
+    expect(getUserIdFromAuthHeader).toHaveBeenCalledWith({ allowAnonymous: true });
+  });
+
+  it('explicitly allows an anonymous Supabase owner with an active store entitlement', async () => {
+    getUserIdFromAuthHeader.mockResolvedValue({ userId: 'anonymous-subscriber' });
+    userHasActivePremium.mockResolvedValue(true);
+
+    await expect(requireActiveSubscription()).resolves.toEqual({ userId: 'anonymous-subscriber' });
+    expect(getUserIdFromAuthHeader).toHaveBeenCalledWith({ allowAnonymous: true });
   });
 
   it('rejects an authenticated user whose entitlement is expired', async () => {
@@ -126,13 +138,41 @@ describe('subscription-only access', () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain(privateError);
   });
 
+  it('allows account-neutral content reads without a bearer token', async () => {
+    getUserIdFromAuthHeader.mockResolvedValue({ error: 'Missing bearer token' });
+
+    await expect(resolveReadOnlyContentViewer()).resolves.toEqual({
+      userId: null,
+      isAnonymous: true,
+    });
+    expect(userHasActivePremium).not.toHaveBeenCalled();
+  });
+
+  it('preserves an optional authenticated viewer on account-neutral reads', async () => {
+    getUserIdFromAuthHeader.mockResolvedValue({ userId: 'viewer', isAnonymous: true });
+
+    await expect(resolveReadOnlyContentViewer()).resolves.toEqual({
+      userId: 'viewer',
+      isAnonymous: true,
+    });
+  });
+
+  it('never downgrades an invalid bearer to a signed-out content viewer', async () => {
+    getUserIdFromAuthHeader.mockResolvedValue({ error: 'Invalid auth token' });
+
+    const result = await resolveReadOnlyContentViewer();
+    expect('response' in result).toBe(true);
+    if ('response' in result) expect(result.response.status).toBe(401);
+  });
+
   it('keeps every product route handler behind the central gate unless explicitly exempt', () => {
     const apiRoot = path.resolve(process.cwd(), 'app/api/v1');
     const unguarded = collectRouteFiles(apiRoot)
       .filter((file) => {
         const route = path.relative(apiRoot, path.dirname(file));
         if (
-          AUTH_ONLY_ROUTES.has(route) ||
+          PERMANENT_AUTH_ONLY_ROUTES.has(route) ||
+          ANONYMOUS_AUTH_ALLOWED_ROUTES.has(route) ||
           PUBLIC_CALLBACK_ROUTES.has(route) ||
           PUBLIC_ANALYTICS_ROUTES.has(route) ||
           PUBLIC_ONBOARDING_ROUTES.has(route) ||
@@ -142,7 +182,7 @@ describe('subscription-only access', () => {
           return false;
         }
         const source = fs.readFileSync(file, 'utf8');
-        const guardCount = source.match(/await requireActiveSubscription\(\)/g)?.length ?? 0;
+        const guardCount = source.match(/await (?:requireActiveSubscription|resolveReadOnlyContentViewer)\(\)/g)?.length ?? 0;
         return handlerCount(source) === 0 || guardCount !== handlerCount(source);
       })
       .map((file) => path.relative(apiRoot, file));
@@ -180,12 +220,12 @@ describe('subscription-only access', () => {
     expect(unsafe).toEqual([]);
   });
 
-  it('keeps purchase recovery, entitlement status, and account deletion authenticated', () => {
+  it('keeps ordinary auth-only APIs on the permanent-account boundary', () => {
     const apiRoot = path.resolve(process.cwd(), 'app/api/v1');
     const improperlyExempted = collectRouteFiles(apiRoot)
       .filter((file) => {
         const route = path.relative(apiRoot, path.dirname(file));
-        if (!AUTH_ONLY_ROUTES.has(route)) return false;
+        if (!PERMANENT_AUTH_ONLY_ROUTES.has(route)) return false;
         const source = fs.readFileSync(file, 'utf8');
         const authChecks = source.match(/await getUserIdFromAuthHeader\(\)/g)?.length ?? 0;
         return handlerCount(source) === 0 || authChecks !== handlerCount(source);
@@ -193,6 +233,23 @@ describe('subscription-only access', () => {
       .map((file) => path.relative(apiRoot, file));
 
     expect(improperlyExempted).toEqual([]);
+  });
+
+  it('limits explicit anonymous auth to receipt validation and entitlement reads', () => {
+    const apiRoot = path.resolve(process.cwd(), 'app/api/v1');
+    const improperlyGuarded = collectRouteFiles(apiRoot)
+      .filter((file) => {
+        const route = path.relative(apiRoot, path.dirname(file));
+        const source = fs.readFileSync(file, 'utf8');
+        const hasAnonymousOptIn = /await getUserIdFromAuthHeader\(\{ allowAnonymous: true \}\)/.test(source);
+        if (ANONYMOUS_AUTH_ALLOWED_ROUTES.has(route)) {
+          return handlerCount(source) === 0 || !hasAnonymousOptIn;
+        }
+        return hasAnonymousOptIn;
+      })
+      .map((file) => path.relative(apiRoot, file));
+
+    expect(improperlyGuarded).toEqual([]);
   });
 
   it('keeps every operator route behind the dedicated operator secret', () => {

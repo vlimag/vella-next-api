@@ -10,7 +10,30 @@ import { createServiceClient } from '@/lib/supabase';
  * This mirrors the logic in `GET /api/v1/me/entitlements` so paywall gating and
  * the client-facing status endpoint can never drift apart.
  */
-export async function userHasActivePremium(userId: string | null | undefined): Promise<boolean> {
+type EntitlementIdentityOptions = {
+  isAnonymous?: boolean;
+};
+
+type EntitlementAccessRow = {
+  entitlement_code: unknown;
+  metadata?: unknown;
+};
+
+export function entitlementIsUsableForIdentity(
+  entitlement: EntitlementAccessRow,
+  options: EntitlementIdentityOptions = {},
+) {
+  const metadata = entitlement.metadata && typeof entitlement.metadata === 'object'
+    ? entitlement.metadata as Record<string, unknown>
+    : null;
+  const isStoreGuest = metadata?.access_scope === 'store_guest';
+  return options.isAnonymous === true || !isStoreGuest;
+}
+
+export async function userHasActivePremium(
+  userId: string | null | undefined,
+  options: EntitlementIdentityOptions = {},
+): Promise<boolean> {
   if (!userId) return false;
 
   const supabase = createServiceClient();
@@ -18,7 +41,7 @@ export async function userHasActivePremium(userId: string | null | undefined): P
 
   const { data: own, error: ownError } = await supabase
     .from('entitlements')
-    .select('entitlement_code')
+    .select('entitlement_code, metadata')
     .eq('user_id', userId)
     .eq('active', true)
     .lte('starts_at', nowIso)
@@ -28,7 +51,10 @@ export async function userHasActivePremium(userId: string | null | undefined): P
     throw new Error(`Failed to load user entitlements: ${ownError.message}`);
   }
 
-  if ((own ?? []).some((e) => String(e.entitlement_code).startsWith('premium'))) {
+  if ((own ?? []).some((e) => (
+    entitlementIsUsableForIdentity(e, options)
+    && String(e.entitlement_code).startsWith('premium')
+  ))) {
     return true;
   }
 

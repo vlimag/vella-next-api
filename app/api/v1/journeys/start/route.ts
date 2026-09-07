@@ -26,6 +26,10 @@ type TemplateRow = {
   theme_tags: string[];
 };
 
+function isUniqueViolation(error: unknown) {
+  return !!error && typeof error === 'object' && (error as { code?: unknown }).code === '23505';
+}
+
 export async function POST(req: Request) {
   const access = await requireActiveSubscription();
   if ('response' in access) return access.response;
@@ -38,25 +42,6 @@ export async function POST(req: Request) {
 
   const language = parsed.data.language_code ?? 'en';
   const supabase = createServiceClient();
-
-  let currentJourneyQuery = supabase
-    .from('user_journeys')
-    .select('id')
-    .eq('status', 'active')
-    .limit(1);
-
-  if (actor.kind === 'user') {
-    currentJourneyQuery = currentJourneyQuery.eq('user_id', actor.userId);
-  } else {
-    currentJourneyQuery = currentJourneyQuery.eq('anonymous_profile_id', actor.anonymousProfileId);
-  }
-
-  const { data: currentJourney, error: currentJourneyError } = await currentJourneyQuery.maybeSingle();
-
-  if (currentJourneyError) return fail('Could not check active journey', 500, currentJourneyError.message);
-  if (currentJourney?.id) {
-    return fail('You already have an active journey. Complete or abandon it first.', 409);
-  }
 
   const templateQuery = supabase
     .from('journey_templates')
@@ -88,13 +73,32 @@ export async function POST(req: Request) {
 
   if (templateError || !template) return fail('Journey template not found', 404);
 
+  // Users may walk several different paths at once. Only an accidental
+  // duplicate of the same immutable template is blocked.
+  let duplicateJourneyQuery = supabase
+    .from('user_journeys')
+    .select('id')
+    .eq('status', 'active')
+    .eq('template_slug', (template as TemplateRow).slug)
+    .limit(1);
+  duplicateJourneyQuery = actor.kind === 'user'
+    ? duplicateJourneyQuery.eq('user_id', actor.userId)
+    : duplicateJourneyQuery.eq('anonymous_profile_id', actor.anonymousProfileId);
+  const { data: duplicateJourney, error: duplicateJourneyError } = await duplicateJourneyQuery.maybeSingle();
+  if (duplicateJourneyError) return fail('Could not check active journey', 500, { code: 'journey_unavailable' });
+  if (duplicateJourney?.id) {
+    return fail('This journey is already active.', 409, { code: 'journey_template_active' });
+  }
+
   // Paywall gate: premium journeys require an active premium entitlement.
   // Anonymous (guest) actors can never start a premium journey.
   if ((template as TemplateRow).is_premium) {
     let isPremium = false;
     if (actor.kind === 'user') {
       try {
-        isPremium = await userHasActivePremium(actor.userId);
+        isPremium = await userHasActivePremium(actor.userId, {
+          isAnonymous: access.isAnonymous,
+        });
       } catch (error) {
         return fail('Could not verify premium access', 500, String(error));
       }
@@ -107,6 +111,7 @@ export async function POST(req: Request) {
   const journeyValues = {
     ...ownerFilter(actor),
     template_id: template.id,
+    template_slug: (template as TemplateRow).slug,
     status: 'active',
     start_date: new Date().toISOString().slice(0, 10),
     current_day: 1,
@@ -129,6 +134,9 @@ export async function POST(req: Request) {
   }
 
   if (insertError || !insertedJourney) {
+    if (isUniqueViolation(insertError)) {
+      return fail('This journey is already active.', 409, { code: 'journey_template_active' });
+    }
     return fail('Could not start journey', 500, insertError?.message);
   }
 

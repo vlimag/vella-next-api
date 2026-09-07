@@ -72,4 +72,16 @@ describe('first Vella Gathering content contract', () => {
     expect(sql).not.toMatch(/private_(?:answer|response|text)|prayer_(?:answer|response|text)|journal_(?:answer|response|text)/i);
     expect(sql).not.toMatch(/\b(drop|truncate)\s+(table|schema)/i);
   });
+
+  it('localizes the public gathering summary in every supported locale', () => {
+    const migrationsPath = path.resolve(process.cwd(), '../supabase/migrations');
+    const name = fs.readdirSync(migrationsPath).find((candidate) => candidate.endsWith('_localize_gathering_copy.sql'));
+    expect(name).toBeTruthy();
+    const sql = fs.readFileSync(path.join(migrationsPath, name!), 'utf8');
+    for (const locale of LOCALES) expect(sql).toContain(`when '${locale}'`);
+    expect(sql).toContain('Um encontro guiado');
+    expect(sql).toContain('Une rencontre guidée');
+    expect(sql).toContain('Prowadzone spotkanie');
+    expect(sql).not.toMatch(/(?:Um|Un|Une|Ein|Prowadzony|Проводимый) Gathering/i);
+  });
 });

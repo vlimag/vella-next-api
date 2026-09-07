@@ -77,6 +77,17 @@ describe('GET /api/v1/onboarding/moment', () => {
     });
   });
 
+  it('marks successful approved content as shared-cacheable', async () => {
+    const response = await GET(
+      new Request('https://vella.one/api/v1/onboarding/moment?theme=peace&lang=pt'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe(
+      'public, s-maxage=3600, stale-while-revalidate=86400',
+    );
+  });
+
   it('returns a coarse 404 when approved content is unavailable', async () => {
     mocks.client = verseClient({ data: null, error: null });
 

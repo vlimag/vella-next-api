@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   requireActiveSubscription: vi.fn(),
+  resolveReadOnlyContentViewer: vi.fn(),
   client: null as unknown as {
     from: (table: string) => unknown;
     rpc: (...args: unknown[]) => unknown;
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('../lib/subscriptionAccess', () => ({
   requireActiveSubscription: mocks.requireActiveSubscription,
+  resolveReadOnlyContentViewer: mocks.resolveReadOnlyContentViewer,
 }));
 
 vi.mock('../lib/supabase', () => ({
@@ -39,6 +41,7 @@ describe('Prayer Space routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.requireActiveSubscription.mockResolvedValue({ userId: USER_ID });
+    mocks.resolveReadOnlyContentViewer.mockResolvedValue({ userId: USER_ID, isAnonymous: false });
   });
 
   it('returns the stable PrayerMoment shape and declares an English Scripture fallback', async () => {

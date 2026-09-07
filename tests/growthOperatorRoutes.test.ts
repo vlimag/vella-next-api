@@ -496,6 +496,18 @@ describe('growth operator routes', () => {
         by_client_issue: [],
         by_server_error: [],
         by_verified_phase: [],
+        checkout_lifecycle: {
+          audit_available: true,
+          started_attempts: 0,
+          terminal_attempts: 0,
+          open_attempts: 0,
+          open_over_2m: 0,
+          legacy_uncorrelated_starts: 0,
+          orphan_results: 0,
+          duplicate_terminal_attempts: 0,
+          by_outcome: [],
+          by_stage: [],
+        },
         row_limit_reached: false,
       },
     } });
@@ -504,7 +516,7 @@ describe('growth operator routes', () => {
       p_to: '2026-07-31',
       p_cohort_days: 14,
     });
-    expect(from).toHaveBeenCalledTimes(36);
+    expect(from).toHaveBeenCalledTimes(38);
   });
 
   it('projects ordered truth and independently enforces every 20-unit privacy threshold', async () => {
