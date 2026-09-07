@@ -1,6 +1,6 @@
 # Vella Brazil Android Growth Playbook
 
-Last updated: 2026-08-30
+Last updated: 2026-09-07
 
 ## Objective
 
@@ -70,22 +70,41 @@ At this budget, use one campaign with Maximize Conversions and no artificial
 target bid during the initial learning period. Do not create multiple campaigns
 for the same small audience.
 
-## Current controlled learning sequence — 2026-08-30
+## Current controlled learning sequence — 2026-09-07
 
-Vella currently has installs and checkout activity but no verified trial starts.
-Use this sequence instead of asking Google to optimize against an event that has
-not yet occurred:
+Campaign `Vella_BR_Android_202608_PrayerDaily` is currently paused. Its configured
+budget remains R$30/day and bidding remains Install volume (All users) / Maximize
+conversions, without target CPI. The single install/download action remains the
+sole Primary action.
 
-1. **Stage A — qualified install learning:** keep the single production campaign
-   at R$30/day, Install volume (All users), with no target CPI. Use truthful
-   Premium-focused assets so the traffic self-qualifies before install.
-2. **Stage B — conversion observation:** after corrected GA4 events are visibly
-   arriving, import `begin_checkout` and `verified_trial_start` as Secondary
-   conversions only. Reconcile trial starts with authoritative server/store
-   validation. Do not change bidding at the same time.
-3. **Stage C — value optimization:** optimize solely toward
-   `verified_trial_start` only after it is stable, unique, reconciled, and has
-   enough volume for automated learning. Paid subscription starts remain the
+`begin_checkout` is now marked as a GA4 key event and imported into Google Ads as
+Secondary/observation-only, excluded from account-level goals. The Google Play
+purchase action also remains Secondary. Do not import or optimize toward
+`verified_trial_start` because Vella still has no reconciled verified trial.
+
+API main commit `52c5bac` is deployed on `vella.one`; the production health,
+missing-bearer protection, and real anonymous-bearer diagnostic smoke checks
+passed. The campaign must nevertheless remain paused until a licensed physical
+Android test records one intentional cancellation and verifies annual and
+monthly purchases through authoritative receipt validation and Premium
+entitlement.
+
+Use this sequence:
+
+1. **Stage 0 — finish the purchase gate:** complete and record the cancellation,
+   annual, and monthly physical-device cases. Do not resume spend before all
+   three are green.
+2. **Stage A — qualified install learning:** after the gate passes, resume the
+   single production campaign at R$30/day for at most 14 campaign days (R$420),
+   retaining Install volume (All users), no target CPI, and install as the sole
+   Primary action.
+3. **Stage B — conversion observation:** observe `begin_checkout` as Secondary
+   without changing bidding, budget, goals, geography, or creatives in the same
+   learning window. Reconcile every later trial with authoritative server/store
+   validation.
+4. **Stage C — value optimization:** consider a separate value-optimization
+   decision only after `verified_trial_start` is stable, unique, reconciled, and
+   has enough volume for automated learning. Paid subscription starts remain the
    later business-quality check.
 
 Change one material variable at a time and normally allow 7–14 days for learning
@@ -96,6 +115,10 @@ Scripture searches, or other sensitive spiritual signals.
 
 Reference:
 https://support.google.com/google-ads/answer/14104492
+
+The month-by-month sections below are a strategic sequencing framework. The
+2026-09-07 live state and gate above control campaign operations; older day
+labels or allocations do not authorize a restart or configuration change.
 
 ## Month 1 — prove the message
 
@@ -132,13 +155,15 @@ Each creator receives one brief but keeps their own voice:
 Do not script theological claims or guaranteed outcomes. Collect qualified
 traffic and identify the strongest hook.
 
-### Days 18–30: concentrated Google test
+### Next controlled Google test after the physical gate
 
-Budget: R$600, approximately R$46 per day for 13 days.
+Budget: up to R$420, exactly R$30 per campaign day for at most 14 campaign days.
 
 - One Google Android App Campaign.
 - Brazil only, Portuguese assets only.
 - Maximize Conversions without an invented target CPI.
+- Keep install as the sole Primary action and `begin_checkout` as
+  Secondary/observation-only.
 - Use the two strongest creator/Vella-owned videos plus square and landscape
   adaptations.
 - Do not edit the campaign repeatedly during the learning period.
