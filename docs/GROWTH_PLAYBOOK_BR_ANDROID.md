@@ -25,6 +25,9 @@ The first 90 days are not a race for the largest install count. Success means:
 - Budget: R$1,000 per calendar month.
 - Offer: 14-day free trial only for eligible new annual subscribers; monthly is
   charged immediately.
+- There is no permanent free tier. Do not change product, base-plan, offer,
+  price, renewal, or entitlement configuration as part of store or ad creative
+  work.
 - Full approved Scripture corpus: Portuguese and English. Do not buy traffic in
   other languages until corpus licensing and coverage support the promise.
 - Religious conviction is sensitive personal data. Campaigns, analytics, and
@@ -92,25 +95,73 @@ purchase cases remain pending as of 2026-09-08. The operator explicitly
 accepted that risk for the immediate re-enable; this override does not count
 the test as completed.
 
-Mobile `main` and `origin/main` are aligned at
-`1e5802e937c34397d98dd1b487e6492b8a12eb64`. The current production OTA is
+At OTA publication time, mobile `main` and `origin/main` were aligned at
+`1e5802e937c34397d98dd1b487e6492b8a12eb64`. The current production OTA remains
 group `fc429d67-5e5a-4860-84f8-ed62c4881f82`, with Android update
 `01a0805a-b507-748a-b23b-ae1ee872e4f5` and iOS update
 `01a0805a-b507-79b3-9078-e316482cb659`. EAS records production channel to
 production branch, runtime `1.4`, that exact commit, and
-`isGitWorkingTreeDirty=false`. Verification passed 901/901 tests and 5,080
-expectations with the 60-second timeout, TypeScript checking, the creative
-package verifier, and independent review with no remaining findings.
+`isGitWorkingTreeDirty=false`. OTA-base verification passed 901/901 tests and
+5,080 expectations with the 60-second timeout, TypeScript checking, the
+creative-package verifier, and independent review with no remaining findings.
 
 The OTA adds conservatively gated native review requests only after meaningful
 value. It does not show a review request at launch, onboarding, authentication,
 paywall, checkout, or purchase. It also makes no change to prices, plans, trial
 eligibility or duration, renewals, entitlements, campaign economics, or Ads
-configuration. The final PT-BR Play feature graphic is a verified 1024×500,
-8-bit RGB/no-alpha PNG of 496,606 bytes (SHA-256
+configuration.
+
+Post-OTA mobile-main-only work is metadata and creative packaging, not another
+runtime release. Commit `785af371f8143188fbb17996aecff9808a48b3a6`
+canonicalizes eight localized Google Play descriptions; a subsequent
+creative-package change at `89034e2224780639d0e0b2ce97c7cfbc46226e79`
+prepares the non-UI image family. Fresh verification of the later state passed
+914/914 mobile tests with 5,359 expectations, TypeScript
+checking, and the truthful PT-BR package verifier. No further OTA is needed for
+either metadata-only change, and the production OTA provenance above must not
+be rewritten to a later commit.
+
+The final PT-BR Play feature graphic is a verified 1024×500, 8-bit
+RGB/no-alpha PNG of 496,606 bytes (SHA-256
 `7d595e7252163d4993a91e48efca8577f64b016f4356aa079ff710141eff3110`).
-Apple and Play screenshots and every UI-dependent Ads still/video master remain
-**HOLD** with zero approved captures.
+Six brand-only Ads stills are ready for controller upload: two concepts, each at
+exactly 1200×1500, 1200×1200, and 1200×628. They contain no product UI and
+therefore do not satisfy the real-UI creative gate. Apple and Play screenshots
+and every UI-dependent Ads still/video master remain **HOLD** with zero approved
+captures.
+
+Fresh measured evidence for 2026-09-01 through 2026-09-07:
+
+- Google Ads reported 6,787 impressions, 811 clicks, 180
+  installs/conversions, R$217.96 spend, R$1.21 per install/conversion, R$0.27
+  average CPC, 11.95% CTR, and zero attributed in-app actions.
+- The fresh GA4 inspection recorded `plan_select` at 22 events from 16 users,
+  `begin_checkout` at 22 events from 15 users, and `verified_trial_start` at
+  zero. Event counts and user counts are not a reconciled cohort conversion
+  rate, and the two reporting systems must not be divided into a claimed funnel
+  percentage.
+
+The next controller actions are prepared but have not been performed:
+
+- In Google Play, update the full description for `en-US`, `pt-BR`, `es-ES`,
+  `fr-FR`, `de-DE`, `it-IT`, `pl-PL`, and `ru-RU`; update the `pt-BR` short
+  description; and upload the verified PT-BR feature graphic. Preserve all
+  titles, non-PT short descriptions, icon, screenshots, videos, and tablet
+  assets.
+- In Google Ads, remove the four old image associations, including the visibly
+  English creative, then upload and associate the six brand-only stills.
+  Preserve all five Portuguese headlines, all five Portuguese descriptions,
+  the R$30/day budget, Install volume bidding, the sole Primary install goal,
+  Brazil/Portuguese targeting, the 2026-09-19 end date, billing, and access.
+- Publishing the listing, uploading files, removing associations, and attaching
+  new assets require one grouped action-time controller confirmation. Until
+  that confirmation and a successful console save/review, local readiness must
+  not be described as a live Play or Ads change.
+
+This publication scope preserves the product economics: monthly remains an
+immediate charge with no trial; exactly 14 trial days remain limited to eligible
+new annual subscribers; there is no permanent free tier; and no product,
+base-plan, offer, price, renewal, or entitlement configuration changes.
 
 Use this sequence:
 
@@ -283,7 +334,7 @@ Hook:
 
 Show Daily Light, one small guided step, and completion without streak pressure.
 
-Every creative must:
+Every product-demonstration creative must:
 
 - show Vella and real UI early;
 - work without sound and include captions;
@@ -291,6 +342,11 @@ Every creative must:
 - distinguish biblical text from AI commentary;
 - avoid medical, prophetic, guaranteed-result, or personal-attribute claims;
 - disclose the trial accurately when the offer appears.
+
+The prepared brand-only still family is the explicit non-UI exception: it may
+use the current Vella icon and approved decorative background, but it may not
+imply that the background is product UI. All screenshot and video concepts stay
+held until current, platform-native UI captures pass truth and privacy review.
 
 Approved offer wording:
 

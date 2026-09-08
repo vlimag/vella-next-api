@@ -36,25 +36,39 @@ plan or snapshot below wherever they differ.
   endpoint, kept missing-bearer requests protected with 401, and accepted and
   persisted a privacy-safe IAP diagnostic from a real Supabase-anonymous bearer
   with 202; the smoke event and user were then removed.
-- Mobile `main` is pushed and clean at
+- At publication time, mobile `main` was pushed and clean at
   `1e5802e937c34397d98dd1b487e6492b8a12eb64`, with zero divergence from
-  `origin/main`. The 2026-09-08 production OTA is group
+  `origin/main`. The 2026-09-08 production OTA remains group
   `fc429d67-5e5a-4860-84f8-ed62c4881f82`: Android update
   `01a0805a-b507-748a-b23b-ae1ee872e4f5` and iOS update
   `01a0805a-b507-79b3-9078-e316482cb659`. EAS reports production channel to
   production branch, runtime `1.4`, the exact commit above, and
   `isGitWorkingTreeDirty=false` for both platforms.
-- Release verification passed 901/901 mobile tests with 5,080 expectations
-  using the 60-second test timeout, TypeScript checking, the PT-BR package
-  verifier, and independent review with no remaining findings. The OTA adds
-  only conservatively gated, post-value native review prompting; it does not
-  change any price, plan, trial, renewal, entitlement, or campaign setting.
+- The OTA-base release verification passed 901/901 mobile tests with 5,080
+  expectations using the 60-second test timeout, TypeScript checking, the
+  PT-BR package verifier, and independent review with no remaining findings.
+  The OTA adds only conservatively gated, post-value native review prompting;
+  it does not change any price, plan, trial, renewal, entitlement, or campaign
+  setting.
+- Later mobile-main-only metadata work is deliberately separate from that OTA:
+  commit `785af371f8143188fbb17996aecff9808a48b3a6` canonicalizes the eight
+  localized Google Play descriptions, and commit
+  `89034e2224780639d0e0b2ce97c7cfbc46226e79` prepares controller-uploadable,
+  non-UI ad images. Neither change modifies
+  the installed runtime, so neither requires another OTA. Fresh verification
+  over the later metadata/creative state passed 914/914 mobile tests with 5,359
+  expectations, TypeScript checking, and the truthful PT-BR package verifier;
+  the verifier confirmed that the non-UI Ads stills are ready while every
+  UI-dependent export remains blocked.
 - The final Play PT-BR feature graphic is ready at 1024×500, 8-bit RGB without
   alpha, 496,606 bytes, SHA-256
   `7d595e7252163d4993a91e48efca8577f64b016f4356aa079ff710141eff3110`.
-  Apple and Play screenshots plus all UI-dependent Ads still/video masters
-  remain **HOLD** with zero approved captures; no fabricated or wrong-platform
-  UI may replace them.
+  Six brand-only Ads stills are also ready for controller upload: two concepts,
+  each exported at exactly 1200×1500, 1200×1200, and 1200×628. They use
+  the current Vella brand, contain no product UI, and do not clear the separate
+  real-UI gate. Apple and Play screenshots plus all UI-dependent Ads still and
+  video masters remain **HOLD** with zero approved captures; no fabricated or
+  wrong-platform UI may replace them.
 - The licensed physical Android test has not run: it must still record one
   intentional cancellation, then verify both annual and monthly purchases reach
   authoritative receipt validation and Premium entitlement. The operator
@@ -78,6 +92,39 @@ plan or snapshot below wherever they differ.
   therefore intentionally omitted from ad copy rather than risk a stale or
   misleading offer.
 
+Fresh performance evidence for 2026-09-01 through 2026-09-07:
+
+- Google Ads reported 6,787 impressions, 811 clicks, and 180
+  installs/conversions on R$217.96 spend: R$1.21 per install/conversion, R$0.27
+  average CPC, and 11.95% CTR. It reported zero attributed in-app actions.
+- The fresh GA4 inspection showed `plan_select` at 22 events from 16 users,
+  `begin_checkout` at 22 events from 15 users, and `verified_trial_start` at
+  zero. These are event and user aggregates from separate reporting systems,
+  not a reconciled cohort and not a plan-select-to-checkout conversion rate.
+  They do not establish subscriber economics or justify value bidding.
+
+Prepared external changes, not yet performed:
+
+- **Google Play:** replace the localized full description for `en-US`, `pt-BR`,
+  `es-ES`, `fr-FR`, `de-DE`, `it-IT`, `pl-PL`, and `ru-RU`; replace only the
+  `pt-BR` short description; and upload the verified PT-BR feature graphic.
+  Preserve every title, every non-PT short description, and all icon,
+  screenshot, video, and tablet assets.
+- **Google Ads:** remove the four existing image associations, including the
+  one visibly containing English, then upload and associate the six reviewed
+  brand-only stills. Preserve all five Portuguese headlines, all five
+  Portuguese descriptions, R$30/day, Install volume bidding, the sole Primary
+  install goal, Brazil/Portuguese targeting, the 2026-09-19 end date, billing,
+  and access.
+- Neither change above has been made in Google Play Console or Google Ads. They
+  remain blocked on one grouped, action-time controller confirmation covering
+  the listing publication, file uploads, image-association removal, and ad asset
+  association. Local readiness is not evidence of publication.
+- The prepared copy and image changes do not alter commerce: monthly remains an
+  immediate charge with no trial; only eligible new annual subscribers receive
+  exactly 14 trial days; there is no permanent free tier; and product, base-plan,
+  offer, price, renewal, and entitlement configuration remain untouched.
+
 Current text assets saved on 2026-08-30:
 
 Headlines:
@@ -96,11 +143,11 @@ Descriptions:
 4. `Assinatura necessária após a experiência inicial. Veja preços e condições no app.`
 5. `Ore, busque versículos e siga jornadas guiadas com todos os recursos Premium.`
 
-The three new headlines and three new descriptions were under asset review when
-saved on 2026-08-30. Their review state was not part of the 2026-09-07 campaign
-verification or the 2026-09-08 mobile release verification. Keep the current
-R$30/day budget and Install volume bid mode unchanged during the controlled
-learning window while completing the deferred physical purchase validation.
+The current ad asset report contains all five Portuguese headlines and all five
+Portuguese descriptions above. Preserve them during the prepared image-only
+refresh. Keep the current R$30/day budget and Install volume bid mode unchanged
+during the controlled learning window while completing the deferred physical
+purchase validation.
 
 ## Account and campaign-history evidence
 
@@ -195,6 +242,12 @@ Required exports:
 - no real personal, prayer, search, notification-token, account, or purchase
   data visible.
 
+The six prepared September brand-only stills are an intentionally narrower
+interim asset family. Two brand concepts have verified 1200×1500,
+1200×1200, and 1200×628 exports ready for controller upload. Because they
+contain no product UI, they do not satisfy the real-UI requirement above and do
+not authorize generation or release of any held screenshot or video master.
+
 ## Conversion and reporting truth
 
 - The intended GA4 property and Google Play are linked to Google Ads.
@@ -285,12 +338,22 @@ Conversion hierarchy controlling the current learning window and later changes:
       receipt validation, and Premium-entitlement paths are verified.
 - [x] First-party ingestion, retention, operator report, and privacy disclosure
       are live.
-- [x] Mobile main is pushed clean with zero remote divergence at
+- [x] At OTA publication time, mobile main was pushed clean with zero remote
+      divergence at
       `1e5802e937c34397d98dd1b487e6492b8a12eb64`; production OTA group
       `fc429d67-5e5a-4860-84f8-ed62c4881f82` reports runtime 1.4, both
       platforms, the exact commit, and a clean working tree.
-- [x] The PT-BR Play feature graphic is verified and inventoried; all
-      UI-dependent screenshot and Ads media exports remain explicitly held.
+- [x] Post-OTA store/creative metadata passes 914/914 tests, 5,359 expectations,
+      TypeScript checking, and the package verifier; no further OTA is needed.
+- [x] The PT-BR Play feature graphic and six brand-only Ads stills are verified
+      and inventoried; all UI-dependent screenshot and Ads media exports remain
+      explicitly held.
+- [ ] Publish the prepared eight-locale Play description scope, PT-BR short
+      description, and PT-BR feature graphic after grouped controller
+      confirmation, without changing any preserved listing field.
+- [ ] Remove the four old Ads image associations and associate the six prepared
+      brand stills after the same grouped controller confirmation, without
+      changing text or campaign settings.
 - [ ] At least two real-UI creatives pass the truth/privacy review.
 - [x] Campaign `24120421103` was paused on 2026-09-07 without changing its
       R$30/day budget, Install volume bidding, or Brazil/Portuguese targeting.
