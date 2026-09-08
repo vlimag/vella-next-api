@@ -15,6 +15,7 @@
     "test:practice-sessions:postgres": "tests/practiceSessionsPostgres.integration.sh",
     "validate:site": "vitest run tests/site.test.ts",
     "validate:editorial": "node scripts/validate-editorial-packets.mjs",
+    "render:editorial-assets": "node scripts/render-editorial-assets.mjs",
     "corpus:import": "node --env-file=.env scripts/import-approved-webp-corpus.mjs",
     "corpus:import:webp": "node --env-file=.env scripts/import-approved-webp-corpus.mjs",
     "gatherings:seed": "node --env-file=.env scripts/seed-gathering-inventory.mjs",

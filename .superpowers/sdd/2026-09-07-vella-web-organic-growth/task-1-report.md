@@ -87,3 +87,60 @@ After the fixes, this command passed:
 - `yarn typecheck` passed; duration 90.65 seconds.
 - `yarn validate:editorial` printed `Validated 4 PT-BR draft editorial packets.`
 - `git diff --check` passed with no output.
+
+## Editorial review remediation — 2026-09-07
+
+All four packets remain `draft`, `human_reviewed: false`, and `approval: null`.
+No live `lib/site/blog.ts` content, public route, or sitemap entry was changed.
+
+- Weeks 1–3 now carry 790–821-word, structured PT-BR article-refresh drafts
+  for their existing localized article URLs.
+- Week 4 now contains a distinct Brazil spring 2026 article draft with proposed
+  slug `primavera-no-brasil-sete-dias-de-atencao`; it is explicitly an
+  `unpublished_draft` gated by `named_human_editorial_approval`.
+- Each packet contains three 15–30-second publication-ready scripts with a
+  hook, spoken body, on-screen text, and audience-facing CTA. Validator tests
+  reject editorial-process wording in those fields.
+- Each packet has a distinct bounded campaign/content pair, safe source and
+  medium, and a reader-facing CTA label. No ad controls or app code changed.
+- The reproducible Sharp renderer produced two opaque RGB PNGs per packet. The
+  validator verifies all schema fields, article word floor, draft gate, live
+  article mapping where applicable, exact dimensions, RGB/no alpha, declared
+  path, and SHA-256 hash.
+
+### Asset inventory
+
+| Asset | SHA-256 |
+| --- | --- |
+| semana-1-quadrado.png | `ecf0ffb7b47104bf803152b4526017e3888e097def298bb85423afc0b00767b6` |
+| semana-1-vertical.png | `ad951ffa4511edf13f1d90f281336e9d2912249da2c85c015ebf3bc4caf4a1d9` |
+| semana-2-quadrado.png | `b5b1b15508072b3d986ad8744f081d67811005e5128493c05a09717f5f3c8a19` |
+| semana-2-vertical.png | `a40bb419b2cae9465414eb236ad05d8922d08e6a76b63acdb4373e6a827ecce3` |
+| semana-3-quadrado.png | `15dfd9727f6eeb543786550a0bc3710b5accd5e29b6ff070e3b01f6f246b5377` |
+| semana-3-vertical.png | `7cb36e1993e95f6ac8e3854d7cc6d46e3dd425932bc5aa84aa483bd5b226a0d6` |
+| semana-4-quadrado.png | `b08c01146f3aceeb39ea53209e30340e8caee4fbb2d1615cb46c255dc5f4a055` |
+| semana-4-vertical.png | `7982bf823e8211236cd29a55ac49f8b392cb31c78e11a6891a59dca4300ca288` |
+
+### TDD evidence
+
+RED: the expanded packet test initially failed because the packet validator
+reported only four manifests, authoritative draft copy was absent, and the
+spring draft was absent. The first renderer-aware validator run then exposed
+the default 5-second timeout, so the two process-spawning tests received a
+scoped 30-second timeout.
+
+GREEN: `yarn vitest run tests/editorialPackets.test.ts --pool=threads
+--maxWorkers=1 --minWorkers=1 --reporter=dot` passed 4/4 tests. `yarn
+validate:editorial` validated four packets and eight share-card assets.
+
+The remaining release gate is a named human approval of Scripture handling,
+natural PT-BR, safety, and claims before any draft copy, packet, lifecycle
+message, or seasonal article can become public.
+### Controller QA follow-up
+
+- Replaced the inflated JSON-serialization word check with a Unicode-aware count of `authoritative_article.draft.body_markdown` itself. The four authoritative body counts are week 1: 745, week 2: 735, week 3: 725, and week 4: 708 words. Redundant mini-section copies were removed.
+- Moved the week 4 proposed slug and named-human approval gate into `authoritative_article`, so the unpublished seasonal packet uses the same contract as every other article.
+- Added a validator and negative test that reject editorial-process wording in audience-facing video fields. The RED run failed because the validator did not yet emit the audience-wording failure; the GREEN run passed after the rule was added.
+- Final focused GREEN: `yarn vitest run tests/editorialPackets.test.ts --pool=threads --maxWorkers=1 --minWorkers=1 --reporter=dot` — 5/5 passed (76.43s wall clock).
+- Final asset reproducibility and validation GREEN: `yarn render:editorial-assets && yarn validate:editorial && git diff --check` — rendered 8 assets; validated 4 packets and 8 cards; no whitespace errors.
+- All packets remain `status: draft`, `human_reviewed: false`, and `approval: null`. The week 4 article remains unpublished pending named human editorial approval.

@@ -1,14 +1,78 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "locale": "pt-BR",
   "status": "draft",
-  "review": { "human_reviewed": false },
+  "review": {
+    "human_reviewed": false
+  },
   "approval": null,
   "topic": "Como entender e aplicar uma passagem.",
-  "authoritative_article": { "existing_url": "/pt/blog/read-scripture-with-curiosity", "action": "refresh_draft" },
-  "short_video_scripts": ["Comece observando o que a passagem realmente diz.", "Leia o contexto antes de concluir depressa.", "Escolha uma resposta que combine com o texto."],
-  "share_cards": [{ "format": "1080x1080", "copy": "Contexto antes de conclusões rápidas." }, { "format": "1080x1920", "copy": "Leia. Observe. Aplique com humildade." }],
+  "authoritative_article": {
+    "publication_state": "existing_article_refresh_draft",
+    "existing_url": "/pt/blog/read-scripture-with-curiosity",
+    "draft": {
+      "title": "Como entender e aplicar uma passagem com cuidado",
+      "description": "Um roteiro de leitura que começa no texto antes de chegar à aplicação.",
+      "body_markdown": "## Comece pelo trecho, não pela resposta\n\nLer uma passagem com cuidado começa com uma decisão simples: permitir que o texto fale antes de procurar uma aplicação imediata. Quando abrimos a Bíblia em busca de uma frase pronta, corremos o risco de ignorar quem fala, para quem fala e o que está acontecendo. Reserve alguns minutos para ler o parágrafo inteiro. Depois leia novamente e perceba repetições, contrastes, perguntas, personagens e mudanças de tom. Essa atenção inicial não resolve tudo, mas impede que uma palavra isolada carregue um peso que não é dela.\n\nPergunte o que está explicitamente presente. Há uma ordem, uma promessa, uma narrativa, uma imagem, uma oração ou uma discussão? Escreva uma observação que outra pessoa também poderia conferir no texto. Por exemplo: ‘o autor repete esta palavra’, ‘a pessoa faz uma pergunta’, ‘o parágrafo começa com um contraste’. Essa etapa separa o que você leu da interpretação que virá depois.\n\n## Dê espaço ao contexto\n\nLeia os versículos anteriores e seguintes. Uma frase pode responder a uma situação específica, continuar um argumento ou resumir uma imagem maior. O gênero também importa: poesia usa metáforas, provérbios descrevem padrões de sabedoria, cartas conversam com comunidades concretas e narrativas contam acontecimentos sem necessariamente aprovar cada atitude. Perguntar que tipo de texto você está lendo muda o modo como você escuta.\n\nSe uma palavra parecer decisiva, compare traduções confiáveis e procure referências relacionadas. Um comentário, uma Bíblia de estudo ou uma conversa com um professor responsável pode ajudar, mas não substitui a leitura. Quando há divergência entre intérpretes, reconheça a diferença. Não é preciso decidir tudo de uma vez. Uma pergunta bem guardada pode ser mais honesta do que uma certeza apressada.\n\n## Diferencie observação, interpretação e resposta\n\nDepois de observar, escreva o que você acha que a passagem pode significar. Use linguagem proporcional: ‘parece mostrar’, ‘me faz perguntar’, ‘posso praticar’. Isso não enfraquece a leitura; mostra respeito pelo texto e pelas pessoas que o recebem de modos diferentes. Em seguida, escolha uma resposta pequena. Talvez seja pedir perdão, agradecer, esperar, procurar reconciliação ou continuar estudando.\n\nUma aplicação responsável não transforma todo texto em instrução individual. Algumas passagens chamam para contemplação, outras oferecem lamento, outras descrevem uma história complexa. Pergunte qual resposta combina com o gênero e o contexto. Se o assunto tocar violência, culpa, medo, saúde, família ou qualquer situação de risco, não use a passagem para pressionar alguém a permanecer em perigo ou a dispensar ajuda profissional. Procure apoio seguro e especializado quando necessário.\n\n## Uma prática de cinco perguntas\n\nUse estas perguntas com uma passagem breve: O que acontece aqui? Que palavra ou imagem se repete? O que vem antes e depois? O que posso afirmar com clareza? Que resposta cabe hoje sem exagerar o texto? Anote uma linha para cada pergunta. A prática não exige respostas perfeitas; ela treina uma atenção que pode crescer com o tempo.\n\nSe você estiver lendo com outra pessoa, combine que cada uma pode dizer ‘não sei’ e pode passar uma pergunta. Compartilhe observações antes de conselhos. Escutar o texto e a outra pessoa com respeito ajuda a evitar que a conversa vire disputa ou controle. Uma comunidade saudável dá espaço para aprender, corrigir e voltar ao assunto em outro dia.\n\n## Volte ao texto durante a semana\n\nReleia a passagem escolhida em dois ou três dias diferentes. O que você notou na primeira leitura pode ganhar contorno depois. Talvez uma pergunta permaneça sem resposta; registre-a e siga estudando. A Bíblia não precisa se tornar um teste de velocidade. Leitura cuidadosa é uma forma de prestar atenção ao texto, à história e à vida concreta.\n\nNo fim da semana, escolha uma frase que você consegue resumir sem tirá-la do contexto. Compartilhe-a apenas se fizer sentido e se puder fazê-lo sem apresentar sua conclusão como regra para todos. A melhor aplicação não é a mais impressionante; é aquela que nasce de uma leitura honesta e produz cuidado, responsabilidade e abertura para continuar aprendendo.\n\n## Registre o que ainda não sabe\n\nNem toda leitura precisa terminar em uma conclusão. Reserve um espaço para perguntas que pedem mais contexto, tempo ou conversa. Você pode anotar a referência, a dúvida e uma próxima fonte confiável para consultar. Quando voltar ao trecho, leia novamente antes de comparar respostas. Esse hábito protege você de usar uma impressão inicial como certeza e ajuda a construir uma aplicação mais cuidadosa."
+    }
+  },
+  "short_video_scripts": [
+    {
+      "hook": "Antes de aplicar, leia o contexto.",
+      "spoken_body": "Pegue uma passagem curta e leia o parágrafo inteiro. Observe quem fala, o que se repete e o que vem antes e depois. Depois escreva uma pergunta, não uma conclusão apressada.",
+      "on_screen_text": "Contexto antes de conclusão.",
+      "cta": "Salve estas perguntas para a próxima leitura.",
+      "approximate_duration_seconds": 23
+    },
+    {
+      "hook": "O que o texto diz de fato?",
+      "spoken_body": "Tente separar observação de interpretação. Primeiro anote uma frase que está no texto. Depois pergunte o que ela pode significar para você hoje, com cuidado e humildade.",
+      "on_screen_text": "Observe. Pergunte. Responda.",
+      "cta": "Leia o guia e pratique as cinco perguntas.",
+      "approximate_duration_seconds": 21
+    },
+    {
+      "hook": "Uma boa pergunta pode abrir a leitura.",
+      "spoken_body": "Em vez de buscar uma resposta imediata, pergunte: o que está acontecendo aqui? Qual palavra chama atenção? Que resposta cabe sem fazer a passagem dizer mais do que ela diz?",
+      "on_screen_text": "Faça uma pergunta melhor.",
+      "cta": "Compartilhe com alguém que gosta de estudar com cuidado.",
+      "approximate_duration_seconds": 25
+    }
+  ],
+  "share_cards": [
+    {
+      "dimensions": "1080x1080",
+      "path": "docs/editorial/pt-BR/assets/semana-3-quadrado.png",
+      "sha256": "15dfd9727f6eeb543786550a0bc3710b5accd5e29b6ff070e3b01f6f246b5377",
+      "copy_lines": [
+        "Contexto antes",
+        "de conclusões rápidas."
+      ],
+      "accent": "#9fbb95",
+      "art_direction": "Azul-noite Vella, luz verde suave e tipografia editorial; sem pessoas ou tela de produto.",
+      "alt_text": "Cartão Vella com a frase Contexto antes de conclusões rápidas."
+    },
+    {
+      "dimensions": "1080x1920",
+      "path": "docs/editorial/pt-BR/assets/semana-3-vertical.png",
+      "sha256": "7cb36e1993e95f6ac8e3854d7cc6d46e3dd425932bc5aa84aa483bd5b226a0d6",
+      "copy_lines": [
+        "Leia.",
+        "Observe. Pergunte."
+      ],
+      "accent": "#9fbb95",
+      "art_direction": "Cartão vertical azul-noite com acento verde, sem dados, preço ou alegação de resultado.",
+      "alt_text": "Cartão vertical Vella sobre leitura cuidadosa de uma passagem."
+    }
+  ],
   "in_app_practice": "Anote uma observação, uma pergunta e uma resposta possível ao texto.",
-  "lifecycle_message": "Volte a uma passagem curta e faça uma pergunta melhor hoje.",
-  "store_cta": { "campaign": "android_first_launch", "url": "https://play.google.com/store/apps/details?id=io.vella.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dandroid_first_launch%26utm_content%3Dblog-article" }
+  "lifecycle_message": "Volte a uma passagem curta e faça uma pergunta cuidadosa hoje.",
+  "reader_cta": {
+    "label": "Aprender a ler uma passagem com contexto",
+    "url": "/pt/blog/read-scripture-with-curiosity"
+  },
+  "store_cta": {
+    "campaign": "ptbr_w3_entender_passagem",
+    "url": "https://play.google.com/store/apps/details?id=io.vella.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dptbr_w3_entender_passagem%26utm_content%3Dptbr_w3_artigo"
+  }
 }

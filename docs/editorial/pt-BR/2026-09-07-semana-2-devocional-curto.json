@@ -1,14 +1,78 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "locale": "pt-BR",
   "status": "draft",
-  "review": { "human_reviewed": false },
+  "review": {
+    "human_reviewed": false
+  },
   "approval": null,
   "topic": "Como criar um devocional diário curto.",
-  "authoritative_article": { "existing_url": "/pt/blog/a-gentle-daily-scripture-rhythm", "action": "refresh_draft" },
-  "short_video_scripts": ["Escolha um momento que já existe no seu dia.", "Leia poucas linhas, observe e responda com sinceridade.", "Um ritmo curto pode continuar em dias cheios."],
-  "share_cards": [{ "format": "1080x1080", "copy": "Um devocional curto cabe em um dia real." }, { "format": "1080x1920", "copy": "Leia, observe, responda." }],
+  "authoritative_article": {
+    "publication_state": "existing_article_refresh_draft",
+    "existing_url": "/pt/blog/a-gentle-daily-scripture-rhythm",
+    "draft": {
+      "title": "Um devocional diário curto para dias comuns",
+      "description": "Uma prática simples de leitura, atenção e oração que respeita o ritmo da vida real.",
+      "body_markdown": "## Um começo que cabe no seu dia\n\nUm devocional diário não precisa ocupar uma hora nem depender de uma manhã perfeita. Ele pode começar com um trecho curto, alguns minutos de atenção e uma resposta honesta. A proposta é criar um ritmo que consiga acompanhar dias comuns: trabalho, estudo, cuidado com outras pessoas, deslocamentos e cansaço. Quando a prática só funciona nas condições ideais, ela se torna difícil de retomar. Um começo menor pode ajudar você a voltar sem transformar a leitura em cobrança.\n\nEscolha um momento reconhecível, não necessariamente um horário rígido. Pode ser depois do café, antes de abrir o computador, no transporte ou ao se preparar para dormir. Esse ponto de apoio já existe no seu dia e reduz a tarefa de lembrar. Se o momento falhar, não trate isso como fracasso. Procure outro ponto de apoio e tente de novo quando for possível.\n\n## Leia pouco, mas com atenção\n\nSepare um parágrafo, um salmo curto ou alguns versículos de um evangelho. Leia uma vez para perceber o sentido geral. Depois leia novamente e observe uma palavra, uma imagem, uma pergunta ou um contraste. Você não precisa encontrar uma mensagem escondida nem produzir uma explicação completa. O objetivo é ficar um pouco mais perto do texto antes de decidir o que ele significa para você.\n\nSe uma passagem parecer difícil, leia o que vem antes e depois. Observe quem está falando, para quem e em qual situação. Consulte uma tradução confiável ou converse com alguém experiente se a dúvida continuar. Cuidado com respostas rápidas que fazem a passagem prometer o que ela não promete. Um devocional curto pode incluir uma pergunta em aberto; maturidade também é saber quando continuar aprendendo.\n\n## Responda de forma concreta\n\nDepois da leitura, escolha uma resposta que caiba no dia. Você pode escrever uma frase, fazer uma oração breve, agradecer por algo específico ou praticar um gesto de cuidado. Pergunte: o que esta passagem me convida a perceber, reparar ou lembrar hoje? Não há necessidade de transformar cada leitura em uma grande decisão. Respostas pequenas e responsáveis costumam ser mais fáceis de praticar e revisar.\n\nSe escrever ajudar, use três linhas: ‘li’, ‘percebi’ e ‘respondo’. Em ‘li’, anote a referência ou uma frase. Em ‘percebi’, escreva algo que chama atenção sem tentar dar a última palavra. Em ‘respondo’, registre uma oração ou uma ação simples. O caderno não precisa ser bonito nem completo; ele serve para apoiar a memória e mostrar caminhos que voltam a aparecer.\n\n## Um mínimo para dias cheios\n\nNos dias em que não há tempo, escolha quatro versos, uma frase e uma oração. Leia os versos, guarde uma frase e responda com poucas palavras. Esse mínimo não é uma regra para provar valor. Ele é uma forma de deixar a porta aberta quando a energia está baixa. Se até isso não for possível, recomece no dia seguinte sem compensar leitura nem aumentar a cobrança.\n\nTambém vale preparar o ambiente: deixe uma Bíblia ou caderno perto do lugar escolhido, salve a passagem com antecedência e reduza uma distração conhecida. Pequenos ajustes podem proteger alguns minutos de atenção. Ainda assim, a vida muda. Uma semana de doença, viagem, luto ou trabalho intenso pode pedir pausa e cuidado. A prática deve servir à vida, não ignorar o que ela exige.\n\n## Repare no que sustenta o retorno\n\nAo final de sete dias, observe o que facilitou ou dificultou a leitura. Talvez o trecho tenha sido longo demais, o horário não combine com sua rotina ou a resposta escrita tenha ajudado. Ajustar o ritmo é parte da prática. Você pode continuar no mesmo livro, escolher outra passagem ou convidar alguém de confiança para conversar sobre uma pergunta.\n\nNão compare seu devocional com o de outra pessoa. O valor da leitura não está em uma sequência perfeita, em uma emoção específica ou em quantas páginas você cobriu. Voltar ao texto com atenção, respeito e liberdade já é um caminho significativo. Amanhã pode começar novamente com poucos versos, uma pausa e uma resposta possível.\n\n## Recomece com gentileza\n\nUm ritmo útil também prevê interrupções. Se você deixou a leitura de lado por alguns dias, não precisa tentar recuperar cada trecho nem criar uma regra mais dura. Escolha a próxima passagem e recomece dela. Ao perceber que um formato deixou de ajudar, experimente reduzir o texto, trocar o lugar ou apenas ler em voz baixa. A prática ganha fôlego quando pode ser ajustada com honestidade."
+    }
+  },
+  "short_video_scripts": [
+    {
+      "hook": "Você só tem poucos minutos hoje?",
+      "spoken_body": "Escolha um momento que já existe no seu dia. Leia um parágrafo, perceba uma frase e responda com uma oração curta. Um devocional simples pode ser claro e possível.",
+      "on_screen_text": "Leia. Perceba. Responda.",
+      "cta": "Salve para praticar em um momento tranquilo.",
+      "approximate_duration_seconds": 20
+    },
+    {
+      "hook": "Não transforme a leitura em prova.",
+      "spoken_body": "Em dias corridos, experimente quatro versos, uma frase e uma oração. Esse mínimo não mede sua fé; ele só ajuda você a manter espaço para voltar amanhã.",
+      "on_screen_text": "Um mínimo possível para dias cheios.",
+      "cta": "Compartilhe esta prática com quem precisa desacelerar.",
+      "approximate_duration_seconds": 22
+    },
+    {
+      "hook": "Um hábito começa com um ponto de apoio.",
+      "spoken_body": "Ligue a leitura ao café, ao caminho ou ao fim do dia. Quando o horário muda, esse ponto continua lembrando você de abrir a passagem e parar um pouco.",
+      "on_screen_text": "Escolha um momento reconhecível.",
+      "cta": "Leia o guia e escolha seu ponto de apoio.",
+      "approximate_duration_seconds": 19
+    }
+  ],
+  "share_cards": [
+    {
+      "dimensions": "1080x1080",
+      "path": "docs/editorial/pt-BR/assets/semana-2-quadrado.png",
+      "sha256": "b5b1b15508072b3d986ad8744f081d67811005e5128493c05a09717f5f3c8a19",
+      "copy_lines": [
+        "Um devocional curto",
+        "para dias comuns."
+      ],
+      "accent": "#8ba9c8",
+      "art_direction": "Azul-noite Vella com brilho azul-claro e tipografia direta; sem interface ou pessoas.",
+      "alt_text": "Cartão Vella com a frase Um devocional curto para dias comuns."
+    },
+    {
+      "dimensions": "1080x1920",
+      "path": "docs/editorial/pt-BR/assets/semana-2-vertical.png",
+      "sha256": "a40bb419b2cae9465414eb236ad05d8922d08e6a76b63acdb4373e6a827ecce3",
+      "copy_lines": [
+        "Leia pouco.",
+        "Volte com calma."
+      ],
+      "accent": "#8ba9c8",
+      "art_direction": "Cartão vertical de contraste azul-noite e azul-claro, sem dados pessoais ou promessa de resultado.",
+      "alt_text": "Cartão vertical Vella sobre voltar à leitura com calma."
+    }
+  ],
   "in_app_practice": "Leia um parágrafo, destaque uma frase e responda com uma oração curta.",
-  "lifecycle_message": "Reserve poucos minutos para ler, observar e responder hoje.",
-  "store_cta": { "campaign": "android_first_launch", "url": "https://play.google.com/store/apps/details?id=io.vella.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dandroid_first_launch%26utm_content%3Dblog-article" }
+  "lifecycle_message": "Reserve poucos minutos para ler, perceber e responder hoje.",
+  "reader_cta": {
+    "label": "Montar um devocional curto",
+    "url": "/pt/blog/a-gentle-daily-scripture-rhythm"
+  },
+  "store_cta": {
+    "campaign": "ptbr_w2_devocional_curto",
+    "url": "https://play.google.com/store/apps/details?id=io.vella.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dptbr_w2_devocional_curto%26utm_content%3Dptbr_w2_artigo"
+  }
 }

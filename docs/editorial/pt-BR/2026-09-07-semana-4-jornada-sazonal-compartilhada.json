@@ -1,14 +1,79 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "locale": "pt-BR",
   "status": "draft",
-  "review": { "human_reviewed": false },
+  "review": {
+    "human_reviewed": false
+  },
   "approval": null,
   "topic": "Uma jornada sazonal compartilhada.",
-  "authoritative_article": { "existing_url": "/pt/blog/a-gentle-daily-scripture-rhythm", "action": "refresh_draft_no_new_url" },
-  "short_video_scripts": ["Convide alguém para um ritmo curto nesta semana.", "Cada pessoa pode escolher um momento simples para voltar ao texto.", "Compartilhem uma pergunta, sem transformar a prática em desempenho."],
-  "share_cards": [{ "format": "1080x1080", "copy": "Uma jornada curta, compartilhada com cuidado." }, { "format": "1080x1920", "copy": "Voltem ao texto, um dia de cada vez." }],
-  "in_app_practice": "Escolha uma passagem curta e compartilhe uma pergunta de reflexão com alguém de confiança.",
-  "lifecycle_message": "Nesta semana, convide alguém para um ritmo simples de leitura e oração.",
-  "store_cta": { "campaign": "android_first_launch", "url": "https://play.google.com/store/apps/details?id=io.vella.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dandroid_first_launch%26utm_content%3Dblog-article" }
+  "authoritative_article": {
+    "publication_state": "unpublished_draft",
+    "draft": {
+      "title": "Primavera no Brasil: sete dias de atenção, leitura e oração",
+      "description": "Uma jornada sazonal breve para atravessar o início da primavera com companhia e sem comparação.",
+      "body_markdown": "## Uma estação para reparar\n\nA primavera de 2026 começa no Brasil durante esta cadência de quatro semanas. A mudança de estação não precisa virar uma meta, uma promessa ou uma experiência obrigatória. Ela pode ser apenas um convite para reparar no que muda devagar: a luz, o ar, uma árvore do caminho, o horário do fim da tarde. Essa atenção simples pode abrir espaço para uma leitura menos apressada e uma oração mais honesta.\n\nA proposta desta jornada é pequena: durante sete dias, escolha uma passagem breve e volte a ela com cuidado. Você pode fazer isso sozinho ou com uma ou duas pessoas de confiança. Não há resultado para alcançar, sequência para exibir nem necessidade de sentir algo específico. A estação oferece uma imagem; cada pessoa decide, com liberdade, se e como quer participar.\n\n## Escolham um texto que caiba na semana\n\nPrefira um salmo, uma cena curta dos evangelhos ou um parágrafo de uma carta. Leiam o trecho no primeiro dia e anotem uma pergunta que ele desperta. Nos dias seguintes, releiam sem correr para uma conclusão. Uma pessoa pode notar uma palavra; outra pode perceber uma imagem; outra talvez não tenha nada a dizer. Todas essas respostas podem caber na prática.\n\nEvitem escolher um texto para provar um ponto ou corrigir alguém. O objetivo é criar uma conversa que respeite o texto e as pessoas. Se surgir uma interpretação difícil, voltem ao contexto, consultem uma fonte confiável ou guardem a pergunta para outra ocasião. Ninguém precisa assumir o papel de especialista para participar.\n\n## Compartilhem apenas o que é seguro\n\nUma troca simples pode funcionar por mensagem ou conversa curta: ‘esta frase ficou comigo’, ‘esta pergunta continua aberta’ ou ‘hoje não consegui parar muito tempo’. Não é necessário expor experiências íntimas, confessar algo pessoal ou oferecer aconselhamento. Escutar com respeito é uma forma completa de presença.\n\nSe alguém compartilhar sofrimento intenso, risco, violência ou medo, não responda com uma frase bíblica como se ela resolvesse a situação. Procure ajuda apropriada, apoie a busca por segurança e respeite limites. A jornada não substitui cuidado profissional, comunitário ou médico. O texto pode acompanhar uma conversa difícil, mas não deve ser usado para pressionar alguém a permanecer em perigo.\n\n## Um ritmo de sete dias\n\nNo primeiro dia, leiam o trecho e escolham uma pergunta. No segundo, observem uma palavra ou imagem. No terceiro, leiam o contexto anterior e posterior. No quarto, escrevam uma resposta de oração curta. No quinto, conversem sobre uma observação que pode ser compartilhada. No sexto, escolham uma atitude pequena de cuidado. No sétimo, nomeiem uma gratidão ou uma pergunta que desejam carregar adiante.\n\nEsse roteiro é opcional. Se a semana ficar cheia, retomem onde estiverem. Não tentem compensar dias perdidos nem medir quem foi mais constante. O valor está na atenção oferecida, não na quantidade de mensagens enviadas. Uma pessoa pode participar em silêncio; outra pode ler em horários diferentes; outra pode encerrar a prática antes. Respeitar esses ritmos torna a jornada mais segura e mais real.\n\n## Fechar sem comparação\n\nAo final, cada pessoa pode responder a duas perguntas: o que percebi no texto ou na semana? O que quero levar comigo para os próximos dias? Uma resposta pode ser pequena: uma frase, uma gratidão, uma conversa pendente, um pedido de ajuda ou o desejo de voltar à passagem. Não transforme o encerramento em avaliação de desempenho.\n\nA primavera continua mudando depois dos sete dias, e a leitura também pode continuar. Talvez vocês escolham outro texto, talvez façam uma pausa. O importante é que a prática permaneça livre de coerção e aberta à realidade de cada pessoa. Voltar ao texto com atenção, companhia e cuidado pode ser um modo sereno de atravessar a estação.\n\n## Cuidem do combinado\n\nAntes de começar, conversem sobre o que torna a participação confortável: um horário possível, um canal de mensagem e a liberdade de não responder. Evitem cobrar presença, interpretar o silêncio ou encaminhar relatos pessoais sem permissão. Se alguém quiser sair da conversa, agradeçam a companhia e respeitem a decisão. Esses limites simples ajudam a manter a jornada acolhedora e permitem que a atenção à estação seja acompanhada de cuidado concreto entre as pessoas.\n\nAo fim, preservem uma pergunta aberta e um gesto simples de cuidado para os dias seguintes."
+    },
+    "proposed_slug": "primavera-no-brasil-sete-dias-de-atencao",
+    "required_approval": "named_human_editorial_approval"
+  },
+  "short_video_scripts": [
+    {
+      "hook": "A primavera começa durante esta jornada.",
+      "spoken_body": "Nesta primavera de 2026 no Brasil, convide alguém para reler uma passagem curta por sete dias. Cada pessoa pode trazer uma pergunta ou uma frase que ficou. Não é uma competição.",
+      "on_screen_text": "Sete dias de leitura com cuidado.",
+      "cta": "Convide alguém para ler com calma nesta semana.",
+      "approximate_duration_seconds": 23
+    },
+    {
+      "hook": "Uma jornada compartilhada pode ser simples.",
+      "spoken_body": "Escolham um texto breve, leiam no próprio ritmo e troquem uma observação quando quiserem. Escutar sem aconselhar também é uma forma de estar junto.",
+      "on_screen_text": "Leia junto. Sem comparação.",
+      "cta": "Compartilhe este convite com uma pessoa de confiança.",
+      "approximate_duration_seconds": 20
+    },
+    {
+      "hook": "Repare no que muda devagar.",
+      "spoken_body": "A mudança de estação pode lembrar você de desacelerar. Leia uma passagem, respire e anote uma pequena gratidão. Não há resultado para alcançar nesta semana.",
+      "on_screen_text": "Atenção para a primavera.",
+      "cta": "Salve a prática para começar quando fizer sentido.",
+      "approximate_duration_seconds": 19
+    }
+  ],
+  "share_cards": [
+    {
+      "dimensions": "1080x1080",
+      "path": "docs/editorial/pt-BR/assets/semana-4-quadrado.png",
+      "sha256": "b08c01146f3aceeb39ea53209e30340e8caee4fbb2d1615cb46c255dc5f4a055",
+      "copy_lines": [
+        "Primavera no Brasil.",
+        "Sete dias de atenção."
+      ],
+      "accent": "#c9a9d9",
+      "art_direction": "Azul-noite Vella com luz lilás suave; referência abstrata à primavera, sem plantas realistas, pessoas ou UI.",
+      "alt_text": "Cartão Vella sobre uma jornada de sete dias na primavera no Brasil."
+    },
+    {
+      "dimensions": "1080x1920",
+      "path": "docs/editorial/pt-BR/assets/semana-4-vertical.png",
+      "sha256": "7982bf823e8211236cd29a55ac49f8b392cb31c78e11a6891a59dca4300ca288",
+      "copy_lines": [
+        "Leia junto.",
+        "Sem comparação."
+      ],
+      "accent": "#c9a9d9",
+      "art_direction": "Cartão vertical azul-noite e lilás com linguagem sazonal serena, sem pessoas ou alegações.",
+      "alt_text": "Cartão vertical Vella convidando à leitura compartilhada sem comparação."
+    }
+  ],
+  "in_app_practice": "Escolha uma passagem curta e compartilhe uma pergunta com alguém de confiança.",
+  "lifecycle_message": "Nesta primavera, convide alguém para reler uma passagem curta durante sete dias.",
+  "reader_cta": {
+    "label": "Conhecer a jornada de primavera",
+    "url": "#jornada-de-primavera"
+  },
+  "store_cta": {
+    "campaign": "ptbr_w4_primavera_2026",
+    "url": "https://play.google.com/store/apps/details?id=io.vella.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dptbr_w4_primavera_2026%26utm_content%3Dptbr_w4_artigo"
+  }
 }
