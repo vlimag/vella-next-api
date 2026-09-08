@@ -1,22 +1,24 @@
 # Google Ads — Vella Brazil Android setup
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 This records the verified live configuration separately from older campaign
 snapshots and pre-launch plans. The production campaign was re-enabled by
-explicit operator override on 2026-09-07 and is now Enabled / Eligible. The
-licensed physical-Android cancellation, annual, and monthly purchase test has
-not run; it is deferred to 2026-09-08 and remains an outstanding validation.
+explicit operator override on 2026-09-07 and was Enabled / Eligible at the last
+campaign-state verification that day. The licensed physical-Android
+cancellation, annual, and monthly purchase test has not run and remains an
+outstanding validation.
 
-## Current verified live state — 2026-09-07
+## Current controlling state — updated 2026-09-08
 
 This section is the controlling operational record and supersedes every older
 plan or snapshot below wherever they differ.
 
 - Campaign `Vella_BR_Android_202608_PrayerDaily` (ID `24120421103`) is
-  **Enabled / Eligible**. Its configured budget remains **R$30/day**, with
-  Brazil-only and Portuguese targeting. The known religious-belief limitation
-  is expected for this product; it is not a disapproval.
+  **Enabled / Eligible** as last verified on 2026-09-07. Its configured budget
+  remains **R$30/day**, with Brazil-only and Portuguese targeting. The known
+  religious-belief limitation is expected for this product; it is not a
+  disapproval.
 - Bidding remains **Install volume (All users)** / Maximize conversions, with no
   target CPI. Re-enabling did not change budget, bidding, targeting, billing, or
   access. The controlled learning window began on 2026-09-07 and now has an
@@ -29,15 +31,35 @@ plan or snapshot below wherever they differ.
   Play install/download action remains the sole **Primary** action. The Google
   Play purchase conversion remains Secondary, Awaiting conversions, with zero
   recorded conversions.
-- API main commit `52c5bac` is deployed on `vella.one`. Production checks
-  returned 200 from the health endpoint, kept missing-bearer requests protected
-  with 401, and accepted and persisted a privacy-safe IAP diagnostic from a real
-  Supabase-anonymous bearer with 202; the smoke event and user were then removed.
+- The anonymous-IAP endpoint fix introduced in API main commit `52c5bac` is
+  deployed on `vella.one`. Production checks returned 200 from the health
+  endpoint, kept missing-bearer requests protected with 401, and accepted and
+  persisted a privacy-safe IAP diagnostic from a real Supabase-anonymous bearer
+  with 202; the smoke event and user were then removed.
+- Mobile `main` is pushed and clean at
+  `1e5802e937c34397d98dd1b487e6492b8a12eb64`, with zero divergence from
+  `origin/main`. The 2026-09-08 production OTA is group
+  `fc429d67-5e5a-4860-84f8-ed62c4881f82`: Android update
+  `01a0805a-b507-748a-b23b-ae1ee872e4f5` and iOS update
+  `01a0805a-b507-79b3-9078-e316482cb659`. EAS reports production channel to
+  production branch, runtime `1.4`, the exact commit above, and
+  `isGitWorkingTreeDirty=false` for both platforms.
+- Release verification passed 901/901 mobile tests with 5,080 expectations
+  using the 60-second test timeout, TypeScript checking, the PT-BR package
+  verifier, and independent review with no remaining findings. The OTA adds
+  only conservatively gated, post-value native review prompting; it does not
+  change any price, plan, trial, renewal, entitlement, or campaign setting.
+- The final Play PT-BR feature graphic is ready at 1024×500, 8-bit RGB without
+  alpha, 496,606 bytes, SHA-256
+  `7d595e7252163d4993a91e48efca8577f64b016f4356aa079ff710141eff3110`.
+  Apple and Play screenshots plus all UI-dependent Ads still/video masters
+  remain **HOLD** with zero approved captures; no fabricated or wrong-platform
+  UI may replace them.
 - The licensed physical Android test has not run: it must still record one
   intentional cancellation, then verify both annual and monthly purchases reach
   authoritative receipt validation and Premium entitlement. The operator
-  explicitly accepted the risk of re-enabling before this validation and
-  deferred the three cases to 2026-09-08; do not record this gate as complete.
+  explicitly accepted the risk of re-enabling before this validation; do not
+  record this gate as complete until the three cases actually pass.
 - First-party Vella telemetry for 2026-08-23 through 2026-08-30 recorded 122
   first opens, 47 installs reaching the paywall, 15 installs starting checkout,
   zero verified trials, and zero verified paid subscription starts. These
@@ -75,10 +97,10 @@ Descriptions:
 5. `Ore, busque versículos e siga jornadas guiadas com todos os recursos Premium.`
 
 The three new headlines and three new descriptions were under asset review when
-saved on 2026-08-30. Their review state was not part of the 2026-09-07 live
-verification. Keep the current R$30/day budget and Install volume bid mode
-unchanged during the controlled learning window while completing the deferred
-physical purchase validation.
+saved on 2026-08-30. Their review state was not part of the 2026-09-07 campaign
+verification or the 2026-09-08 mobile release verification. Keep the current
+R$30/day budget and Install volume bid mode unchanged during the controlled
+learning window while completing the deferred physical purchase validation.
 
 ## Account and campaign-history evidence
 
@@ -154,9 +176,10 @@ annual renewal price and the full auto-renewal/cancellation disclosure.
 
 ## Visual assets
 
-Google may initially draw the icon and listing media from Google Play. Before
-the paid phase, add real current Android product demonstrations for at least two
-of these concepts:
+Google may initially draw the icon and listing media from Google Play. As soon
+as approved platform-native captures exist, add real current Android product
+demonstrations for at least two of these concepts without fabricating interim
+UI:
 
 1. Prayer Space when words are difficult.
 2. A private prayer memory and gratitude check-in.
@@ -179,8 +202,10 @@ Required exports:
   goals; the single install/download action remains the sole Primary action.
 - Runtime 1.4 is production-shipped. API main commit `52c5bac` accepts the
   privacy-safe diagnostic from the technical anonymous session while retaining
-  bearer protection. The licensed physical Android purchase validation remains
-  incomplete and is deferred to 2026-09-08, even though the operator explicitly
+  bearer protection. The current mobile production OTA is group
+  `fc429d67-5e5a-4860-84f8-ed62c4881f82` from clean, pushed mobile main commit
+  `1e5802e937c34397d98dd1b487e6492b8a12eb64`. The licensed physical Android
+  purchase validation remains incomplete, even though the operator explicitly
   accepted that risk and re-enabled the campaign on 2026-09-07.
 - Keep every other lifecycle/subscription action Secondary or unimported until
   exact-build observation and authoritative server/store reconciliation exist.
@@ -260,15 +285,21 @@ Conversion hierarchy controlling the current learning window and later changes:
       receipt validation, and Premium-entitlement paths are verified.
 - [x] First-party ingestion, retention, operator report, and privacy disclosure
       are live.
+- [x] Mobile main is pushed clean with zero remote divergence at
+      `1e5802e937c34397d98dd1b487e6492b8a12eb64`; production OTA group
+      `fc429d67-5e5a-4860-84f8-ed62c4881f82` reports runtime 1.4, both
+      platforms, the exact commit, and a clean working tree.
+- [x] The PT-BR Play feature graphic is verified and inventoried; all
+      UI-dependent screenshot and Ads media exports remain explicitly held.
 - [ ] At least two real-UI creatives pass the truth/privacy review.
 - [x] Campaign `24120421103` was paused on 2026-09-07 without changing its
       R$30/day budget, Install volume bidding, or Brazil/Portuguese targeting.
 - [x] The operator explicitly accepted the pending physical-purchase risk and
       re-enabled campaign `24120421103` on 2026-09-07; its live status was
       verified as Enabled / Eligible with configuration unchanged.
-- [ ] On 2026-09-08, complete and record the licensed physical Android
-      cancellation plus annual and monthly purchase, receipt-validation, and
-      Premium-entitlement cases. This test has not yet run.
+- [ ] Complete and record the licensed physical Android cancellation plus
+      annual and monthly purchase, receipt-validation, and Premium-entitlement
+      cases. As of 2026-09-08, this test has not run.
 - [x] The controlled learning window began on 2026-09-07 at R$30/day for at
       most 13 scheduled dates through the explicit 2026-09-19 end date
       (nominally R$390, with a R$420 operator ceiling). Any budget, bid, goal,

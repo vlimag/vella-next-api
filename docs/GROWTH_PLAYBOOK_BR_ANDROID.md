@@ -1,6 +1,6 @@
 # Vella Brazil Android Growth Playbook
 
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 ## Objective
 
@@ -70,33 +70,54 @@ At this budget, use one campaign with Maximize Conversions and no artificial
 target bid during the initial learning period. Do not create multiple campaigns
 for the same small audience.
 
-## Current controlled learning sequence — 2026-09-07
+## Current controlled learning sequence — 2026-09-08
 
 Campaign `Vella_BR_Android_202608_PrayerDaily` (ID `24120421103`) was re-enabled
-by explicit operator override on 2026-09-07 and is now Enabled / Eligible. Its
-configured budget remains R$30/day and bidding remains Install volume (All
-users) / Maximize conversions, without target CPI. Brazil/Portuguese targeting
-is unchanged, and the single install/download action remains the sole Primary
-action.
+by explicit operator override on 2026-09-07 and was Enabled / Eligible at the
+last campaign-state verification that day. Its configured budget remains
+R$30/day and bidding remains Install volume (All users) / Maximize conversions,
+without target CPI. Brazil/Portuguese targeting is unchanged, and the single
+install/download action remains the sole Primary action.
 
 `begin_checkout` is now marked as a GA4 key event and imported into Google Ads as
 Secondary/observation-only, excluded from account-level goals. The Google Play
 purchase action also remains Secondary. Do not import or optimize toward
 `verified_trial_start` because Vella still has no reconciled verified trial.
 
-API main commit `52c5bac` is deployed on `vella.one`; the production health,
-missing-bearer protection, and real anonymous-bearer diagnostic smoke checks
-passed. The licensed physical Android test has not run: the intentional
-cancellation plus annual and monthly purchase cases remain pending and are
-deferred to 2026-09-08. The operator explicitly accepted that risk for the
-immediate re-enable; this override does not count the test as completed.
+The anonymous-IAP endpoint fix introduced in API main commit `52c5bac` is
+deployed on `vella.one`; the production health, missing-bearer protection, and
+real anonymous-bearer diagnostic smoke checks passed. The licensed physical
+Android test has not run: the intentional cancellation plus annual and monthly
+purchase cases remain pending as of 2026-09-08. The operator explicitly
+accepted that risk for the immediate re-enable; this override does not count
+the test as completed.
+
+Mobile `main` and `origin/main` are aligned at
+`1e5802e937c34397d98dd1b487e6492b8a12eb64`. The current production OTA is
+group `fc429d67-5e5a-4860-84f8-ed62c4881f82`, with Android update
+`01a0805a-b507-748a-b23b-ae1ee872e4f5` and iOS update
+`01a0805a-b507-79b3-9078-e316482cb659`. EAS records production channel to
+production branch, runtime `1.4`, that exact commit, and
+`isGitWorkingTreeDirty=false`. Verification passed 901/901 tests and 5,080
+expectations with the 60-second timeout, TypeScript checking, the creative
+package verifier, and independent review with no remaining findings.
+
+The OTA adds conservatively gated native review requests only after meaningful
+value. It does not show a review request at launch, onboarding, authentication,
+paywall, checkout, or purchase. It also makes no change to prices, plans, trial
+eligibility or duration, renewals, entitlements, campaign economics, or Ads
+configuration. The final PT-BR Play feature graphic is a verified 1024×500,
+8-bit RGB/no-alpha PNG of 496,606 bytes (SHA-256
+`7d595e7252163d4993a91e48efca8577f64b016f4356aa079ff710141eff3110`).
+Apple and Play screenshots and every UI-dependent Ads still/video master remain
+**HOLD** with zero approved captures.
 
 Use this sequence:
 
-1. **Stage 0 — complete the deferred purchase validation:** on 2026-09-08,
-   complete and record the cancellation, annual, and monthly physical-device
-   cases. They remain outstanding despite the operator's risk acceptance and
-   must not be marked green before they actually pass.
+1. **Stage 0 — complete the deferred purchase validation:** complete and record
+   the cancellation, annual, and monthly physical-device cases. They remain
+   outstanding as of 2026-09-08 despite the operator's risk acceptance and must
+   not be marked green before they actually pass.
 2. **Stage A — qualified install learning is live:** the controlled window began
    with the 2026-09-07 re-enable at R$30/day and has an explicit 2026-09-19 end
    date. That 13-date span is nominally R$390; retain the R$420 operator ceiling
@@ -121,9 +142,9 @@ Reference:
 https://support.google.com/google-ads/answer/14104492
 
 The month-by-month sections below are a strategic sequencing framework. The
-2026-09-07 live state and gate above control campaign operations; older day
-labels or allocations do not authorize a configuration change or extension of
-the current controlled learning window.
+controlling state updated on 2026-09-08 and the gate above govern campaign
+operations; older day labels or allocations do not authorize a configuration
+change or extension of the current controlled learning window.
 
 ## Month 1 — prove the message
 
