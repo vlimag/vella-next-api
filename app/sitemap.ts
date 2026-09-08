@@ -15,13 +15,25 @@ const STATIC_PATHS = [
   '/delete-account',
 ] as const;
 
-const UPDATED_AT = new Date('2026-09-07T00:00:00.000Z');
+const HOME_UPDATED_AT = new Date('2026-09-07T00:00:00.000Z');
+const PREVIOUS_STATIC_UPDATED_AT = new Date('2026-08-24T00:00:00.000Z');
+const STATIC_UPDATED_AT: Record<(typeof STATIC_PATHS)[number], Date> = {
+  '': HOME_UPDATED_AT,
+  '/features': PREVIOUS_STATIC_UPDATED_AT,
+  [PRAYER_SPACE_PATH]: PREVIOUS_STATIC_UPDATED_AT,
+  '/blog': PREVIOUS_STATIC_UPDATED_AT,
+  '/support': PREVIOUS_STATIC_UPDATED_AT,
+  '/privacy': PREVIOUS_STATIC_UPDATED_AT,
+  '/terms': PREVIOUS_STATIC_UPDATED_AT,
+  '/community-guidelines': PREVIOUS_STATIC_UPDATED_AT,
+  '/delete-account': PREVIOUS_STATIC_UPDATED_AT,
+};
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const staticEntries: MetadataRoute.Sitemap = STATIC_PATHS.flatMap((path) =>
     LOCALES.map((locale) => ({
       url: absoluteUrl(locale, path),
-      lastModified: UPDATED_AT,
+      lastModified: STATIC_UPDATED_AT[path],
       changeFrequency: path === '' ? ('weekly' as const) : path === '/blog' ? ('weekly' as const) : ('monthly' as const),
       priority: path === '' ? 1 : path === PRAYER_SPACE_PATH ? 0.95 : path === '/features' ? 0.9 : path === '/blog' ? 0.8 : 0.6,
       alternates: { languages: languageAlternates(path) },
@@ -32,7 +44,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     LOCALES.map((locale) => {
       const path = `/blog/${slug}`;
       const post = getPost(locale, slug);
-      const lastModified = post ? new Date(post.updatedAt ?? post.publishedAt) : UPDATED_AT;
+      const lastModified = post
+        ? new Date(post.updatedAt ?? post.publishedAt)
+        : PREVIOUS_STATIC_UPDATED_AT;
       return {
         url: absoluteUrl(locale, path),
         lastModified,

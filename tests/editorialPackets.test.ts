@@ -72,6 +72,9 @@ describe('PT-BR editorial packets', () => {
       draft: { body_markdown: expect.any(String) },
     });
     expect(packet.authoritative_article.draft.body_markdown.match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu)?.length ?? 0).toBeGreaterThanOrEqual(700);
+    expect(packet.authoritative_article.draft.body_markdown).not.toMatch(
+      /(?:^|\n\n)[^.\n]*\ba mudança de estação\b[^.]*\.\s+A mudança de estação\b/iu,
+    );
   });
 
   it('rejects a packet URL that is not a currently published PT article', () => {

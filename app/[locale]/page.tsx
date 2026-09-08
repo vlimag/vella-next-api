@@ -8,15 +8,11 @@ import { PhonePreview } from '@/components/site/PhonePreview';
 import { PrayerSpaceSpotlight } from '@/components/site/PrayerSpaceSpotlight';
 import { StoreLinks } from '@/components/site/StoreLinks';
 import {
-  ANDROID_STORE_AVAILABLE,
-  IOS_STORE_AVAILABLE,
-  SITE_URL,
-  absoluteUrl,
-  availableStoreUrls,
   isLocale,
   localizedPath,
 } from '@/lib/site/config';
 import { getCopy } from '@/lib/site/content';
+import { buildHomeStructuredData } from '@/lib/site/homeStructuredData';
 import { getPrayerSpaceCopy } from '@/lib/site/prayerSpace';
 
 export default async function HomePage({ params }: { params: Promise<{ locale: string }> }) {
@@ -26,43 +22,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   const copy = await getCopy(locale);
   const prayerSpace = getPrayerSpaceCopy(locale);
 
-  const structuredData = [
-    {
-      '@context': 'https://schema.org',
-      '@type': 'Organization',
-      name: 'Vella',
-      url: SITE_URL,
-      logo: `${SITE_URL}/icon-512.png`,
-      email: 'hello@vella.one',
-    },
-    {
-      '@context': 'https://schema.org',
-      '@type': 'WebSite',
-      name: 'Vella',
-      url: absoluteUrl(locale),
-      inLanguage: locale,
-      description: copy.seo.description,
-    },
-    {
-      '@context': 'https://schema.org',
-      '@type': 'MobileApplication',
-      name: 'Vella',
-      operatingSystem: [
-        ...(ANDROID_STORE_AVAILABLE ? ['Android'] : []),
-        ...(IOS_STORE_AVAILABLE ? ['iOS'] : []),
-      ].join(', '),
-      applicationCategory: 'LifestyleApplication',
-      description: copy.seo.description,
-      url: absoluteUrl(locale),
-      downloadUrl: availableStoreUrls(),
-      offers: {
-        '@type': 'Offer',
-        price: '0',
-        priceCurrency: 'USD',
-        description: copy.hero.note,
-      },
-    },
-  ];
+  const structuredData = buildHomeStructuredData(locale, copy.seo.description);
 
   return (
     <PageShell locale={locale} copy={copy}>

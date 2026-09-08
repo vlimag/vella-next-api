@@ -19,6 +19,7 @@ import {
   PLAY_STORE_URL,
   STORE_CAMPAIGN,
   STORE_CTA_EVENT,
+  absoluteUrl,
   availableStoreUrls,
   languageAlternates,
   localizedPath,
@@ -27,6 +28,7 @@ import {
   storeCtaId,
 } from '@/lib/site/config';
 import { getCopy } from '@/lib/site/content';
+import { buildHomeStructuredData } from '@/lib/site/homeStructuredData';
 import { localizedMetadata } from '@/lib/site/metadata';
 import {
   PRAYER_SPACE_ARTICLE_PATH,
@@ -864,6 +866,13 @@ describe('Vella localized website', () => {
     expect(markup).toContain(`href="${APP_STORE_URL}"`);
   });
 
+  it('does not invent free USD subscription economics in homepage structured data', async () => {
+    const structuredData = buildHomeStructuredData('pt', 'Descrição localizada de teste.');
+    const application = structuredData.find((entry) => entry['@type'] === 'MobileApplication');
+    expect(application).toBeDefined();
+    expect(application).not.toHaveProperty('offers');
+  });
+
   it('ships a complete private Prayer Space experience in every language', () => {
     for (const locale of LOCALES) {
       const prayer = getPrayerSpaceCopy(locale);
@@ -899,7 +908,23 @@ describe('Vella localized website', () => {
     }
     expect(entries.every((entry) => new URL(entry.url).hostname === 'vella.one')).toBe(true);
     expect(entries.every((entry) => !new URL(entry.url).pathname.startsWith('/en'))).toBe(true);
-    expect(entries.some((entry) => entry.lastModified && new Date(entry.lastModified).toISOString() === '2026-09-07T00:00:00.000Z')).toBe(true);
+    const expectedStaticDates = new Map<string, string>([
+      ['', '2026-09-07T00:00:00.000Z'],
+      ['/features', '2026-08-24T00:00:00.000Z'],
+      [PRAYER_SPACE_PATH, '2026-08-24T00:00:00.000Z'],
+      ['/blog', '2026-08-24T00:00:00.000Z'],
+      ['/support', '2026-08-24T00:00:00.000Z'],
+      ['/privacy', '2026-08-24T00:00:00.000Z'],
+      ['/terms', '2026-08-24T00:00:00.000Z'],
+      ['/community-guidelines', '2026-08-24T00:00:00.000Z'],
+      ['/delete-account', '2026-08-24T00:00:00.000Z'],
+    ]);
+    for (const [path, expectedDate] of expectedStaticDates) {
+      for (const locale of LOCALES) {
+        const entry = entries.find((candidate) => candidate.url === absoluteUrl(locale, path));
+        expect(new Date(entry?.lastModified ?? 0).toISOString()).toBe(expectedDate);
+      }
+    }
     const refreshedArticle = entries.find((entry) => entry.url === 'https://vella.one/pt/blog/a-gentle-daily-scripture-rhythm');
     expect(new Date(refreshedArticle?.lastModified ?? 0).toISOString()).toBe('2026-07-28T00:00:00.000Z');
   });
