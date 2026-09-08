@@ -1,8 +1,16 @@
-const SEARCH_HOSTS = ['google.', 'bing.', 'duckduckgo.', 'yahoo.', 'ecosia.'];
-const SOCIAL_HOSTS = ['instagram.', 'facebook.', 'tiktok.', 'youtube.', 'x.com', 'twitter.'];
+import { STORE_CAMPAIGN } from './config';
 
-function hostMatches(hostname: string, fragments: readonly string[]) {
-  return fragments.some((fragment) => hostname === fragment || hostname.endsWith(`.${fragment}`) || hostname.includes(fragment));
+const SEARCH_HOSTS = ['google.com', 'bing.com', 'duckduckgo.com', 'yahoo.com', 'ecosia.org'];
+const SOCIAL_HOSTS = ['instagram.com', 'facebook.com', 'tiktok.com', 'youtube.com', 'x.com', 'twitter.com'];
+const WEB_CAMPAIGNS = new Set([STORE_CAMPAIGN]);
+
+function hostMatches(hostname: string, domains: readonly string[]) {
+  return domains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+}
+
+export function canonicalCampaign(value: string | null): string {
+  const campaign = value?.trim().toLowerCase();
+  return campaign && WEB_CAMPAIGNS.has(campaign) ? campaign : STORE_CAMPAIGN;
 }
 
 export function canonicalRouteClass(pathname: string): string {

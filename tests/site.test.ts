@@ -900,6 +900,8 @@ describe('Vella localized website', () => {
     expect(entries.every((entry) => entry.url.startsWith('https://www.vella.one'))).toBe(false);
     expect(entries.every((entry) => entry.url.includes('/en/'))).toBe(false);
     expect(entries.some((entry) => entry.lastModified && new Date(entry.lastModified).toISOString() === '2026-09-07T00:00:00.000Z')).toBe(true);
+    const refreshedArticle = entries.find((entry) => entry.url === 'https://vella.one/pt/blog/a-gentle-daily-scripture-rhythm');
+    expect(new Date(refreshedArticle?.lastModified ?? 0).toISOString()).toBe('2026-07-28T00:00:00.000Z');
   });
 
   it('allows Next assets while publishing one canonical robots sitemap', () => {

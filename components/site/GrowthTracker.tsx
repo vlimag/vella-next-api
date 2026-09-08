@@ -6,7 +6,7 @@ import {
   STORE_CTA_EVENT,
   type Locale,
 } from '@/lib/site/config';
-import { canonicalRouteClass, coarseReferrerClass } from '@/lib/site/webAttribution';
+import { canonicalCampaign, canonicalRouteClass, coarseReferrerClass } from '@/lib/site/webAttribution';
 
 type Attribution = {
   source?: string;
@@ -56,17 +56,7 @@ function sessionId() {
 
 function resolveAttribution(): Attribution {
   const params = new URLSearchParams(window.location.search);
-  const incoming: Attribution = {
-    source: safeCode(params.get('utm_source'), 32),
-    medium: safeCode(params.get('utm_medium'), 32),
-    campaign: safeCode(params.get('utm_campaign'), 64),
-    content: safeCode(params.get('utm_content'), 64),
-  };
-  const hasIncoming = Object.values(incoming).some(Boolean);
-
-  if (hasIncoming) {
-    webAttribution = Object.fromEntries(Object.entries(incoming).filter(([, value]) => value));
-  }
+  webAttribution = { campaign: canonicalCampaign(params.get('utm_campaign')) };
   return webAttribution;
 }
 

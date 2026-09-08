@@ -54,3 +54,36 @@ The full `yarn test` run was started with a single Vitest worker and session
 polling, but the controller interrupted it after about 280 seconds before it
 returned a result. It must be rerun to completion before any production release.
 No push or deployment was performed by this task.
+
+## Review round 1/5 — 2026-09-07
+
+### Fixes
+
+- `utm_campaign` now passes through a closed website-campaign mapping. Only
+  `android_first_launch` is retained; every unknown or malformed value falls
+  back to that safe default. The pre-existing generated pseudonymous
+  event/install/session UUID envelope is unchanged.
+- Referrer classification now accepts only an exact approved hostname or its
+  dot-suffix subdomain. Deceptive hosts such as `notgoogle.com` and
+  `example.instagram.com.evil.test` are classified as referrals.
+- Removed the unsupported `2026-09-07` `updatedAt` values from the four public
+  posts. Draft packet work does not alter public article sitemap dates.
+- Editorial validation now reads the current blog slug registry and rejects a
+  packet whose PT-BR article URL is not currently published; prefix-only checks
+  are no longer sufficient.
+
+### RED and GREEN evidence
+
+The amended focused suite first failed exactly as intended: it accepted an
+unknown packet article URL, classified `notgoogle.com` as search, had no
+closed campaign mapper, and emitted the unsupported 2026-09-07 PT article
+timestamp.
+
+After the fixes, this command passed:
+
+`yarn vitest run tests/site.test.ts tests/webAttribution.test.ts tests/editorialPackets.test.ts --pool=threads --maxWorkers=1 --minWorkers=1 --reporter=dot`
+
+- 3 test files passed, 37 tests passed; duration 24.46 seconds.
+- `yarn typecheck` passed; duration 90.65 seconds.
+- `yarn validate:editorial` printed `Validated 4 PT-BR draft editorial packets.`
+- `git diff --check` passed with no output.
