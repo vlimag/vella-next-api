@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "locale": "pt-BR",
+  "status": "draft",
+  "review": { "human_reviewed": false },
+  "approval": null,
+  "topic": "Como orar quando faltam palavras.",
+  "authoritative_article": { "existing_url": "/pt/blog/praying-when-your-mind-will-not-slow-down", "action": "refresh_draft" },
+  "short_video_scripts": ["Pare, respire e diga a Deus o que está presente.", "Uma oração honesta pode começar com poucas palavras.", "Escolha uma frase curta e volte a ela com calma."],
+  "share_cards": [{ "format": "1080x1080", "copy": "Quando faltam palavras, comece com presença." }, { "format": "1080x1920", "copy": "Uma frase honesta já pode ser oração." }],
+  "in_app_practice": "Respire três vezes e escreva uma frase de oração honesta.",
+  "lifecycle_message": "Hoje, experimente voltar a Deus com uma frase simples e verdadeira.",
+  "store_cta": { "campaign": "android_first_launch", "url": "https://play.google.com/store/apps/details?id=io.vella.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dandroid_first_launch%26utm_content%3Dblog-article" }
+}

@@ -6,6 +6,7 @@ import {
   STORE_CTA_EVENT,
   type Locale,
 } from '@/lib/site/config';
+import { canonicalRouteClass, coarseReferrerClass } from '@/lib/site/webAttribution';
 
 type Attribution = {
   source?: string;
@@ -69,6 +70,14 @@ function resolveAttribution(): Attribution {
   return webAttribution;
 }
 
+function webContext(): Attribution {
+  return {
+    source: coarseReferrerClass(document.referrer),
+    medium: 'website',
+    content: canonicalRouteClass(window.location.pathname),
+  };
+}
+
 function readQueue(): WebGrowthEvent[] {
   return webQueue;
 }
@@ -130,13 +139,14 @@ export function GrowthTracker({ locale }: { locale: Locale }) {
     if (window.location.pathname.includes('/operator/growth')) return;
 
     const attribution = resolveAttribution();
+    const context = webContext();
     if (!landingSent) {
       landingSent = true;
       enqueue(locale, 'landing_viewed', {
-        source: attribution.source ?? 'direct',
-        medium: attribution.medium ?? 'website',
+        source: context.source,
+        medium: context.medium,
         campaign: attribution.campaign ?? STORE_CAMPAIGN,
-        ...(attribution.content ? { content: attribution.content } : {}),
+        content: context.content,
       });
     } else {
       void flushQueue();
@@ -148,14 +158,13 @@ export function GrowthTracker({ locale }: { locale: Locale }) {
       const values = detail as Record<string, unknown>;
       const ctaId = safeCode(typeof values.id === 'string' ? values.id : null, 48);
       const store = values.platform === 'android' ? 'android' : values.platform === 'ios' ? 'ios' : null;
-      const content = safeCode(typeof values.placement === 'string' ? values.placement : null, 64);
       if (!ctaId || !store) return;
 
       enqueue(locale, 'store_cta_clicked', {
-        source: attribution.source ?? 'vella_site',
-        medium: attribution.medium ?? 'website',
+        source: context.source,
+        medium: context.medium,
         campaign: attribution.campaign ?? STORE_CAMPAIGN,
-        ...(attribution.content || content ? { content: attribution.content ?? content } : {}),
+        content: context.content,
         cta_id: ctaId,
         store,
       });

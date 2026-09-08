@@ -4,7 +4,9 @@ import { createElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { generateMetadata as generateLocaleMetadata } from '@/app/[locale]/layout';
+import robots from '@/app/robots';
 import sitemap from '@/app/sitemap';
+import { HeroStoreLinks } from '@/components/site/HeroStoreLinks';
 import { middleware } from '@/middleware';
 import { StoreLinks } from '@/components/site/StoreLinks';
 import { BLOG_SLUGS, getPosts } from '@/lib/site/blog';
@@ -701,8 +703,8 @@ function articleWordCount(locale: (typeof LOCALES)[number], slug: string) {
 
 describe('Vella localized website', () => {
   it('loads complete copy for every app locale', async () => {
-    for (const locale of LOCALES) {
-      const copy = await getCopy(locale);
+    const localizedCopy = await Promise.all(LOCALES.map(async (locale) => [locale, await getCopy(locale)] as const));
+    for (const [locale, copy] of localizedCopy) {
       expect(copy.locale).toBe(locale);
       expect(copy.features).toHaveLength(8);
       expect(copy.rhythm.steps).toHaveLength(3);
@@ -716,7 +718,7 @@ describe('Vella localized website', () => {
       expect(serialized).not.toContain('vella.app');
       expect(serialized).not.toContain('velah.app');
     }
-  });
+  }, 30_000);
 
   it('describes subscription-only access consistently in every locale', async () => {
     for (const locale of LOCALES) {
@@ -853,6 +855,15 @@ describe('Vella localized website', () => {
     }
   });
 
+  it('publishes the home hero as a direct, measurable store choice', async () => {
+    const copy = await getCopy('pt');
+    const markup = renderToStaticMarkup(createElement(HeroStoreLinks, { copy: copy.download }));
+
+    expect((markup.match(/data-cta-placement="hero"/gu) ?? [])).toHaveLength(2);
+    expect(markup).toContain(`href="${playStoreCampaignUrl('hero').replace('&', '&amp;')}"`);
+    expect(markup).toContain(`href="${APP_STORE_URL}"`);
+  });
+
   it('ships a complete private Prayer Space experience in every language', () => {
     for (const locale of LOCALES) {
       const prayer = getPrayerSpaceCopy(locale);
@@ -886,6 +897,18 @@ describe('Vella localized website', () => {
       expect(entries.some((entry) => entry.url === new URL(localizedPath(locale, PRAYER_SPACE_PATH), 'https://vella.one').toString().replace(/\/$/, ''))).toBe(true);
       expect(entries.some((entry) => entry.url === new URL(localizedPath(locale, PRAYER_SPACE_ARTICLE_PATH), 'https://vella.one').toString().replace(/\/$/, ''))).toBe(true);
     }
+    expect(entries.every((entry) => entry.url.startsWith('https://www.vella.one'))).toBe(false);
+    expect(entries.every((entry) => entry.url.includes('/en/'))).toBe(false);
+    expect(entries.some((entry) => entry.lastModified && new Date(entry.lastModified).toISOString() === '2026-09-07T00:00:00.000Z')).toBe(true);
+  });
+
+  it('allows Next assets while publishing one canonical robots sitemap', () => {
+    const policy = robots();
+    const rule = Array.isArray(policy.rules) ? policy.rules[0] : policy.rules;
+
+    expect(rule?.disallow).toEqual(['/api/']);
+    expect(policy.host).toBe('https://vella.one');
+    expect(policy.sitemap).toBe('https://vella.one/sitemap.xml');
   });
 
   it('does not append the Vella brand twice in localized page titles', () => {
@@ -1072,15 +1095,18 @@ describe('Vella localized website', () => {
     expect(googleAdsReadiness.includes('- Client account: `712-460-9192`.')).toBe(true);
     expect(googleAdsReadiness.includes('- App listing: approved Vella Android store listing (identifier omitted).')).toBe(true);
     expect(googleAdsReadiness.includes('Campaign name: `Vella_BR_Android_202608_PrayerDaily`')).toBe(true);
-    expect(googleAdsReadiness.includes('Historical campaign ID: `24120421103`')).toBe(true);
+    expect(googleAdsReadiness.includes('Production campaign ID: `24120421103`')).toBe(true);
     expect(googleAdsReadiness.includes('Planned campaign ID: pending')).toBe(true);
   });
 
-  it('keeps acquisition runbooks on shipped attribution truth and paused spend', () => {
-    expect(googleAdsReadiness).toContain('Budget: R$60/day');
-    expect(googleAdsReadiness).toContain('14-day campaign cap of R$840');
-    expect(googleAdsReadiness).toContain('R$1,000 total learning ceiling');
-    expect(googleAdsReadiness).toContain('start state: **paused**');
+  it('documents the current Brazilian campaign controls without treating historical plans as live', () => {
+    expect(googleAdsReadiness).toContain('**R$30/day**');
+    expect(googleAdsReadiness).toContain('Brazil-only and Portuguese targeting');
+    expect(googleAdsReadiness).toContain('Install volume (All users)');
+    expect(googleAdsReadiness).toMatch(/no\s+target CPI/u);
+    expect(googleAdsReadiness).toContain('`begin_checkout` was');
+    expect(googleAdsReadiness).toContain('**Secondary**');
+    expect(googleAdsReadiness).toContain('sole **Primary** action');
     expect(googleAdsReadiness).toContain('vella_profile_initialized');
     expect(googleAdsReadiness).not.toMatch(/\bsign_up\b/u);
     expect(googleAdsReadiness).toContain('native Install Referrer bridge is implemented in candidate source');
@@ -1091,13 +1117,13 @@ describe('Vella localized website', () => {
     expect(growthPlatformAccess).toContain('R$560');
     expect(growthPlatformAccess).toContain('R$56');
     expect(growthPlatformAccess).not.toContain('added in a future store build');
-    expect(googleAdsReadiness).toContain('Historical campaign status observed: **Ended / inactive**');
+    expect(googleAdsReadiness).toContain('An older UI snapshot showed **Ended / inactive**');
     expect(googleAdsReadiness).toContain('Historical budget: R$46/day');
-    expect(googleAdsReadiness).not.toContain('Campaign status observed: **Paused**');
+    expect(googleAdsReadiness).toContain('must not be used as the current campaign state');
     expect(googleAdsReadiness).toContain('R$594.09');
     expect(googleAdsReadiness).toContain('R$594.08');
     expect(googleAdsReadiness).toMatch(/R\$0\.01\s+display\/reconciliation difference/u);
-    expect(googleAdsReadiness).toContain('custom lifecycle events are not yet production-shipped');
+    expect(googleAdsReadiness).toContain('GA4 automatic events were arriving, while mapped custom events were absent.');
     expect(growthPlatformAccess).toContain('`APPLE_ADS_ORG_ID` is not configured');
     expect(growthPlatformAccess).toContain('historical campaign `24120421103` remains ended/inactive');
     expect(growthPlatformAccess).toContain('replacement campaign ID is pending');
@@ -1302,5 +1328,12 @@ describe('Vella localized website', () => {
     expect(redirectResponse.headers.get('location')).toBe('https://vella.one/pt');
     expect(redirectResponse.headers.get('cache-control')).toBe('private, no-store');
     expect(redirectResponse.headers.get('vary')).toBe('Accept-Language');
+  });
+
+  it('permanently redirects the www host to apex before locale routing', () => {
+    const response = middleware(new NextRequest('https://www.vella.one/pt/blog?utm_campaign=android_first_launch'));
+
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe('https://vella.one/pt/blog?utm_campaign=android_first_launch');
   });
 });

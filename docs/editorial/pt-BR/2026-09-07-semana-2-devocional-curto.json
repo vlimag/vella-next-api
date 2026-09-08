@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "locale": "pt-BR",
+  "status": "draft",
+  "review": { "human_reviewed": false },
+  "approval": null,
+  "topic": "Como criar um devocional diário curto.",
+  "authoritative_article": { "existing_url": "/pt/blog/a-gentle-daily-scripture-rhythm", "action": "refresh_draft" },
+  "short_video_scripts": ["Escolha um momento que já existe no seu dia.", "Leia poucas linhas, observe e responda com sinceridade.", "Um ritmo curto pode continuar em dias cheios."],
+  "share_cards": [{ "format": "1080x1080", "copy": "Um devocional curto cabe em um dia real." }, { "format": "1080x1920", "copy": "Leia, observe, responda." }],
+  "in_app_practice": "Leia um parágrafo, destaque uma frase e responda com uma oração curta.",
+  "lifecycle_message": "Reserve poucos minutos para ler, observar e responder hoje.",
+  "store_cta": { "campaign": "android_first_launch", "url": "https://play.google.com/store/apps/details?id=io.vella.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dandroid_first_launch%26utm_content%3Dblog-article" }
+}

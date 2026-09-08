@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "locale": "pt-BR",
+  "status": "draft",
+  "review": { "human_reviewed": false },
+  "approval": null,
+  "topic": "Como entender e aplicar uma passagem.",
+  "authoritative_article": { "existing_url": "/pt/blog/read-scripture-with-curiosity", "action": "refresh_draft" },
+  "short_video_scripts": ["Comece observando o que a passagem realmente diz.", "Leia o contexto antes de concluir depressa.", "Escolha uma resposta que combine com o texto."],
+  "share_cards": [{ "format": "1080x1080", "copy": "Contexto antes de conclusões rápidas." }, { "format": "1080x1920", "copy": "Leia. Observe. Aplique com humildade." }],
+  "in_app_practice": "Anote uma observação, uma pergunta e uma resposta possível ao texto.",
+  "lifecycle_message": "Volte a uma passagem curta e faça uma pergunta melhor hoje.",
+  "store_cta": { "campaign": "android_first_launch", "url": "https://play.google.com/store/apps/details?id=io.vella.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dandroid_first_launch%26utm_content%3Dblog-article" }
+}

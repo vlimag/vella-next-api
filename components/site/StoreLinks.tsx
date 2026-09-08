@@ -86,7 +86,7 @@ export function StoreLinks({
   const buttons = platform === 'android'
     ? [androidButton]
     : platform === 'ios'
-      ? [iosButton, androidButton]
+      ? [iosButton]
       : [androidButton, iosButton];
 
   return (

@@ -1,6 +1,8 @@
+import React from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/site/JsonLd';
+import { HeroStoreLinks } from '@/components/site/HeroStoreLinks';
 import { PageShell } from '@/components/site/PageShell';
 import { PhonePreview } from '@/components/site/PhonePreview';
 import { PrayerSpaceSpotlight } from '@/components/site/PrayerSpaceSpotlight';
@@ -75,7 +77,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             <h1>{copy.hero.title}<br /><em>{copy.hero.accent}</em></h1>
             <p className="hero-body">{copy.hero.body}</p>
             <div className="hero-actions">
-              <Link className="button button-gold" href="#experience">{copy.hero.primaryCta}<span aria-hidden="true">→</span></Link>
+              <HeroStoreLinks copy={copy.download} />
               <Link className="button button-ghost" href={localizedPath(locale, '/blog')}>{copy.hero.secondaryCta}</Link>
             </div>
             <p className="hero-note"><span aria-hidden="true">✓</span>{copy.hero.note}</p>

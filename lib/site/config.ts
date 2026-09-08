@@ -18,6 +18,7 @@ export const STORE_CAMPAIGN = 'android_first_launch';
 export const STORE_CTA_EVENT = 'vella:store-cta-click';
 
 export type StoreCtaPlacement =
+  | 'hero'
   | 'header-desktop'
   | 'header-mobile'
   | 'home-download'

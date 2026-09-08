@@ -40,6 +40,12 @@ function withLanguage(response: NextResponse, locale: Locale) {
 }
 
 export function middleware(request: NextRequest) {
+  if (request.nextUrl.hostname === 'www.vella.one') {
+    const url = request.nextUrl.clone();
+    url.hostname = 'vella.one';
+    return NextResponse.redirect(url, 308);
+  }
+
   const { pathname } = request.nextUrl;
   if (
     pathname.startsWith('/api/') ||

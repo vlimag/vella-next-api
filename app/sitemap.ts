@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { BLOG_SLUGS, getPost } from '@/lib/site/blog';
-import { DEFAULT_LOCALE, LOCALES, absoluteUrl, languageAlternates } from '@/lib/site/config';
+import { LOCALES, absoluteUrl, languageAlternates } from '@/lib/site/config';
 import { PRAYER_SPACE_PATH } from '@/lib/site/prayerSpace';
 
 const STATIC_PATHS = [
@@ -15,7 +15,7 @@ const STATIC_PATHS = [
   '/delete-account',
 ] as const;
 
-const UPDATED_AT = new Date('2026-08-03T12:00:00.000Z');
+const UPDATED_AT = new Date('2026-09-07T00:00:00.000Z');
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const staticEntries: MetadataRoute.Sitemap = STATIC_PATHS.flatMap((path) =>
@@ -28,18 +28,20 @@ export default function sitemap(): MetadataRoute.Sitemap {
     })),
   );
 
-  const blogEntries: MetadataRoute.Sitemap = BLOG_SLUGS.flatMap((slug) => {
-    const path = `/blog/${slug}`;
-    const post = getPost(DEFAULT_LOCALE, slug);
-    const lastModified = post ? new Date(post.updatedAt ?? post.publishedAt) : UPDATED_AT;
-    return LOCALES.map((locale) => ({
-      url: absoluteUrl(locale, path),
-      lastModified,
-      changeFrequency: 'yearly' as const,
-      priority: 0.75,
-      alternates: { languages: languageAlternates(path) },
-    }));
-  });
+  const blogEntries: MetadataRoute.Sitemap = BLOG_SLUGS.flatMap((slug) =>
+    LOCALES.map((locale) => {
+      const path = `/blog/${slug}`;
+      const post = getPost(locale, slug);
+      const lastModified = post ? new Date(post.updatedAt ?? post.publishedAt) : UPDATED_AT;
+      return {
+        url: absoluteUrl(locale, path),
+        lastModified,
+        changeFrequency: 'yearly' as const,
+        priority: 0.75,
+        alternates: { languages: languageAlternates(path) },
+      };
+    }),
+  );
 
   return [...staticEntries, ...blogEntries];
 }

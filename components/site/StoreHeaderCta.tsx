@@ -32,9 +32,7 @@ export function StoreHeaderCta({
   }, []);
 
   const iosDirect = platform === 'ios' && IOS_STORE_AVAILABLE;
-  const androidDirect = platform !== 'unknown'
-    && platform !== 'ios'
-    && ANDROID_STORE_AVAILABLE;
+  const androidDirect = platform === 'android' && ANDROID_STORE_AVAILABLE;
   const isDirect = iosDirect || androidDirect;
   const storePlatform = iosDirect ? 'ios' : 'android';
   const href = iosDirect
