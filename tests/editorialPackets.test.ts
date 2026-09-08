@@ -119,4 +119,28 @@ describe('PT-BR editorial packets', () => {
       rmSync(directory, { recursive: true, force: true });
     }
   }, 30_000);
+
+  it('rejects internal release cadence language from article copy', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vella-packets-'));
+    const packet = JSON.parse(readFileSync('docs/editorial/pt-BR/2026-09-07-semana-4-jornada-sazonal-compartilhada.json', 'utf8'));
+    packet.authoritative_article.draft.body_markdown += ' Esta cadência de quatro semanas não é linguagem para leitores.';
+
+    for (const file of readdirSync('docs/editorial/pt-BR').filter((entry) => entry.endsWith('.json'))) {
+      const content = file === '2026-09-07-semana-4-jornada-sazonal-compartilhada.json'
+        ? packet
+        : JSON.parse(readFileSync(`docs/editorial/pt-BR/${file}`, 'utf8'));
+      writeFileSync(join(directory, file), JSON.stringify(content));
+    }
+
+    try {
+      expect(() => execFileSync(process.execPath, ['scripts/validate-editorial-packets.mjs'], {
+        cwd: process.cwd(),
+        encoding: 'utf8',
+        env: { ...process.env, EDITORIAL_PACKET_DIRECTORY: directory },
+        stdio: 'pipe',
+      })).toThrow(/internal release wording/u);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

@@ -144,3 +144,10 @@ message, or seasonal article can become public.
 - Final focused GREEN: `yarn vitest run tests/editorialPackets.test.ts --pool=threads --maxWorkers=1 --minWorkers=1 --reporter=dot` — 5/5 passed (76.43s wall clock).
 - Final asset reproducibility and validation GREEN: `yarn render:editorial-assets && yarn validate:editorial && git diff --check` — rendered 8 assets; validated 4 packets and 8 cards; no whitespace errors.
 - All packets remain `status: draft`, `human_reviewed: false`, and `approval: null`. The week 4 article remains unpublished pending named human editorial approval.
+
+### Editorial re-review: seasonal wording
+
+- Replaced the internal phrase “A primavera de 2026 começa no Brasil durante esta cadência de quatro semanas” with “Com a chegada da primavera no Brasil, a mudança de estação pode virar uma pausa gentil para reparar no que muda devagar.” The week-4 body remains above the 700-word floor.
+- RED: the new temporary-packet test that injected `cadência de quatro semanas` did not fail until the validator rule was added.
+- GREEN: `yarn vitest run tests/editorialPackets.test.ts --pool=threads --maxWorkers=1 --minWorkers=1 --reporter=dot` passed 6/6 (48.69s wall clock); `yarn validate:editorial` validated 4 draft packets and 8 share-card assets; `git diff --check` passed.
+- No content was published. `status: draft`, `human_reviewed: false`, `approval: null`, and the named-human approval requirement remain intact.

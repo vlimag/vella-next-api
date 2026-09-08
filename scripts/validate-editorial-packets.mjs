@@ -15,6 +15,7 @@ const ALLOWED_CAMPAIGNS = new Set([
 ]);
 const SAFE_CODE = /^[a-z0-9][a-z0-9._~-]{0,63}$/u;
 const EDITORIAL_PROCESS_LANGUAGE = /rascunho|revis[aã]o|publica[çc][aã]o|editorial/iu;
+const INTERNAL_RELEASE_LANGUAGE = /cadência de quatro semanas/iu;
 
 function packetFailure(name, message) {
   return `${name}: ${message}`;
@@ -64,6 +65,9 @@ async function main() {
     const draftWords = wordCount(draft?.body_markdown);
     if (!draft?.title || !draft?.description || !draft?.body_markdown || draftWords < 700) {
       failures.push(packetFailure(name, 'must include a complete authoritative article draft'));
+    }
+    if (INTERNAL_RELEASE_LANGUAGE.test(draft?.body_markdown ?? '')) {
+      failures.push(packetFailure(name, 'article copy must not use internal release wording'));
     }
     const isSeasonalDraft = packet.authoritative_article?.publication_state === 'unpublished_draft';
     if (!isSeasonalDraft && !publishedUrls.has(packet.authoritative_article?.existing_url)) {
