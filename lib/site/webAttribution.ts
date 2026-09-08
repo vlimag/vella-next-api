@@ -25,6 +25,11 @@ export function canonicalRouteClass(pathname: string): string {
   return 'other';
 }
 
+// Call this when the CTA is activated, rather than when a page effect first mounts.
+export function storeClickRouteClass(pathname: string): string {
+  return canonicalRouteClass(pathname);
+}
+
 export function coarseReferrerClass(referrer: string, siteHost = 'vella.one'): string {
   if (!referrer) return 'direct';
 

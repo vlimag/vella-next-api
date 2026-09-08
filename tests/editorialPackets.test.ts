@@ -143,4 +143,25 @@ describe('PT-BR editorial packets', () => {
       rmSync(directory, { recursive: true, force: true });
     }
   }, 30_000);
+
+  it('rejects non-canonical Play Store URLs and outer query parameters', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'vella-packets-'));
+    const packet = JSON.parse(readFileSync('docs/editorial/pt-BR/2026-09-07-semana-1-orar-quando-faltam-palavras.json', 'utf8'));
+    packet.store_cta.url = 'https://play.google.com/store/apps/details?id=wrong.app&referrer=utm_source%3Dvella.one%26utm_medium%3Dwebsite%26utm_campaign%3Dptbr_w1_orar_palavras%26utm_content%3Dptbr_w1_artigo&extra=1';
+
+    for (const file of readdirSync('docs/editorial/pt-BR').filter((entry) => entry.endsWith('.json'))) {
+      const content = file === '2026-09-07-semana-1-orar-quando-faltam-palavras.json'
+        ? packet
+        : JSON.parse(readFileSync(`docs/editorial/pt-BR/${file}`, 'utf8'));
+      writeFileSync(join(directory, file), JSON.stringify(content));
+    }
+
+    try {
+      expect(() => execFileSync(process.execPath, ['scripts/validate-editorial-packets.mjs'], {
+        cwd: process.cwd(), encoding: 'utf8', env: { ...process.env, EDITORIAL_PACKET_DIRECTORY: directory }, stdio: 'pipe',
+      })).toThrow(/exact Play Store URL/u);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
 });

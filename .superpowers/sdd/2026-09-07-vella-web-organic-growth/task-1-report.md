@@ -151,3 +151,10 @@ message, or seasonal article can become public.
 - RED: the new temporary-packet test that injected `cadência de quatro semanas` did not fail until the validator rule was added.
 - GREEN: `yarn vitest run tests/editorialPackets.test.ts --pool=threads --maxWorkers=1 --minWorkers=1 --reporter=dot` passed 6/6 (48.69s wall clock); `yarn validate:editorial` validated 4 draft packets and 8 share-card assets; `git diff --check` passed.
 - No content was published. `status: draft`, `human_reviewed: false`, `approval: null`, and the named-human approval requirement remain intact.
+
+### Final API review remediation
+
+- CTA attribution now evaluates the current pathname at click time, covering same-locale soft navigation while preserving initial coarse referrer classification.
+- Canonical www redirects now run for pages and `/_next/static` / `/_next/image` assets, preserving paths and query strings without redirecting localhost.
+- The packet validator enforces the exact HTTPS Google Play details URL, `id=io.vella.app`, exactly the `id` and `referrer` outer parameters, and exactly the four bounded nested UTM values. It rejects schedule-dependent week-4 wording.
+- Focused GREEN: `tests/webAttribution.test.ts`, `tests/editorialPackets.test.ts`, and `tests/site.test.ts` passed 44/44. `yarn typecheck`, `yarn validate:site` (33/33), renderer, and `yarn validate:editorial` passed. `git diff --check e3e15c9..HEAD` passed after removing the inherited extra EOF blank line.

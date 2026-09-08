@@ -15,7 +15,7 @@ const ALLOWED_CAMPAIGNS = new Set([
 ]);
 const SAFE_CODE = /^[a-z0-9][a-z0-9._~-]{0,63}$/u;
 const EDITORIAL_PROCESS_LANGUAGE = /rascunho|revis[aã]o|publica[çc][aã]o|editorial/iu;
-const INTERNAL_RELEASE_LANGUAGE = /cadência de quatro semanas/iu;
+const INTERNAL_RELEASE_LANGUAGE = /cadência de quatro semanas|a primavera começa durante esta jornada/iu;
 
 function packetFailure(name, message) {
   return `${name}: ${message}`;
@@ -30,6 +30,22 @@ function campaignFromUrl(value) {
 function referrerFromUrl(value) {
   const url = new URL(value);
   return new URLSearchParams(url.searchParams.get('referrer') ?? '');
+}
+
+function isCanonicalPlayStoreUrl(value, expectedCampaign) {
+  const url = new URL(value);
+  const outerKeys = [...url.searchParams.keys()];
+  if (url.origin !== 'https://play.google.com' || url.pathname !== '/store/apps/details'
+    || outerKeys.length !== 2 || new Set(outerKeys).size !== 2
+    || url.searchParams.get('id') !== 'io.vella.app' || !url.searchParams.get('referrer')) return false;
+
+  const referrer = referrerFromUrl(value);
+  const nestedKeys = [...referrer.keys()];
+  return nestedKeys.length === 4 && new Set(nestedKeys).size === 4
+    && referrer.get('utm_source') === 'vella.one'
+    && referrer.get('utm_medium') === 'website'
+    && referrer.get('utm_campaign') === expectedCampaign
+    && SAFE_CODE.test(referrer.get('utm_content') ?? '');
 }
 
 function wordCount(value) {
@@ -119,9 +135,8 @@ async function main() {
       const campaign = campaignFromUrl(packet.store_cta?.url ?? '');
       const content = referrer.get('utm_content');
       if (!ALLOWED_CAMPAIGNS.has(packet.store_cta?.campaign) || campaign !== packet.store_cta?.campaign
-        || !SAFE_CODE.test(content ?? '') || referrer.get('utm_source') !== 'vella.one'
-        || referrer.get('utm_medium') !== 'website') {
-        failures.push(packetFailure(name, 'CTA URL must use an allowlisted campaign code'));
+        || !isCanonicalPlayStoreUrl(packet.store_cta?.url ?? '', packet.store_cta?.campaign)) {
+        failures.push(packetFailure(name, 'CTA URL must use the exact Play Store URL and allowlisted campaign code'));
       }
       campaigns.add(campaign);
       contents.add(content);

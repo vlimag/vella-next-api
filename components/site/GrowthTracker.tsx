@@ -6,7 +6,7 @@ import {
   STORE_CTA_EVENT,
   type Locale,
 } from '@/lib/site/config';
-import { canonicalCampaign, canonicalRouteClass, coarseReferrerClass } from '@/lib/site/webAttribution';
+import { canonicalCampaign, canonicalRouteClass, coarseReferrerClass, storeClickRouteClass } from '@/lib/site/webAttribution';
 
 type Attribution = {
   source?: string;
@@ -154,7 +154,8 @@ export function GrowthTracker({ locale }: { locale: Locale }) {
         source: context.source,
         medium: context.medium,
         campaign: attribution.campaign ?? STORE_CAMPAIGN,
-        content: context.content,
+        // Soft navigation does not rerun this effect, so classify the route at the click.
+        content: storeClickRouteClass(window.location.pathname),
         cta_id: ctaId,
         store,
       });

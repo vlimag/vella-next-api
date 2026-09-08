@@ -90,4 +90,3 @@ Rollback is independently reversible: restore the prior API deployment, republis
 - Screenshot/creative validation proves expected dimensions, formats, locale, and no stale source captures.
 - Simulator checks prove no review request during launch/onboarding/paywall/checkout and safe post-completion behavior.
 - Campaign controls are recorded before and after and must be identical except for asset/listing state.
-

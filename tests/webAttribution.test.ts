@@ -5,13 +5,22 @@ import { STORE_CAMPAIGN } from '@/lib/site/config';
 const canonicalCampaign = (webAttribution as typeof webAttribution & {
   canonicalCampaign?: (value: string | null) => string;
 }).canonicalCampaign;
-const { canonicalRouteClass, coarseReferrerClass } = webAttribution;
+const { canonicalRouteClass, coarseReferrerClass, storeClickRouteClass } = webAttribution;
 
 describe('web acquisition attribution', () => {
   it('reduces localized URLs to bounded canonical route classes', () => {
     expect(canonicalRouteClass('/pt/blog/a-gentle-daily-scripture-rhythm')).toBe('blog_article');
     expect(canonicalRouteClass('/features/prayer-space')).toBe('prayer_space');
     expect(canonicalRouteClass('/unrecognized-private-path')).toBe('other');
+  });
+
+  it('uses the pathname at CTA click time after a same-locale soft navigation', () => {
+    let pathname = '/pt';
+    const routeClassAtClick = () => storeClickRouteClass(pathname);
+
+    expect(routeClassAtClick()).toBe('home');
+    pathname = '/pt/blog/a-gentle-daily-scripture-rhythm';
+    expect(routeClassAtClick()).toBe('blog_article');
   });
 
   it('reduces referrers to coarse classes without retaining the URL', () => {

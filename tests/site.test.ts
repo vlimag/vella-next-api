@@ -897,8 +897,8 @@ describe('Vella localized website', () => {
       expect(entries.some((entry) => entry.url === new URL(localizedPath(locale, PRAYER_SPACE_PATH), 'https://vella.one').toString().replace(/\/$/, ''))).toBe(true);
       expect(entries.some((entry) => entry.url === new URL(localizedPath(locale, PRAYER_SPACE_ARTICLE_PATH), 'https://vella.one').toString().replace(/\/$/, ''))).toBe(true);
     }
-    expect(entries.every((entry) => entry.url.startsWith('https://www.vella.one'))).toBe(false);
-    expect(entries.every((entry) => entry.url.includes('/en/'))).toBe(false);
+    expect(entries.every((entry) => new URL(entry.url).hostname === 'vella.one')).toBe(true);
+    expect(entries.every((entry) => !new URL(entry.url).pathname.startsWith('/en'))).toBe(true);
     expect(entries.some((entry) => entry.lastModified && new Date(entry.lastModified).toISOString() === '2026-09-07T00:00:00.000Z')).toBe(true);
     const refreshedArticle = entries.find((entry) => entry.url === 'https://vella.one/pt/blog/a-gentle-daily-scripture-rhythm');
     expect(new Date(refreshedArticle?.lastModified ?? 0).toISOString()).toBe('2026-07-28T00:00:00.000Z');
@@ -1337,5 +1337,15 @@ describe('Vella localized website', () => {
 
     expect(response.status).toBe(308);
     expect(response.headers.get('location')).toBe('https://vella.one/pt/blog?utm_campaign=android_first_launch');
+  });
+
+  it('permanently redirects www pages and Next assets to apex while preserving paths and queries', () => {
+    for (const path of ['/features?from=share', '/_next/static/chunks/app.js?v=1', '/_next/image?url=%2Fog.png&w=1080&q=75']) {
+      const response = middleware(new NextRequest(`https://www.vella.one${path}`));
+      expect(response.status).toBe(308);
+      expect(response.headers.get('location')).toBe(`https://vella.one${path}`);
+    }
+
+    expect(middleware(new NextRequest('https://localhost:3000/_next/static/chunks/app.js')).headers.get('x-middleware-next')).toBe('1');
   });
 });
