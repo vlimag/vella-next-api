@@ -1,6 +1,6 @@
 # Vella Brazil Android Growth Playbook
 
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 
 ## Objective
 
@@ -73,14 +73,16 @@ At this budget, use one campaign with Maximize Conversions and no artificial
 target bid during the initial learning period. Do not create multiple campaigns
 for the same small audience.
 
-## Current controlled learning sequence — 2026-09-08
+## Current controlled learning sequence — 2026-09-09
 
 Campaign `Vella_BR_Android_202608_PrayerDaily` (ID `24120421103`) was re-enabled
-by explicit operator override on 2026-09-07 and was Enabled / Eligible at the
-last campaign-state verification that day. Its configured budget remains
-R$30/day and bidding remains Install volume (All users) / Maximize conversions,
-without target CPI. Brazil/Portuguese targeting is unchanged, and the single
-install/download action remains the sole Primary action.
+by explicit operator override on 2026-09-07 and remained Enabled / Eligible with
+no serving issue at the fresh 2026-09-09 verification. Its configured budget
+remains R$30/day and bidding remains Install volume (All users) / Maximize
+conversions, without target CPI. Brazil/Portuguese targeting is unchanged, and
+the single install/download action remains the sole Primary action. The current
+live state is evidence, not authorization to continue spending: the controlling
+recommendation below is to pause before any further optimization or restart.
 
 `begin_checkout` is now marked as a GA4 key event and imported into Google Ads as
 Secondary/observation-only, excluded from account-level goals. The Google Play
@@ -91,7 +93,7 @@ The anonymous-IAP endpoint fix introduced in API main commit `52c5bac` is
 deployed on `vella.one`; the production health, missing-bearer protection, and
 real anonymous-bearer diagnostic smoke checks passed. The licensed physical
 Android test has not run: the intentional cancellation plus annual and monthly
-purchase cases remain pending as of 2026-09-08. The operator explicitly
+purchase cases remain pending as of 2026-09-09. The operator explicitly
 accepted that risk for the immediate re-enable; this override does not count
 the test as completed.
 
@@ -130,19 +132,51 @@ therefore do not satisfy the real-UI creative gate. Apple and Play screenshots
 and every UI-dependent Ads still/video master remain **HOLD** with zero approved
 captures.
 
-Fresh measured evidence for 2026-09-01 through 2026-09-07:
+Fresh production evidence for 2026-09-02 through 2026-09-08:
 
-- Google Ads reported 6,787 impressions, 811 clicks, 180
-  installs/conversions, R$217.96 spend, R$1.21 per install/conversion, R$0.27
-  average CPC, 11.95% CTR, and zero attributed in-app actions.
-- The fresh GA4 inspection recorded `plan_select` at 22 events from 16 users,
-  `begin_checkout` at 22 events from 15 users, and `verified_trial_start` at
-  zero. Event counts and user counts are not a reconciled cohort conversion
-  rate, and the two reporting systems must not be divided into a claimed funnel
-  percentage.
+- Google Ads reported 5,990 impressions, 802 clicks, 177 installs, and R$220.07
+  spend. The campaign had no serving issue, but delivery and low-cost installs
+  are not evidence of subscriber value.
+- Vella recorded 96 first opens, 46 onboarding completions, 41 paywall reaches,
+  14 checkout starts, zero verified production trials, and zero verified
+  production subscription starts. Ads and first-party counts have different
+  definitions and are not a reconciled cohort; do not divide them into a
+  claimed conversion rate.
+- The Android checkout trace for the last seven days contained 13 starts—nine
+  annual and four monthly—followed by ten `store_callback` cancellations, three
+  cases without a terminal event, and zero authoritative receipt validations.
+  Since 2026-08-30, Android contained 31 starts—23 annual and eight monthly—with
+  26 cancellations and five without a terminal event. The approximately
+  9.4-second median time to cancellation is compatible with opening and
+  abandoning the Play purchase sheet, but does not prove that cause.
+- No `failed_receipts`, IAP 5xx responses, conflicts, or other server failures
+  were observed. Checkout successes were iOS Sandbox only and do not count as
+  production conversions. Android recorded a view of the correct 14-day annual
+  offer terms, but the licensed purchase-sheet, receipt-validation, and Premium
+  entitlement paths remain unproven.
+- The preceding GA4 inspection recorded `plan_select` at 22 events from 16
+  users, `begin_checkout` at 22 events from 15 users, and
+  `verified_trial_start` at zero. These are useful observability aggregates,
+  not a reconciled cohort, and they do not override the zero authoritative
+  production outcomes above.
+- Zero `account_created` events are expected because the current flow creates
+  the permanent account after purchase. With zero completed production
+  purchases, no user reaches that step; this does not demonstrate an account
+  creation defect.
+
+The evidence is sufficient to reject scaling, but not to diagnose price or
+subscriber economics. Pause paid spend before any further optimization or
+restart. Publish the truthful Play listing corrections while paused. The six
+prepared image assets may be uploaded and associated while paused, but their
+presence is not a reason to re-enable. Resume only after the licensed physical
+Android cancellation, annual-purchase, and monthly-purchase cases all pass. If
+they pass, resume the unchanged R$30/day Install volume configuration and test
+the refreshed creative before considering scale or value bidding.
 
 The next controller actions are prepared but have not been performed:
 
+- In Google Ads, pause campaign `24120421103` without changing its configured
+  budget, bidding, conversion goals, targeting, end date, billing, or access.
 - In Google Play, update the full description for `en-US`, `pt-BR`, `es-ES`,
   `fr-FR`, `de-DE`, `it-IT`, `pl-PL`, and `ru-RU`; update the `pt-BR` short
   description; and upload the verified PT-BR feature graphic. Preserve all
@@ -153,10 +187,12 @@ The next controller actions are prepared but have not been performed:
   Preserve all five Portuguese headlines, all five Portuguese descriptions,
   the R$30/day budget, Install volume bidding, the sole Primary install goal,
   Brazil/Portuguese targeting, the 2026-09-19 end date, billing, and access.
-- Publishing the listing, uploading files, removing associations, and attaching
-  new assets require one grouped action-time controller confirmation. Until
-  that confirmation and a successful console save/review, local readiness must
-  not be described as a live Play or Ads change.
+  Perform this asset refresh while delivery is paused; attaching assets does
+  not authorize a restart.
+- Pausing the campaign, publishing the listing, uploading files, removing
+  associations, and attaching new assets require action-time controller
+  confirmation. Until that confirmation and successful console changes, local
+  readiness must not be described as a live Play or Ads change.
 
 This publication scope preserves the product economics: monthly remains an
 immediate charge with no trial; exactly 14 trial days remain limited to eligible
@@ -165,20 +201,29 @@ base-plan, offer, price, renewal, or entitlement configuration changes.
 
 Use this sequence:
 
-1. **Stage 0 — complete the deferred purchase validation:** complete and record
-   the cancellation, annual, and monthly physical-device cases. They remain
-   outstanding as of 2026-09-08 despite the operator's risk acceptance and must
-   not be marked green before they actually pass.
-2. **Stage A — qualified install learning is live:** the controlled window began
-   with the 2026-09-07 re-enable at R$30/day and has an explicit 2026-09-19 end
-   date. That 13-date span is nominally R$390; retain the R$420 operator ceiling
-   because Google may vary daily delivery. Keep Install volume (All users), no
-   target CPI, and install as the sole Primary action.
-3. **Stage B — conversion observation:** observe `begin_checkout` as Secondary
+1. **Stage 0 — pause the current spend:** the campaign was still Enabled /
+   Eligible at the 2026-09-09 verification. Pause it before any further
+   optimization or restart; do not alter its R$30/day configured budget,
+   Install volume bidding, Primary goal, geography, end date, billing, or
+   access while applying the stop gate.
+2. **Stage A — correct acquisition truth while paused:** publish the prepared
+   Google Play listing corrections. The reviewed image family may also replace
+   the four old Ads image associations while paused. Neither publication is an
+   instruction to resume delivery.
+3. **Stage B — complete the deferred purchase validation:** complete and record
+   the cancellation, annual, and monthly licensed physical-device cases. They
+   remain outstanding as of 2026-09-09 despite the earlier operator risk
+   acceptance and must not be marked green before they actually pass.
+4. **Stage C — controlled qualified-install restart:** only after all three
+   physical cases pass, resume at the unchanged R$30/day, with the explicit
+   2026-09-19 end date, Install volume (All users), no target CPI, and install as
+   the sole Primary action. Measure the refreshed creative without changing a
+   second material variable.
+5. **Stage D — conversion observation:** observe `begin_checkout` as Secondary
    without changing bidding, budget, goals, geography, or creatives in the same
    learning window. Reconcile every later trial with authoritative server/store
    validation.
-4. **Stage C — value optimization:** consider a separate value-optimization
+6. **Stage E — value optimization:** consider a separate value-optimization
    decision only after `verified_trial_start` is stable, unique, reconciled, and
    has enough volume for automated learning. Paid subscription starts remain the
    later business-quality check.
@@ -193,7 +238,7 @@ Reference:
 https://support.google.com/google-ads/answer/14104492
 
 The month-by-month sections below are a strategic sequencing framework. The
-controlling state updated on 2026-09-08 and the gate above govern campaign
+controlling state updated on 2026-09-09 and the gate above govern campaign
 operations; older day labels or allocations do not authorize a configuration
 change or extension of the current controlled learning window.
 
@@ -232,25 +277,30 @@ Each creator receives one brief but keeps their own voice:
 Do not script theological claims or guaranteed outcomes. Collect qualified
 traffic and identify the strongest hook.
 
-### Current controlled Google test — started 2026-09-07 by operator override
+### Controlled Google test — started 2026-09-07; pause now recommended
 
-Budget: R$30/day through the explicit 2026-09-19 end date; nominally R$390 over
-the 13-date span, with a R$420 operator ceiling.
+Configuration at the 2026-09-09 evidence snapshot: R$30/day through the explicit
+2026-09-19 end date. The originally scheduled 13-date span was nominally R$390,
+with a R$420 operator ceiling, but the current stop gate supersedes that nominal
+spend plan.
 
 - One Google Android App Campaign.
 - Brazil only, Portuguese assets only.
 - Maximize Conversions without an invented target CPI.
 - Keep install as the sole Primary action and `begin_checkout` as
   Secondary/observation-only.
-- Use the two strongest creator/Vella-owned videos plus square and landscape
-  adaptations.
-- Do not edit the campaign repeatedly during the learning period.
-- Do not judge profitability before the trial cohort has aged at least 18–21
-  days.
+- Pause before further optimization. While paused, publish the truthful Play
+  listing update and optionally associate the prepared brand-only images.
+- Do not restart until the licensed physical cancellation, annual-purchase, and
+  monthly-purchase cases pass.
+- After the gate passes, restart at the unchanged configuration and change only
+  the image family for a controlled creative measurement.
 
-The campaign can initially optimize toward installs while Vella observes trial
-and retention quality first-party. Do not scale an install winner that does not
-produce meaningful use and paid conversion.
+The campaign can optimize toward installs while Vella observes trial and
+retention quality first-party, but the current evidence contains no verified
+production trial cohort to mature. Do not buy or scale more installs until the
+purchase gate passes and paid traffic produces authoritative subscription
+outcomes.
 
 ## Month 2 — repeat the winner
 
