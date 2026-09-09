@@ -16,14 +16,14 @@ const PERMANENT_AUTH_ONLY_ROUTES = new Set([
   'attribution/install/link',
   'billing/checkout-session',
   'me',
-  'me/subscription-transitions/ack',
-  'me/subscription-transitions/claim',
 ]);
 
 const ANONYMOUS_AUTH_ALLOWED_ROUTES = new Set([
   'iap/client-event',
   'iap/validate-receipt',
   'me/entitlements',
+  'me/subscription-transitions/ack',
+  'me/subscription-transitions/claim',
 ]);
 
 const PUBLIC_CALLBACK_ROUTES = new Set([
@@ -235,7 +235,7 @@ describe('subscription-only access', () => {
     expect(improperlyExempted).toEqual([]);
   });
 
-  it('limits explicit anonymous auth to receipt validation and entitlement reads', () => {
+  it('limits explicit anonymous auth to purchase, entitlement, and transition delivery routes', () => {
     const apiRoot = path.resolve(process.cwd(), 'app/api/v1');
     const improperlyGuarded = collectRouteFiles(apiRoot)
       .filter((file) => {

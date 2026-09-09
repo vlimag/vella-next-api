@@ -46,6 +46,25 @@ describe('subscription marketing transition delivery routes', () => {
     expect(mocks.rpc).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['claim', (req: Request) => claimTransition(req), undefined],
+    ['ack', (req: Request) => acknowledgeTransition(req), { transitionId: TRANSITION_ID }],
+  ] as const)('explicitly permits the anonymous purchase owner for %s delivery', async (path, handler, body) => {
+    mocks.getUserIdFromAuthHeader.mockImplementation(async (options) => (
+      options?.allowAnonymous === true
+        ? { userId: USER_ID, isAnonymous: true }
+        : { error: 'Anonymous session is not allowed for this endpoint' }
+    ));
+    mocks.rpc.mockResolvedValue(path === 'claim'
+      ? { data: [], error: null }
+      : { data: true, error: null });
+
+    const response = await handler(request(path, body));
+
+    expect(response.status).toBe(200);
+    expect(mocks.getUserIdFromAuthHeader).toHaveBeenCalledWith({ allowAnonymous: true });
+  });
+
   it('returns an empty claim without inventing a transition', async () => {
     mocks.rpc.mockResolvedValue({ data: [], error: null });
 

@@ -11,7 +11,7 @@ function noStore(response: Response) {
 }
 
 export async function POST(request: Request) {
-  const auth = await getUserIdFromAuthHeader();
+  const auth = await getUserIdFromAuthHeader({ allowAnonymous: true });
   if (!('userId' in auth)) return noStore(fail(auth.error, 401));
 
   const parsed = transitionAcknowledgementSchema.safeParse(
