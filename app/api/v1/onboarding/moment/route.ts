@@ -16,6 +16,8 @@ const querySchema = z.object({
   lang: z.enum(PRAYER_MOMENT_LANGUAGES),
 }).strict();
 
+const CONTENT_LOOKUP_ATTEMPTS = 2;
+
 export async function GET(req: Request) {
   const parsed = parseQuery(querySchema, Object.fromEntries(new URL(req.url).searchParams.entries()));
   if ('error' in parsed) return parsed.error;
@@ -29,22 +31,26 @@ export async function GET(req: Request) {
       theme,
       lang,
       async (language: PrayerMomentLanguage) => {
-        const { data, error } = await supabase
-          .from('bible_verses')
-          .select(
-            'id, text_content, language_code, chapter, verse, bible_books!inner(code), bible_versions!inner(code, name, is_active)',
-          )
-          .eq('language_code', language)
-          .eq('chapter', reference.chapter)
-          .eq('verse', reference.verse)
-          .eq('bible_books.code', reference.book)
-          .eq('bible_versions.is_active', true)
-          .order('id', { ascending: true })
-          .limit(1)
-          .maybeSingle();
+        for (let attempt = 1; attempt <= CONTENT_LOOKUP_ATTEMPTS; attempt += 1) {
+          const { data, error } = await supabase
+            .from('bible_verses')
+            .select(
+              'id, text_content, language_code, chapter, verse, bible_books!inner(code), bible_versions!inner(code, name, is_active)',
+            )
+            .eq('language_code', language)
+            .eq('chapter', reference.chapter)
+            .eq('verse', reference.verse)
+            .eq('bible_books.code', reference.book)
+            .eq('bible_versions.is_active', true)
+            .order('id', { ascending: true })
+            .limit(1)
+            .maybeSingle();
 
-        if (error) throw error;
-        return data as unknown as PrayerMomentVerseRow | null;
+          if (!error) return data as unknown as PrayerMomentVerseRow | null;
+          if (attempt === CONTENT_LOOKUP_ATTEMPTS) throw error;
+        }
+
+        return null;
       },
     );
 
@@ -54,7 +60,7 @@ export async function GET(req: Request) {
 
     return ok(moment, {
       headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+        'Cache-Control': 'public, s-maxage=604800, stale-while-revalidate=2592000',
       },
     });
   } catch {

@@ -288,9 +288,13 @@ counts become zero and invalid nullable campaign metrics become `null`.
   protected-route regression is visible separately from user abandonment;
 - `first_experience_diagnostics`: aggregate unique installs for viewed,
   completed and error lifecycle events; per-step install/event counts; and
-  Android/iOS build/runtime rows. Step and release breakdown rows below 20
-  installs are suppressed, while permitted overall totals remain available. It
-  contains no event properties or installation identifiers;
+  Android/iOS build/runtime rows. Content-load errors are reported separately
+  as local fallbacks, including whether that same installation later completed
+  the first experience. Persistence/navigation failures remain separate as
+  completion errors, and malformed legacy stages are counted as unknown. Step
+  and release breakdown rows below 20 installs are suppressed, while permitted
+  overall totals remain available. It contains no event properties or
+  installation identifiers;
 - `release_funnel`: legacy route-derived release diagnostics retained for
   compatibility. Rows below 20 first opens are removed again by the API;
 - `auth_diagnostics`: aggregate auth-screen reach and coarse method/outcome

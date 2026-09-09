@@ -468,6 +468,11 @@ describe('growth operator routes', () => {
         viewed_installs: 0,
         completed_installs: 0,
         error_installs: 0,
+        content_fallback_installs: 0,
+        recovered_content_fallback_installs: 0,
+        unrecovered_content_fallback_installs: 0,
+        completion_error_installs: 0,
+        unknown_error_installs: 0,
         completion_rate: null,
         steps: [],
         releases: [],
@@ -2308,7 +2313,15 @@ describe('growth operator routes', () => {
         ...completedWithoutView.map((installation_id) => ({ installation_id, ...release23, properties: {} })),
       ],
       first_experience_error: [
-        ...retainedCohort.map((installation_id) => ({ installation_id, ...release22, properties: {} })),
+        ...retainedCohort.map((installation_id, index) => ({
+          installation_id,
+          ...release22,
+          properties: index < 12
+            ? { stage: 'content_load', error_code: 'network_unavailable' }
+            : index < 16
+              ? { stage: 'state_save', error_code: 'persistence_failed' }
+              : {},
+        })),
       ],
     };
     const { rpc } = mockGrowthRpcs(report);
@@ -2340,6 +2353,11 @@ describe('growth operator routes', () => {
       viewed_installs: 39,
       completed_installs: 20,
       error_installs: 20,
+      content_fallback_installs: 12,
+      recovered_content_fallback_installs: 12,
+      unrecovered_content_fallback_installs: 0,
+      completion_error_installs: 4,
+      unknown_error_installs: 4,
       completion_rate: 20 / 39,
       steps: [
         { step_key: 'arrival', installs: 20, events: 21 },
@@ -2407,6 +2425,11 @@ describe('growth operator routes', () => {
       viewed_installs: 0,
       completed_installs: 0,
       error_installs: 0,
+      content_fallback_installs: 0,
+      recovered_content_fallback_installs: 0,
+      unrecovered_content_fallback_installs: 0,
+      completion_error_installs: 0,
+      unknown_error_installs: 0,
       completion_rate: null,
       steps: [],
       releases: [],

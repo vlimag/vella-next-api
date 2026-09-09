@@ -32,6 +32,19 @@ function verseClient(result: { data: unknown; error: unknown }) {
   return { from: vi.fn(() => query) };
 }
 
+function sequencedVerseClient(results: Array<{ data: unknown; error: unknown }>) {
+  const queue = [...results];
+  const query: Record<string, unknown> = {};
+  query.select = vi.fn(() => query);
+  query.eq = vi.fn(() => query);
+  query.order = vi.fn(() => query);
+  query.limit = vi.fn(() => query);
+  const maybeSingle = vi.fn(async () => queue.shift() ?? results.at(-1));
+  query.maybeSingle = maybeSingle;
+
+  return { from: vi.fn(() => query), maybeSingle };
+}
+
 describe('GET /api/v1/onboarding/moment', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -84,8 +97,23 @@ describe('GET /api/v1/onboarding/moment', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('cache-control')).toBe(
-      'public, s-maxage=3600, stale-while-revalidate=86400',
+      'public, s-maxage=604800, stale-while-revalidate=2592000',
     );
+  });
+
+  it('retries one transient content lookup failure before returning an error', async () => {
+    const client = sequencedVerseClient([
+      { data: null, error: { message: 'temporary upstream timeout' } },
+      { data: approvedPortugueseVerse, error: null },
+    ]);
+    mocks.client = client;
+
+    const response = await GET(
+      new Request('https://vella.one/api/v1/onboarding/moment?theme=peace&lang=pt'),
+    );
+
+    expect(response.status).toBe(200);
+    expect(client.maybeSingle).toHaveBeenCalledTimes(2);
   });
 
   it('returns a coarse 404 when approved content is unavailable', async () => {

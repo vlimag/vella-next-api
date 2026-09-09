@@ -1495,6 +1495,30 @@ function firstExperienceDiagnostics(groups: {
   const completedRows = groups.completed.filter((row) => (
     typeof row.installation_id === 'string' && viewedInstallIds.has(row.installation_id)
   ));
+  const completedInstallIds = new Set(completedRows.flatMap((row) => (
+    typeof row.installation_id === 'string' ? [row.installation_id] : []
+  )));
+  const errorInstallIds = new Set(groups.errors.flatMap((row) => (
+    typeof row.installation_id === 'string' ? [row.installation_id] : []
+  )));
+  const contentFallbackInstallIds = new Set<string>();
+  const completionErrorInstallIds = new Set<string>();
+  for (const row of groups.errors) {
+    if (typeof row.installation_id !== 'string') continue;
+    const properties = row.properties as Record<string, unknown> | null | undefined;
+    if (properties?.stage === 'content_load') {
+      contentFallbackInstallIds.add(row.installation_id);
+    } else if (properties?.stage === 'state_save' || properties?.stage === 'navigation') {
+      completionErrorInstallIds.add(row.installation_id);
+    }
+  }
+  const recoveredContentFallbackInstallIds = new Set(
+    [...contentFallbackInstallIds].filter((installationId) => completedInstallIds.has(installationId)),
+  );
+  const knownErrorInstallIds = new Set([
+    ...contentFallbackInstallIds,
+    ...completionErrorInstallIds,
+  ]);
   const releaseGroups: Array<{ name: 'viewed' | 'completed' | 'errors'; rows: DiagnosticRow[] }> = [
     { name: 'viewed', rows: groups.viewed },
     { name: 'completed', rows: completedRows },
@@ -1526,7 +1550,14 @@ function firstExperienceDiagnostics(groups: {
   return {
     viewed_installs: viewedInstalls,
     completed_installs: completedInstalls,
-    error_installs: uniqueInstallations(groups.errors),
+    error_installs: errorInstallIds.size,
+    content_fallback_installs: contentFallbackInstallIds.size,
+    recovered_content_fallback_installs: recoveredContentFallbackInstallIds.size,
+    unrecovered_content_fallback_installs:
+      contentFallbackInstallIds.size - recoveredContentFallbackInstallIds.size,
+    completion_error_installs: completionErrorInstallIds.size,
+    unknown_error_installs: [...errorInstallIds]
+      .filter((installationId) => !knownErrorInstallIds.has(installationId)).length,
     completion_rate: viewedInstalls === 0 ? null : completedInstalls / viewedInstalls,
     steps: [...steps.entries()]
       .map(([step_key, value]) => ({ step_key, installs: value.installs.size, events: value.events }))
