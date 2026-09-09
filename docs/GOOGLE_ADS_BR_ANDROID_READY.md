@@ -6,10 +6,10 @@ This records the verified live configuration separately from older campaign
 snapshots and pre-launch plans. The production campaign was re-enabled by
 explicit operator override on 2026-09-07, delivered through the fresh
 2026-09-09 evidence window, and was paused again on 2026-09-09 before further
-optimization. The licensed physical-Android cancellation, annual, and monthly
-purchase test has not run and remains an outstanding validation. The truthful
-Play listing and reviewed image refresh were submitted while delivery was
-paused; neither action authorizes a restart.
+optimization. The physical Android monthly production purchase passed
+on 2026-09-09; the purchase-sheet cancellation and eligible annual 14-day trial
+cases remain outstanding. The truthful Play listing and reviewed image refresh
+were submitted while delivery was paused; neither action authorizes a restart.
 
 ## Current controlling state — updated 2026-09-09
 
@@ -40,6 +40,15 @@ plan or snapshot below wherever they differ.
   endpoint, kept missing-bearer requests protected with 401, and accepted and
   persisted a privacy-safe IAP diagnostic from a real Supabase-anonymous bearer
   with 202; the smoke event and user were then removed.
+- The separate background subscription-transition claim/ack path rejected
+  authenticated anonymous purchase sessions with 401. API commit
+  `6bb91c330a40b2b63ad1d6f2f1220d8c82f32c37` corrects that measurement-delivery
+  path and is deployed to production as
+  `dpl_9bNsQfey3SDJCHWc9JNCxfY7TKJy` at `https://vella.one`. The fix is
+  backend-only: it requires no native build or mobile OTA. Post-deploy checks
+  returned 200 for an authenticated anonymous claim with no queued transition,
+  404 for an authenticated acknowledgement of an unowned transition, and 401
+  when the bearer was absent; the disposable anonymous smoke user was removed.
 - At publication time, mobile `main` was pushed and clean at
   `1e5802e937c34397d98dd1b487e6492b8a12eb64`, with zero divergence from
   `origin/main`. The 2026-09-08 production OTA remains group
@@ -77,12 +86,16 @@ plan or snapshot below wherever they differ.
   and do not clear the separate real-UI gate. Apple and Play screenshots plus
   all UI-dependent Ads still and video masters remain **HOLD** with zero
   approved captures; no fabricated or wrong-platform UI may replace them.
-- The licensed physical Android test has not run: it must still record one
-  intentional cancellation, then verify both annual and monthly purchases reach
-  authoritative receipt validation and Premium entitlement. The operator
-  explicitly accepted the risk of re-enabling before this validation; do not
-  record this gate as complete until the three cases actually pass. It remained
-  outstanding on 2026-09-09.
+- The physical Android monthly production case passed at approximately 11:09 BRT
+  on 2026-09-09. Product `vella.premium.monthly` was purchased in the Production
+  environment with billing phase `paid`, authoritative validation `valid`, and
+  auto-renew enabled through 2026-10-09. The purchase callback, receipt
+  validation, and finish steps all succeeded; no failed receipt or API 5xx was
+  observed, and Premium/Home ultimately worked. A transient Home message,
+  `Falha na solicitação de rede`, recovered on retry. This proves only the
+  monthly case: an intentional purchase-sheet cancellation and an eligible
+  annual purchase showing the 14-day trial and reaching authoritative receipt
+  validation and Premium entitlement remain required.
 - First-party Vella telemetry for 2026-09-02 through 2026-09-08 recorded 96
   first opens, 46 onboarding completions, 41 installs reaching the paywall, 14
   installs starting checkout, zero verified production trials, and zero
@@ -134,14 +147,15 @@ Fresh production evidence for 2026-09-02 through 2026-09-08:
   account creation. This is not evidence that account creation itself failed.
 
 This evidence does not support scaling or value optimization. Paid spend was
-**paused before further campaign optimization or restart** on 2026-09-09. Run
-the licensed physical Android cancellation, annual-purchase, and
-monthly-purchase gate next. The truthful Play listing correction and reviewed
-image refresh are now in review, but the campaign must not be re-enabled merely
-because those submissions were completed. Re-enable only after all three
-physical cases pass; if they pass, resume at the unchanged R$30/day, Install
-volume configuration and measure the refreshed creative before any scale
-decision.
+**paused before further campaign optimization or restart** on 2026-09-09. The
+physical Android monthly purchase gate is now complete; run the
+purchase-sheet cancellation and eligible annual 14-day trial cases next. The
+truthful Play listing correction and reviewed image refresh are now in review,
+but the campaign must not be re-enabled merely because those submissions were
+completed or because the monthly case passed. Re-enable only after both
+remaining physical cases pass; if they pass, resume at the unchanged R$30/day,
+Install volume configuration and measure the refreshed creative before any
+scale decision.
 
 External changes performed on 2026-09-09:
 
@@ -301,10 +315,10 @@ release of any held screenshot or video master.
   privacy-safe diagnostic from the technical anonymous session while retaining
   bearer protection. The current mobile production OTA is group
   `fc429d67-5e5a-4860-84f8-ed62c4881f82` from clean, pushed mobile main commit
-  `1e5802e937c34397d98dd1b487e6492b8a12eb64`. The licensed physical Android
-  purchase validation remains incomplete, even though the operator explicitly
-  accepted that risk and re-enabled the campaign on 2026-09-07. The later
-  2026-09-09 pause restored the physical-purchase gate before any restart.
+  `1e5802e937c34397d98dd1b487e6492b8a12eb64`. The physical Android monthly
+  production purchase passed on 2026-09-09; the cancellation and eligible annual
+  14-day trial cases remain incomplete. The later 2026-09-09 pause keeps those
+  two physical-purchase gates in force before any restart.
 - Keep every other lifecycle/subscription action Secondary or unimported until
   exact-build observation and authoritative server/store reconciliation exist.
 - Google Ads and Play Console own the ad-click-to-install view.
@@ -328,10 +342,11 @@ release of any held screenshot or video master.
 
 Evidence gates before any campaign restart, optimization change, or expansion:
 
-1. Complete one licensed physical Android cancellation, one annual purchase,
-   and one monthly purchase. Both purchases must reach authoritative receipt
-   validation and Premium entitlement; viewing correct offer terms is not a
-   substitute.
+1. The physical Android monthly production purchase is complete.
+   Complete one purchase-sheet cancellation and one eligible annual purchase;
+   the annual case must show the correct 14-day trial and reach authoritative
+   receipt validation and Premium entitlement. Viewing correct offer terms is
+   not a substitute.
 2. Process the Android Release manifest and prove both advertising-ID
    permissions are absent while privacy-preserving attribution remains present.
 3. Observe each intended event on a production-equivalent test device in
@@ -382,8 +397,12 @@ Conversion hierarchy controlling the paused/restart state and later changes:
       from account-level goals.
 - [x] Public Android listing and website CTA pass live smoke tests.
 - [ ] Real annual trial shows 14 days and the correct local renewal price.
-- [ ] Licensed physical Android cancellation plus annual and monthly purchase,
-      receipt validation, and Premium-entitlement paths are verified.
+- [x] Physical Android monthly production purchase reached a valid
+      authoritative receipt, successful finish, and Premium entitlement on
+      2026-09-09.
+- [ ] Licensed physical Android purchase-sheet cancellation and eligible annual
+      14-day trial purchase, receipt-validation, and Premium-entitlement paths
+      are verified.
 - [x] First-party ingestion, retention, operator report, and privacy disclosure
       are live.
 - [x] At OTA publication time, mobile main was pushed clean with zero remote
@@ -417,12 +436,14 @@ Conversion hierarchy controlling the paused/restart state and later changes:
       date, billing, or access. Fresh inspection confirmed Paused, R$30/day,
       Install volume (All users), Maximize conversions, no target CPI, Brazil,
       Portuguese, and the 2026-09-19 end date.
-- [ ] Complete and record the licensed physical Android cancellation plus
-      annual and monthly purchase, receipt-validation, and Premium-entitlement
-      cases. As of 2026-09-09, this test has not run.
-- [ ] Re-enable only after all three licensed physical Android cases pass; use
-      the unchanged R$30/day Install volume configuration for the controlled
-      creative measurement before any scale or value-optimization decision.
+- [x] Complete and record the physical Android monthly production
+      purchase, receipt-validation, finish, and Premium-entitlement case.
+- [ ] Complete and record the licensed physical Android purchase-sheet
+      cancellation and eligible annual 14-day trial case.
+- [ ] Re-enable only after both remaining licensed physical Android cases pass;
+      use the unchanged R$30/day Install volume configuration for the
+      controlled creative measurement before any scale or value-optimization
+      decision.
 - [x] The controlled learning window began on 2026-09-07 at R$30/day for at
       most 13 scheduled dates through the explicit 2026-09-19 end date
       (nominally R$390, with a R$420 operator ceiling). The 2026-09-09 stop gate

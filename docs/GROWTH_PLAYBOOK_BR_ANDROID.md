@@ -91,11 +91,29 @@ purchase action also remains Secondary. Do not import or optimize toward
 
 The anonymous-IAP endpoint fix introduced in API main commit `52c5bac` is
 deployed on `vella.one`; the production health, missing-bearer protection, and
-real anonymous-bearer diagnostic smoke checks passed. The licensed physical
-Android test has not run: the intentional cancellation plus annual and monthly
-purchase cases remain pending as of 2026-09-09. The operator explicitly
-accepted that risk for the immediate re-enable; this override does not count
-the test as completed.
+real anonymous-bearer diagnostic smoke checks passed. The physical Android
+monthly production purchase passed on 2026-09-09. The intentional
+purchase-sheet cancellation and eligible annual 14-day trial purchase remain
+pending, so the campaign remains paused.
+
+At approximately 11:09 BRT, product `vella.premium.monthly` completed a
+physical Android purchase in the Production environment. Its billing phase was
+`paid`, authoritative validation was `valid`, auto-renew was enabled through
+2026-10-09, and the purchase callback, receipt validation, and finish steps all
+succeeded. There were no failed receipts or API 5xx responses, and Premium/Home
+ultimately worked. A transient Home message, `Falha na solicitação de rede`,
+recovered on retry. This is production proof for the monthly case only; it does
+not substitute for the two remaining physical cases.
+
+A separate background subscription-transition claim/ack path rejected
+authenticated anonymous purchase sessions with 401. API commit
+`6bb91c330a40b2b63ad1d6f2f1220d8c82f32c37` fixes that measurement-delivery
+path and is deployed to production as `dpl_9bNsQfey3SDJCHWc9JNCxfY7TKJy` at
+`https://vella.one`. This backend-only correction requires no native build or
+mobile OTA. Post-deploy checks returned 200 for an authenticated anonymous claim
+with no queued transition, 404 for an authenticated acknowledgement of an
+unowned transition, and 401 when the bearer was absent; the disposable anonymous
+smoke user was removed.
 
 At OTA publication time, mobile `main` and `origin/main` were aligned at
 `1e5802e937c34397d98dd1b487e6492b8a12eb64`. The current production OTA remains
@@ -171,10 +189,11 @@ The evidence is sufficient to reject scaling, but not to diagnose price or
 subscriber economics. Paid spend was paused on 2026-09-09 before any further
 optimization or restart. The truthful Play listing corrections and six-image
 Ads refresh were submitted while paused, but their presence is not a reason to
-re-enable. Resume only after the licensed physical Android cancellation,
-annual-purchase, and monthly-purchase cases all pass. If they pass, resume the
-unchanged R$30/day Install volume configuration and test the refreshed creative
-before considering scale or value bidding.
+re-enable. The monthly production purchase has passed; resume only after the
+licensed physical Android purchase-sheet cancellation and eligible annual
+14-day trial purchase also pass. Then resume the unchanged R$30/day Install
+volume configuration and test the refreshed creative before considering scale
+or value bidding.
 
 Controller actions completed on 2026-09-09:
 
@@ -212,11 +231,11 @@ Use this sequence:
    The prepared Google Play listing corrections and the reviewed six-image Ads
    family are under review. Their submission is not an instruction to resume
    delivery.
-3. **Stage B — complete the deferred purchase validation:** complete and record
-   the cancellation, annual, and monthly licensed physical-device cases. They
-   remain outstanding as of 2026-09-09 despite the earlier operator risk
-   acceptance and must not be marked green before they actually pass.
-4. **Stage C — controlled qualified-install restart:** only after all three
+3. **Stage B — complete the deferred purchase validation:** the monthly
+   physical-device production case passed on 2026-09-09. Complete and record the
+   purchase-sheet cancellation and eligible annual 14-day trial purchase; do
+   not mark either remaining case green before it actually passes.
+4. **Stage C — controlled qualified-install restart:** only after both remaining
    physical cases pass, resume at the unchanged R$30/day, with the explicit
    2026-09-19 end date, Install volume (All users), no target CPI, and install as
    the sole Primary action. Measure the refreshed creative without changing a
@@ -293,8 +312,9 @@ spend plan.
   Secondary/observation-only.
 - Delivery is paused. The truthful Play listing update and prepared brand-only
   images were submitted while paused and are under review.
-- Do not restart until the licensed physical cancellation, annual-purchase, and
-  monthly-purchase cases pass.
+- The physical Android monthly production purchase passed on 2026-09-09. Do
+  not restart until the purchase-sheet cancellation and eligible annual 14-day
+  trial purchase also pass.
 - After the gate passes, restart at the unchanged configuration and change only
   the image family for a controlled creative measurement.
 
