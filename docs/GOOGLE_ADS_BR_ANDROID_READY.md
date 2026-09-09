@@ -4,12 +4,12 @@ Last updated: 2026-09-09
 
 This records the verified live configuration separately from older campaign
 snapshots and pre-launch plans. The production campaign was re-enabled by
-explicit operator override on 2026-09-07 and remained Enabled / Eligible with
-no serving issue at the fresh 2026-09-09 verification. The licensed
-physical-Android cancellation, annual, and monthly purchase test has not run
-and remains an outstanding validation. Fresh checkout evidence now makes
-pausing spend the controlling recommendation before any further optimization
-or restart; this document does not record that pause as performed.
+explicit operator override on 2026-09-07, delivered through the fresh
+2026-09-09 evidence window, and was paused again on 2026-09-09 before further
+optimization. The licensed physical-Android cancellation, annual, and monthly
+purchase test has not run and remains an outstanding validation. The truthful
+Play listing and reviewed image refresh were submitted while delivery was
+paused; neither action authorizes a restart.
 
 ## Current controlling state — updated 2026-09-09
 
@@ -17,16 +17,18 @@ This section is the controlling operational record and supersedes every older
 plan or snapshot below wherever they differ.
 
 - Campaign `Vella_BR_Android_202608_PrayerDaily` (ID `24120421103`) is
-  **Enabled / Eligible** as last verified on 2026-09-09, with no serving issue.
-  Its configured budget remains **R$30/day**, with Brazil-only and Portuguese
-  targeting. The known religious-belief limitation is expected for this
-  product; it is not a disapproval.
+  **Paused** as verified on 2026-09-09. Google Ads reports that the campaign
+  cannot run because it is paused. Its configured budget remains
+  **R$30/day**, with Brazil-only and Portuguese targeting. The known
+  religious-belief limitation is expected for this product when delivery is
+  active; it is not a disapproval.
 - Bidding remains **Install volume (All users)** / Maximize conversions, with no
-  target CPI. Re-enabling did not change budget, bidding, targeting, billing, or
-  access. The controlled learning window began on 2026-09-07 and now has an
-  explicit campaign end date of **2026-09-19**. At R$30/day, the originally
-  scheduled 13-date span was nominally R$390 with an R$420 operator ceiling, but
-  the 2026-09-09 pause-before-restart gate supersedes that nominal spend plan.
+  target CPI. The pause and image-only refresh did not change budget, bidding,
+  goals, targeting, end date, billing, or access. The controlled learning
+  window began on 2026-09-07 and retains its explicit campaign end date of
+  **2026-09-19**. At R$30/day, the originally scheduled 13-date span was
+  nominally R$390 with an R$420 operator ceiling, but the 2026-09-09
+  pause-before-restart gate supersedes that nominal spend plan.
 - Google Play and the intended GA4 property are linked. `begin_checkout` was
   marked as a GA4 key event and imported into Google Ads as **Secondary**,
   observation-only, and excluded from account-level goals. The single Google
@@ -62,15 +64,19 @@ plan or snapshot below wherever they differ.
   expectations, TypeScript checking, and the truthful PT-BR package verifier;
   the verifier confirmed that the non-UI Ads stills are ready while every
   UI-dependent export remains blocked.
-- The final Play PT-BR feature graphic is ready at 1024×500, 8-bit RGB without
-  alpha, 496,606 bytes, SHA-256
+- The final Play PT-BR feature graphic was submitted to Google Play on
+  2026-09-09. It is 1024×500, 8-bit RGB without alpha, 496,606 bytes, SHA-256
   `7d595e7252163d4993a91e48efca8577f64b016f4356aa079ff710141eff3110`.
-  Six brand-only Ads stills are also ready for controller upload: two concepts,
-  each exported at exactly 1200×1500, 1200×1200, and 1200×628. They use
-  the current Vella brand, contain no product UI, and do not clear the separate
-  real-UI gate. Apple and Play screenshots plus all UI-dependent Ads still and
-  video masters remain **HOLD** with zero approved captures; no fabricated or
-  wrong-platform UI may replace them.
+  Google Play lists exactly ten changes in review: eight localized full
+  descriptions, the PT-BR short description, and the PT-BR feature graphic.
+  Google Play subsequently reported that the changes are now in review; this
+  is a submission, not an approval or publication claim. The six brand-only Ads
+  stills were also associated on 2026-09-09: two concepts, each at exactly
+  1200×1500, 1200×1200, and 1200×628. All six report Pending / Under review and
+  Campaign is paused. They use the current Vella brand, contain no product UI,
+  and do not clear the separate real-UI gate. Apple and Play screenshots plus
+  all UI-dependent Ads still and video masters remain **HOLD** with zero
+  approved captures; no fabricated or wrong-platform UI may replace them.
 - The licensed physical Android test has not run: it must still record one
   intentional cancellation, then verify both annual and monthly purchases reach
   authoritative receipt validation and Premium entitlement. The operator
@@ -127,43 +133,38 @@ Fresh production evidence for 2026-09-02 through 2026-09-08:
   account flow: without a completed production purchase, users do not reach
   account creation. This is not evidence that account creation itself failed.
 
-This evidence does not support scaling or value optimization. The controlling
-operator recommendation is to **pause paid spend before any further campaign
-optimization or restart**, then run the licensed physical Android cancellation,
-annual-purchase, and monthly-purchase gate. The truthful Play listing correction
-should still be published while spend is paused. The prepared image refresh may
-also be uploaded and associated while paused, but the campaign must not be
-re-enabled merely because new assets are attached. Re-enable only after all
-three physical cases pass; if they pass, resume at the unchanged R$30/day,
-Install volume configuration and measure the refreshed creative before any
-scale decision.
+This evidence does not support scaling or value optimization. Paid spend was
+**paused before further campaign optimization or restart** on 2026-09-09. Run
+the licensed physical Android cancellation, annual-purchase, and
+monthly-purchase gate next. The truthful Play listing correction and reviewed
+image refresh are now in review, but the campaign must not be re-enabled merely
+because those submissions were completed. Re-enable only after all three
+physical cases pass; if they pass, resume at the unchanged R$30/day, Install
+volume configuration and measure the refreshed creative before any scale
+decision.
 
-Prepared external changes, not yet performed:
+External changes performed on 2026-09-09:
 
-- **Google Ads delivery:** pause campaign `24120421103` without changing its
-  configured budget, bidding, conversion goals, targeting, end date, billing,
-  or access. Do not treat an asset upload as permission to re-enable it.
-- **Google Play:** replace the localized full description for `en-US`, `pt-BR`,
-  `es-ES`, `fr-FR`, `de-DE`, `it-IT`, `pl-PL`, and `ru-RU`; replace only the
-  `pt-BR` short description; and upload the verified PT-BR feature graphic.
-  Preserve every title, every non-PT short description, and all icon,
-  screenshot, video, and tablet assets.
-- **Google Ads:** remove the four existing image associations, including the
-  one visibly containing English, then upload and associate the six reviewed
-  brand-only stills. Preserve all five Portuguese headlines, all five
-  Portuguese descriptions, R$30/day, Install volume bidding, the sole Primary
-  install goal, Brazil/Portuguese targeting, the 2026-09-19 end date, billing,
-  and access. Perform the image-association change while the campaign is paused;
-  it is not authorization to restart delivery.
-- None of the external changes above has been made in Google Play Console or
-  Google Ads. They remain blocked on action-time controller confirmation
-  covering the campaign pause, listing publication, file uploads,
-  image-association removal, and ad asset association. Local readiness is not
-  evidence of publication.
-- The prepared copy and image changes do not alter commerce: monthly remains an
+- **Google Ads delivery:** campaign `24120421103` was paused. Fresh settings
+  inspection retained R$30/day, Install volume (All users), Maximize
+  conversions, no target CPI, Brazil, Portuguese, and the 2026-09-19 end date.
+- **Google Play:** exactly ten changes were submitted for review: the full
+  description for `en-US`, `pt-BR`, `es-ES`, `fr-FR`, `de-DE`, `it-IT`,
+  `pl-PL`, and `ru-RU`; the `pt-BR` short description; and the verified PT-BR
+  feature graphic. Every title, every non-PT short description, and all icon,
+  screenshot, video, and tablet assets were preserved. The new feature graphic
+  was truthfully included in the existing AI-assisted asset declaration.
+- **Google Ads assets:** the four old image associations were removed and the
+  six reviewed brand-only stills were uploaded and associated. The saved report
+  contains two 1200×1500 Portrait, two 1200×1200 Square, and two 1200×628
+  Landscape rows, all Pending / Under review while the campaign is paused. All
+  five Portuguese headlines and all five Portuguese descriptions were
+  preserved.
+- These completed controller actions did not alter commerce: monthly remains an
   immediate charge with no trial; only eligible new annual subscribers receive
   exactly 14 trial days; there is no permanent free tier; and product, base-plan,
-  offer, price, renewal, and entitlement configuration remain untouched.
+  offer, price, renewal, and entitlement configuration remain untouched. They
+  also did not alter Ads bidding, goals, budget, targeting, billing, or access.
 
 Current text assets saved on 2026-08-30:
 
@@ -184,10 +185,10 @@ Descriptions:
 5. `Ore, busque versículos e siga jornadas guiadas com todos os recursos Premium.`
 
 The current ad asset report contains all five Portuguese headlines and all five
-Portuguese descriptions above. Preserve them during the prepared image-only
-refresh. Pause delivery before further optimization while keeping the configured
-R$30/day budget and Install volume bid mode unchanged. Do not restart until the
-deferred physical purchase validation passes.
+Portuguese descriptions above plus the six new image rows described above. The
+ad is under review and the campaign remains paused at the configured R$30/day
+budget and unchanged Install volume bid mode. Do not restart until the deferred
+physical purchase validation passes.
 
 ## Account and campaign-history evidence
 
@@ -197,9 +198,9 @@ deferred physical purchase validation passes.
 - Time zone: `(GMT-03:00) Brasília`.
 - Currency: BRL. Currency and time zone cannot be casually changed later.
 - Production campaign ID: `24120421103`.
-- Current status verified on 2026-09-09 after the earlier operator override:
-  **Enabled / Eligible**, with no serving issue. The controlling recommendation
-  is to pause; no pause is recorded as performed here.
+- Current status verified after the 2026-09-09 stop action: **Paused**. The
+  earlier Enabled / Eligible state remains historical evidence for the
+  Sep 2–8 delivery window, not the current delivery state.
 - An older UI snapshot showed **Ended / inactive**; that snapshot is historical
   and must not be used as the current campaign state.
 - Historical budget: R$46/day.
@@ -286,9 +287,10 @@ Required exports:
 
 The six prepared September brand-only stills are an intentionally narrower
 interim asset family. Two brand concepts have verified 1200×1500,
-1200×1200, and 1200×628 exports ready for controller upload. Because they
-contain no product UI, they do not satisfy the real-UI requirement above and do
-not authorize generation or release of any held screenshot or video master.
+1200×1200, and 1200×628 exports. All six were controller-uploaded and associated
+on 2026-09-09 and are under review. Because they contain no product UI, they do
+not satisfy the real-UI requirement above and do not authorize generation or
+release of any held screenshot or video master.
 
 ## Conversion and reporting truth
 
@@ -301,7 +303,8 @@ not authorize generation or release of any held screenshot or video master.
   `fc429d67-5e5a-4860-84f8-ed62c4881f82` from clean, pushed mobile main commit
   `1e5802e937c34397d98dd1b487e6492b8a12eb64`. The licensed physical Android
   purchase validation remains incomplete, even though the operator explicitly
-  accepted that risk and re-enabled the campaign on 2026-09-07.
+  accepted that risk and re-enabled the campaign on 2026-09-07. The later
+  2026-09-09 pause restored the physical-purchase gate before any restart.
 - Keep every other lifecycle/subscription action Secondary or unimported until
   exact-build observation and authoritative server/store reconciliation exist.
 - Google Ads and Play Console own the ad-click-to-install view.
@@ -393,22 +396,27 @@ Conversion hierarchy controlling the paused/restart state and later changes:
 - [x] The PT-BR Play feature graphic and six brand-only Ads stills are verified
       and inventoried; all UI-dependent screenshot and Ads media exports remain
       explicitly held.
-- [ ] Publish the prepared eight-locale Play description scope, PT-BR short
+- [x] Submit the prepared eight-locale Play description scope, PT-BR short
       description, and PT-BR feature graphic after grouped controller
-      confirmation, without changing any preserved listing field.
-- [ ] Remove the four old Ads image associations and associate the six prepared
+      confirmation, without changing any preserved listing field. Google Play
+      showed ten changes in review on 2026-09-09; approval/publication is still
+      pending.
+- [x] Remove the four old Ads image associations and associate the six prepared
       brand stills after the same grouped controller confirmation, without
-      changing text or campaign settings.
+      changing text or campaign settings. All six were Pending / Under review
+      on 2026-09-09.
 - [ ] At least two real-UI creatives pass the truth/privacy review.
 - [x] Campaign `24120421103` was paused on 2026-09-07 without changing its
       R$30/day budget, Install volume bidding, or Brazil/Portuguese targeting.
 - [x] The operator explicitly accepted the pending physical-purchase risk and
-      re-enabled campaign `24120421103` on 2026-09-07; its live status was
-      verified on 2026-09-09 as Enabled / Eligible with no serving issue and
+      re-enabled campaign `24120421103` on 2026-09-07; its pre-pause live status
+      was verified on 2026-09-09 as Enabled / Eligible with no serving issue and
       configuration unchanged.
-- [ ] Pause campaign `24120421103` following the 2026-09-09 production evidence,
+- [x] Pause campaign `24120421103` following the 2026-09-09 production evidence,
       without changing its configured budget, bidding, goals, targeting, end
-      date, billing, or access. This document does not record the pause as done.
+      date, billing, or access. Fresh inspection confirmed Paused, R$30/day,
+      Install volume (All users), Maximize conversions, no target CPI, Brazil,
+      Portuguese, and the 2026-09-19 end date.
 - [ ] Complete and record the licensed physical Android cancellation plus
       annual and monthly purchase, receipt-validation, and Premium-entitlement
       cases. As of 2026-09-09, this test has not run.
