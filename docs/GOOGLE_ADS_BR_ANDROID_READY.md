@@ -87,7 +87,7 @@ plan or snapshot below wherever they differ.
   all UI-dependent Ads still and video masters remain **HOLD** with zero
   approved captures; no fabricated or wrong-platform UI may replace them.
 - The physical Android monthly production case passed at approximately 11:09 BRT
-  on 2026-09-09. Product `vella.premium.monthly` was purchased in the Production
+  on 2026-09-09. The monthly product was purchased in the Production
   environment with billing phase `paid`, authoritative validation `valid`, and
   auto-renew enabled through 2026-10-09. The purchase callback, receipt
   validation, and finish steps all succeeded; no failed receipt or API 5xx was
