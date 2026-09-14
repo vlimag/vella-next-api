@@ -184,13 +184,10 @@ const ORDERED_STAGE_ORDERS: Record<string, ReadonlyMap<string, number>> = {
     ['first_open', 1],
     ['onboarding_started', 2],
     ['onboarding_completed', 3],
-    ['first_experience_viewed', 4],
-    ['first_experience_completed', 5],
-    ['paywall_viewed', 6],
-    ['plan_selected', 7],
-    ['auth_started', 8],
-    ['checkout_started', 9],
-    ['authenticated_active_subscription_bypass', 10],
+    ['paywall_viewed', 4],
+    ['plan_selected', 5],
+    ['checkout_started', 6],
+    ['authenticated_active_subscription_bypass', 7],
   ]),
 };
 const ONBOARDING_STEP_KEYS = new Set([
@@ -714,6 +711,9 @@ function projectDiagnosticSummary(
       contains_ip_or_raw_content: privacy.contains_ip_or_raw_content === false ? false : true,
       contains_account_identifier: privacy.contains_account_identifier === false ? false : true,
       client_subscription_events_are_authoritative: privacy.client_subscription_events_are_authoritative === true,
+      conversion_v3_ordered_funnel: privacy.conversion_v3_ordered_funnel === true,
+      compact_v2_requires_permanent_auth: privacy.compact_v2_requires_permanent_auth !== false,
+      compact_v2_requires_first_experience: privacy.compact_v2_requires_first_experience !== false,
     },
   };
 }

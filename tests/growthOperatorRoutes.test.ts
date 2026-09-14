@@ -378,6 +378,9 @@ describe('growth operator routes', () => {
         minimum_transition_subscriptions: 20,
         small_release_cohorts_omitted: true,
         small_transition_segments_omitted: true,
+        conversion_v3_ordered_funnel: true,
+        compact_v2_requires_permanent_auth: false,
+        compact_v2_requires_first_experience: false,
       },
     };
     const { rpc } = mockGrowthRpcs(report);
@@ -584,11 +587,14 @@ describe('growth operator routes', () => {
         minimum_transition_subscriptions: 19,
         small_release_cohorts_omitted: false,
         small_transition_segments_omitted: false,
+        conversion_v3_ordered_funnel: true,
+        compact_v2_requires_permanent_auth: false,
+        compact_v2_requires_first_experience: false,
       },
       ordered_funnel: [
         { funnel_variant: 'legacy_v1', event_name: 'first_open', stage_order: 1, unique_installs: 21 },
         { funnel_variant: 'legacy_v1', event_name: 'checkout_started', stage_order: 9, unique_installs: 1 },
-        { funnel_variant: 'compact_v2', event_name: 'paywall_viewed', stage_order: 6, unique_installs: 2 },
+        { funnel_variant: 'compact_v2', event_name: 'paywall_viewed', stage_order: 4, unique_installs: 2 },
         {
           funnel_variant: adversarialDimension,
           event_name: adversarialDimension,
@@ -652,7 +658,7 @@ describe('growth operator routes', () => {
     expect(body.data.ordered_funnel).toEqual([
       { funnel_variant: 'legacy_v1', event_name: 'first_open', stage_order: 1, unique_installs: 21 },
       { funnel_variant: 'legacy_v1', event_name: 'checkout_started', stage_order: 9, unique_installs: 1 },
-      { funnel_variant: 'compact_v2', event_name: 'paywall_viewed', stage_order: 6, unique_installs: 2 },
+      { funnel_variant: 'compact_v2', event_name: 'paywall_viewed', stage_order: 4, unique_installs: 2 },
     ]);
     expect(body.data.diagnostic_totals.source_of_truth).toBe('independent_client_events');
     expect(body.data.diagnostic_totals.vella_profile_initialized).toEqual({
@@ -667,6 +673,9 @@ describe('growth operator routes', () => {
       minimum_transition_subscriptions: 20,
       small_release_cohorts_omitted: true,
       small_transition_segments_omitted: true,
+      conversion_v3_ordered_funnel: true,
+      compact_v2_requires_permanent_auth: false,
+      compact_v2_requires_first_experience: false,
     });
     expect(body.data.release_cohorts).toEqual([expect.objectContaining({
       build_number: '20', platform: 'ios', cohort_day: '2026-07-01',
@@ -1674,6 +1683,9 @@ describe('growth operator routes', () => {
       contains_ip_or_raw_content: false,
       contains_account_identifier: false,
       client_subscription_events_are_authoritative: false,
+      conversion_v3_ordered_funnel: false,
+      compact_v2_requires_permanent_auth: true,
+      compact_v2_requires_first_experience: true,
       ordered_by_occurred_at: true,
       minimum_release_installs: 20,
       minimum_transition_subscriptions: 20,
