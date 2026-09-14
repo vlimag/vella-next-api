@@ -3,6 +3,47 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 describe('ordered growth funnel migration', () => {
+  it('replaces compact-v2 ordering with the direct Conversion V3 purchase path', () => {
+    const migrationsPath = path.resolve(process.cwd(), 'supabase/migrations');
+    const migrationName = fs.readdirSync(migrationsPath)
+      .find((name) => name.endsWith('_conversion_v3_ordered_funnel.sql'));
+    expect(migrationName).toBeDefined();
+    if (!migrationName) return;
+
+    const migration = fs.readFileSync(path.join(migrationsPath, migrationName), 'utf8');
+    const summaryFunction = migration.match(
+      /create or replace function faith_harbor\.growth_analytics_summary\([\s\S]*?\n\$\$;/,
+    )?.[0] ?? '';
+    const compactStages = summaryFunction.match(
+      /\('compact_v2'[\s\S]*?\)\s*\n\s*\), eligible_first_opens/,
+    )?.[0] ?? '';
+
+    expect(migration).toMatch(
+      /alter function faith_harbor\.growth_analytics_summary\(date, date, integer\)\s+rename to growth_analytics_summary_pre_conversion_v3;/,
+    );
+    expect(summaryFunction).toContain('security invoker');
+    expect(summaryFunction).toMatch(/set search_path\s*=\s*''/);
+    expect(summaryFunction).toContain(
+      'v_previous := faith_harbor.growth_analytics_summary_pre_conversion_v3(',
+    );
+    expect(compactStages).toContain("('compact_v2', 'first_open', 1)");
+    expect(compactStages).toContain("('compact_v2', 'onboarding_started', 2)");
+    expect(compactStages).toContain("('compact_v2', 'onboarding_completed', 3)");
+    expect(compactStages).toContain("('compact_v2', 'paywall_viewed', 4)");
+    expect(compactStages).toContain("('compact_v2', 'plan_selected', 5)");
+    expect(compactStages).toContain("('compact_v2', 'checkout_started', 6)");
+    expect(compactStages).not.toContain("'first_experience_viewed'");
+    expect(compactStages).not.toContain("'first_experience_completed'");
+    expect(compactStages).not.toContain("'auth_started'");
+    expect(summaryFunction).toContain("'conversion_v3_ordered_funnel', true");
+    expect(migration).toMatch(
+      /revoke all on function faith_harbor\.growth_analytics_summary\(date, date, integer\)\s+from public, anon, authenticated;/,
+    );
+    expect(migration).toMatch(
+      /grant execute on function faith_harbor\.growth_analytics_summary\(date, date, integer\)\s+to service_role;/,
+    );
+  });
+
   it('defines occurred-at reporting with service-only privacy gates and legacy skew keys', () => {
     const migrationsPath = path.resolve(process.cwd(), '../supabase/migrations');
     const migrationName = fs.readdirSync(migrationsPath)
