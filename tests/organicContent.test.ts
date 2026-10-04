@@ -1,6 +1,8 @@
 import { createRequire } from 'node:module';
 import sharp from 'sharp';
 import { describe, expect, it } from 'vitest';
+import { NextRequest } from 'next/server';
+import { middleware } from '@/middleware';
 import ArticlePage, { generateMetadata } from '@/app/[locale]/blog/[slug]/page';
 import { GET as feed } from '@/app/[locale]/blog/feed.xml/route';
 import sitemap from '@/app/sitemap';
@@ -11,6 +13,16 @@ const render = createRequire(import.meta.url)('react-dom/server').renderToStatic
 const slugs = ['how-to-start-reading-the-bible-seven-day-plan', 'a-short-night-prayer-for-the-end-of-the-day'];
 
 describe('organic article cluster', () => {
+  it('serves editorial image URLs without locale rewrites while still routing English articles', () => {
+    for (const locale of LOCALES) for (const kind of ['reading', 'evening']) {
+      const response = middleware(new NextRequest(`https://vella.one/blog/${kind}-${locale}.png`));
+      expect(response.headers.get('x-middleware-next')).toBe('1');
+      expect(response.headers.get('x-middleware-rewrite')).toBeNull();
+    }
+    const article = middleware(new NextRequest('https://vella.one/blog/how-to-start-reading-the-bible-seven-day-plan'));
+    expect(article.headers.get('x-middleware-rewrite')).toBe('https://vella.one/en/blog/how-to-start-reading-the-bible-seven-day-plan');
+  });
+
   it('provides readable, opaque, localized 1200×630 editorial images', async () => {
     for (const locale of LOCALES) for (const kind of ['reading', 'evening']) {
       const metadata = await sharp(`public/blog/${kind}-${locale}.png`).metadata();

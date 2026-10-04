@@ -22,7 +22,7 @@
 
 ## Verification
 
-- Full API suite: 842/842 passed with
+- Full API suite: 843/843 passed with
   `bunx vitest run --maxWorkers=2 --testTimeout=30000`.
 - The existing PostgreSQL-initialization contract exceeded Vitest's default
   5 seconds on the loaded host; its unchanged database assertions passed in
@@ -33,6 +33,10 @@
   findings. All 16 editorial images visually reviewed.
 - Typecheck and local production build passed. Deployment provenance is checked
   during release; the final chat reports the immutable commit/deployment IDs.
+- The first live HTTP audit caught a 404 on editorial images: locale middleware
+  rewrote `/blog/*.png` to the English page tree. A regression reproduced the
+  failure, then passed after excluding only these public PNG paths from locale
+  rewriting. English article routing remains covered by the same regression.
 
 ## Baseline and measurement
 
@@ -53,7 +57,8 @@
 ## Store scope and immutable boundaries
 
 The public BR phone screenshot deck still needs replacement with verified real
-PT-BR Android captures. No images were uploaded and no store listing was saved by
+PT-BR Android captures. The user explicitly deferred this work on October 4;
+it does not block the web release. No images were uploaded and no store listing was saved by
 this release. The last EAS production AAB artifact returned 404, and no physical
 Android was connected during preparation. A separate empty Vella QA AVD was
 created; no existing device/account was reset. Fresh captures, synthetic content,

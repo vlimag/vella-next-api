@@ -51,6 +51,7 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/api/') ||
     pathname.startsWith('/_next/') ||
     pathname.startsWith('/.well-known/') ||
+    (pathname.startsWith('/blog/') && pathname.endsWith('.png')) ||
     STATIC_PATHS.has(pathname)
   ) {
     return NextResponse.next();
