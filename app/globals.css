@@ -850,6 +850,12 @@ h1, h2, h3, p, ul, ol, blockquote { margin-top: 0; }
 .article-install-cta > p:not(.eyebrow) { margin-bottom: 24px; color: rgba(255,255,255,.64); }
 .article-install-cta .store-links { justify-content: flex-start; }
 .article-install-cta .store-desktop-hint { max-width: none; margin-left: 0 !important; text-align: left; }
+.article-related { margin-top: 56px; padding-top: 28px; border-top: 1px solid rgba(189,129,52,.24); }
+.article-prose .article-editorial-note { font-size: 14px; line-height: 1.65; color: var(--text-muted, #655f58); }
+.article-related ul { list-style: none; padding: 0; }
+.article-related li { margin-bottom: 24px; }
+.article-related a { font-weight: 600; text-underline-offset: 4px; }
+.article-related li p { margin: 8px 0 0; font-size: 16px; }
 .article-share { margin-top: 25px; padding-top: 20px; border-top: 1px solid var(--border); }
 .article-share > p { margin: 0 0 10px; color: #8b7e6c; font-size: 10px; }
 .article-share-links { display: flex; flex-wrap: wrap; gap: 8px; }

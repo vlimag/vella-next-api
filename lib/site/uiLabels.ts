@@ -7,6 +7,7 @@ type UiLabels = {
   accountData: string;
   onThisPage: string;
   shareByEmail: string;
+  relatedArticles: string;
 };
 
 export const UI_LABELS: Record<Locale, UiLabels> = {
@@ -17,6 +18,7 @@ export const UI_LABELS: Record<Locale, UiLabels> = {
     accountData: 'Account & data',
     onThisPage: 'On this page',
     shareByEmail: 'Email',
+    relatedArticles: 'Continue reading',
   },
   pt: {
     skipToContent: 'Pular para o conteúdo',
@@ -25,6 +27,7 @@ export const UI_LABELS: Record<Locale, UiLabels> = {
     accountData: 'Conta e dados',
     onThisPage: 'Nesta página',
     shareByEmail: 'E-mail',
+    relatedArticles: 'Continue a leitura',
   },
   es: {
     skipToContent: 'Saltar al contenido',
@@ -33,6 +36,7 @@ export const UI_LABELS: Record<Locale, UiLabels> = {
     accountData: 'Cuenta y datos',
     onThisPage: 'En esta página',
     shareByEmail: 'Correo',
+    relatedArticles: 'Sigue leyendo',
   },
   fr: {
     skipToContent: 'Aller au contenu',
@@ -41,6 +45,7 @@ export const UI_LABELS: Record<Locale, UiLabels> = {
     accountData: 'Compte et données',
     onThisPage: 'Sur cette page',
     shareByEmail: 'E-mail',
+    relatedArticles: 'Poursuivre la lecture',
   },
   de: {
     skipToContent: 'Zum Inhalt springen',
@@ -49,6 +54,7 @@ export const UI_LABELS: Record<Locale, UiLabels> = {
     accountData: 'Konto und Daten',
     onThisPage: 'Auf dieser Seite',
     shareByEmail: 'E-Mail',
+    relatedArticles: 'Weiterlesen',
   },
   it: {
     skipToContent: 'Vai al contenuto',
@@ -57,6 +63,7 @@ export const UI_LABELS: Record<Locale, UiLabels> = {
     accountData: 'Account e dati',
     onThisPage: 'In questa pagina',
     shareByEmail: 'E-mail',
+    relatedArticles: 'Continua a leggere',
   },
   ru: {
     skipToContent: 'Перейти к содержимому',
@@ -65,6 +72,7 @@ export const UI_LABELS: Record<Locale, UiLabels> = {
     accountData: 'Аккаунт и данные',
     onThisPage: 'На этой странице',
     shareByEmail: 'Эл. почта',
+    relatedArticles: 'Читайте дальше',
   },
   pl: {
     skipToContent: 'Przejdź do treści',
@@ -73,5 +81,6 @@ export const UI_LABELS: Record<Locale, UiLabels> = {
     accountData: 'Konto i dane',
     onThisPage: 'Na tej stronie',
     shareByEmail: 'E-mail',
+    relatedArticles: 'Czytaj dalej',
   },
 };

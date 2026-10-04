@@ -1,7 +1,9 @@
 import type { Locale } from './config';
 import { PRAYER_SPACE_ARTICLE_SLUG, prayerSpaceArticleByLocale } from './prayerSpaceArticle';
+import { growthArticles, NEW_BLOG_SLUGS } from './growthArticles';
 
 export const BLOG_SLUGS = [
+  ...NEW_BLOG_SLUGS,
   PRAYER_SPACE_ARTICLE_SLUG,
   'a-gentle-daily-scripture-rhythm',
   'praying-when-your-mind-will-not-slow-down',
@@ -27,6 +29,8 @@ export type BlogPost = {
   updatedAt?: string;
   dateLabel: string;
   readTime: string;
+  socialImage?: string;
+  editorialNote?: string;
   heroQuote: string;
   sections: BlogSection[];
   cta?: {
@@ -41,6 +45,7 @@ export type BlogPost = {
 type BlogPostContent = Omit<BlogPost, 'slug' | 'locale'>;
 
 const en = {
+  ...growthArticles('en'),
   [PRAYER_SPACE_ARTICLE_SLUG]: prayerSpaceArticleByLocale.en,
   'a-gentle-daily-scripture-rhythm': {
     title: 'A gentle daily Scripture rhythm that can survive real life',
@@ -254,6 +259,7 @@ const en = {
 } satisfies Record<BlogSlug, BlogPostContent>;
 
 const es = {
+  ...growthArticles('es'),
   [PRAYER_SPACE_ARTICLE_SLUG]: prayerSpaceArticleByLocale.es,
   'a-gentle-daily-scripture-rhythm': {
     title: 'Un ritmo diario y amable con la Escritura que cabe en la vida real',
@@ -467,6 +473,7 @@ const es = {
 } satisfies Record<BlogSlug, BlogPostContent>;
 
 const fr = {
+  ...growthArticles('fr'),
   [PRAYER_SPACE_ARTICLE_SLUG]: prayerSpaceArticleByLocale.fr,
   'a-gentle-daily-scripture-rhythm': {
     title: 'Un rythme quotidien et paisible avec les Écritures, adapté à la vie réelle',
@@ -680,6 +687,7 @@ const fr = {
 } satisfies Record<BlogSlug, BlogPostContent>;
 
 const pt = {
+  ...growthArticles('pt'),
   [PRAYER_SPACE_ARTICLE_SLUG]: prayerSpaceArticleByLocale.pt,
   'a-gentle-daily-scripture-rhythm': {
     title: 'Um ritmo diário e gentil com as Escrituras que cabe na vida real',
@@ -893,6 +901,7 @@ const pt = {
 } satisfies Record<BlogSlug, BlogPostContent>;
 
 const de = {
+  ...growthArticles('de'),
   [PRAYER_SPACE_ARTICLE_SLUG]: prayerSpaceArticleByLocale.de,
   'a-gentle-daily-scripture-rhythm': {
     title: 'Ein sanfter täglicher Bibelrhythmus, der zum wirklichen Leben passt',
@@ -1106,6 +1115,7 @@ const de = {
 } satisfies Record<BlogSlug, BlogPostContent>;
 
 const it = {
+  ...growthArticles('it'),
   [PRAYER_SPACE_ARTICLE_SLUG]: prayerSpaceArticleByLocale.it,
   'a-gentle-daily-scripture-rhythm': {
     title: 'Un ritmo quotidiano e gentile con la Scrittura, adatto alla vita reale',
@@ -1319,6 +1329,7 @@ const it = {
 } satisfies Record<BlogSlug, BlogPostContent>;
 
 const ru = {
+  ...growthArticles('ru'),
   [PRAYER_SPACE_ARTICLE_SLUG]: prayerSpaceArticleByLocale.ru,
   'a-gentle-daily-scripture-rhythm': {
     title: 'Бережный ежедневный ритм чтения Писания, который выдерживает реальную жизнь',
@@ -1532,6 +1543,7 @@ const ru = {
 } satisfies Record<BlogSlug, BlogPostContent>;
 
 const pl = {
+  ...growthArticles('pl'),
   [PRAYER_SPACE_ARTICLE_SLUG]: prayerSpaceArticleByLocale.pl,
   'a-gentle-daily-scripture-rhythm': {
     title: 'Łagodny codzienny rytm czytania Pisma, który mieści się w prawdziwym życiu',
@@ -1757,6 +1769,19 @@ const postsByLocale = {
 
 function isBlogSlug(value: string): value is BlogSlug {
   return (BLOG_SLUGS as readonly string[]).includes(value);
+}
+
+const RELATED_POSTS = {
+  'how-to-start-reading-the-bible-seven-day-plan': ['read-scripture-with-curiosity', 'a-gentle-daily-scripture-rhythm', 'a-short-night-prayer-for-the-end-of-the-day'],
+  'a-short-night-prayer-for-the-end-of-the-day': [PRAYER_SPACE_ARTICLE_SLUG, 'praying-when-your-mind-will-not-slow-down', 'how-to-start-reading-the-bible-seven-day-plan'],
+  [PRAYER_SPACE_ARTICLE_SLUG]: ['a-short-night-prayer-for-the-end-of-the-day', 'praying-when-your-mind-will-not-slow-down'],
+  'a-gentle-daily-scripture-rhythm': ['how-to-start-reading-the-bible-seven-day-plan', 'read-scripture-with-curiosity'],
+  'praying-when-your-mind-will-not-slow-down': ['a-short-night-prayer-for-the-end-of-the-day', PRAYER_SPACE_ARTICLE_SLUG],
+  'read-scripture-with-curiosity': ['how-to-start-reading-the-bible-seven-day-plan', 'a-gentle-daily-scripture-rhythm'],
+} satisfies Record<BlogSlug, BlogSlug[]>;
+
+export function getRelatedPosts(locale: Locale, slug: BlogSlug): BlogPost[] {
+  return RELATED_POSTS[slug].map((related) => getPost(locale, related)!);
 }
 
 export function getPosts(locale: Locale): BlogPost[] {

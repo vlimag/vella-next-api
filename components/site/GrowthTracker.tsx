@@ -7,6 +7,7 @@ import {
   type Locale,
 } from '@/lib/site/config';
 import { canonicalCampaign, canonicalRouteClass, coarseReferrerClass, storeClickRouteClass } from '@/lib/site/webAttribution';
+import { createWebGrowthQueue, isKnownStoreCta, type WebGrowthEvent } from '@/lib/site/webGrowthQueue';
 
 type Attribution = {
   source?: string;
@@ -15,22 +16,9 @@ type Attribution = {
   content?: string;
 };
 
-type WebGrowthEvent = {
-  event_id: string;
-  install_id: string;
-  event_name: 'landing_viewed' | 'store_cta_clicked';
-  occurred_at: string;
-  platform: 'web';
-  app_version: 'site';
-  locale: Locale;
-  session_id: string;
-  properties: Attribution & { cta_id?: string; store?: 'android' | 'ios' };
-};
-
-const SAFE_CODE = /^[a-z0-9][a-z0-9._~-]*$/;
 let webSessionId: string | null = null;
 let webAttribution: Attribution = {};
-let webQueue: WebGrowthEvent[] = [];
+let webQueue: ReturnType<typeof createWebGrowthQueue> | undefined;
 let landingSent = false;
 
 function uuid() {
@@ -40,13 +28,6 @@ function uuid() {
   bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = [...bytes].map((value) => value.toString(16).padStart(2, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-function safeCode(value: string | null, maxLength: number) {
-  const normalized = value?.trim().toLowerCase();
-  return normalized && normalized.length <= maxLength && SAFE_CODE.test(normalized)
-    ? normalized
-    : undefined;
 }
 
 function sessionId() {
@@ -68,37 +49,21 @@ function webContext(): Attribution {
   };
 }
 
-function readQueue(): WebGrowthEvent[] {
-  return webQueue;
-}
-
-function saveQueue(events: WebGrowthEvent[]) {
-  webQueue = events.slice(-20);
-}
-
-let flushInProgress = false;
-
-async function flushQueue() {
-  if (flushInProgress) return;
-  const events = readQueue();
-  if (!events.length) return;
-  flushInProgress = true;
-  try {
-    const response = await fetch('/api/v1/analytics/events', {
+function outbox() {
+  if (webQueue) return webQueue;
+  let storage: Storage | undefined;
+  try { storage = window.sessionStorage; } catch { /* Disabled storage falls back to memory. */ }
+  webQueue = createWebGrowthQueue(storage, (events) => fetch('/api/v1/analytics/events', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ events }),
       keepalive: true,
-    });
-    if (response.ok) {
-      const sentIds = new Set(events.map((event) => event.event_id));
-      saveQueue(readQueue().filter((event) => !sentIds.has(event.event_id)));
-    }
-  } catch {
-    // A later page view or CTA click retries the same idempotent event IDs.
-  } finally {
-    flushInProgress = false;
-  }
+  }));
+  return webQueue;
+}
+
+function flushQueue() {
+  void outbox().flush();
 }
 
 function enqueue(
@@ -107,8 +72,7 @@ function enqueue(
   properties: WebGrowthEvent['properties'],
 ) {
   const id = sessionId();
-  const queue = readQueue();
-  queue.push({
+  outbox().enqueue({
     event_id: uuid(),
     install_id: id,
     event_name: eventName,
@@ -119,8 +83,7 @@ function enqueue(
     session_id: id,
     properties,
   });
-  saveQueue(queue);
-  void flushQueue();
+  flushQueue();
 }
 
 export function GrowthTracker({ locale }: { locale: Locale }) {
@@ -146,9 +109,9 @@ export function GrowthTracker({ locale }: { locale: Locale }) {
       const detail = (event as CustomEvent<unknown>).detail;
       if (!detail || typeof detail !== 'object') return;
       const values = detail as Record<string, unknown>;
-      const ctaId = safeCode(typeof values.id === 'string' ? values.id : null, 48);
+      const ctaId = values.id;
       const store = values.platform === 'android' ? 'android' : values.platform === 'ios' ? 'ios' : null;
-      if (!ctaId || !store) return;
+      if (!store || !isKnownStoreCta(ctaId, store)) return;
 
       enqueue(locale, 'store_cta_clicked', {
         source: context.source,
@@ -162,7 +125,15 @@ export function GrowthTracker({ locale }: { locale: Locale }) {
     };
 
     window.addEventListener(STORE_CTA_EVENT, handleStoreClick);
-    return () => window.removeEventListener(STORE_CTA_EVENT, handleStoreClick);
+    window.addEventListener('online', flushQueue);
+    window.addEventListener('pagehide', flushQueue);
+    document.addEventListener('visibilitychange', flushQueue);
+    return () => {
+      window.removeEventListener(STORE_CTA_EVENT, handleStoreClick);
+      window.removeEventListener('online', flushQueue);
+      window.removeEventListener('pagehide', flushQueue);
+      document.removeEventListener('visibilitychange', flushQueue);
+    };
   }, [locale]);
 
   return null;

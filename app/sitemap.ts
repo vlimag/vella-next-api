@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { BLOG_SLUGS, getPost } from '@/lib/site/blog';
+import { BLOG_SLUGS, getPost, getPosts } from '@/lib/site/blog';
 import { LOCALES, absoluteUrl, languageAlternates } from '@/lib/site/config';
 import { PRAYER_SPACE_PATH } from '@/lib/site/prayerSpace';
 
@@ -33,7 +33,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const staticEntries: MetadataRoute.Sitemap = STATIC_PATHS.flatMap((path) =>
     LOCALES.map((locale) => ({
       url: absoluteUrl(locale, path),
-      lastModified: STATIC_UPDATED_AT[path],
+      lastModified: path === '/blog'
+        ? new Date(Math.max(...getPosts(locale).map((post) => Date.parse(post.updatedAt ?? post.publishedAt))))
+        : STATIC_UPDATED_AT[path],
       changeFrequency: path === '' ? ('weekly' as const) : path === '/blog' ? ('weekly' as const) : ('monthly' as const),
       priority: path === '' ? 1 : path === PRAYER_SPACE_PATH ? 0.95 : path === '/features' ? 0.9 : path === '/blog' ? 0.8 : 0.6,
       alternates: { languages: languageAlternates(path) },

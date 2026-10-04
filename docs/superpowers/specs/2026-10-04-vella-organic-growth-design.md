@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-04
 
-**Status:** Approved in chat for specification; written-spec review pending
+**Status:** Implementation approved in chat; release verification in progress
 
 ## Outcome
 
@@ -195,9 +195,10 @@ assuming a successful console save means a live localized result.
   image, or stale screenshot source fails validation before release.
 - Website analytics failure remains non-blocking and never delays navigation.
   Failed events remain in the bounded session queue for a later idempotent retry.
-- If a localized article has not received the required editorial approval, it
-  remains a repository draft and is excluded from `BLOG_SLUGS`, sitemap, RSS,
-  and public routes.
+- The existing weekly PT-BR editorial packets retain their named human-review
+  gate and remain drafts. The two evergreen articles in this scope are authorized
+  by the user's instruction to add multilingual posts and finish the release;
+  they disclose AI assistance and are never represented as human-reviewed.
 - Web/API rollback restores the previous Vercel production deployment.
 - Store rollback restores the previous screenshot association; it does not
   change the app binary, OTA, prices, plans, or subscriptions.

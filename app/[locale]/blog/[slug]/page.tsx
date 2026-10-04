@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/site/JsonLd';
 import { PageShell } from '@/components/site/PageShell';
 import { StoreLinks } from '@/components/site/StoreLinks';
-import { BLOG_SLUGS, getPost } from '@/lib/site/blog';
+import { BLOG_SLUGS, getPost, getRelatedPosts } from '@/lib/site/blog';
 import { SITE_URL, absoluteUrl, isLocale, localizedPath } from '@/lib/site/config';
 import { getCopy } from '@/lib/site/content';
 import { localizedMetadata } from '@/lib/site/metadata';
@@ -30,6 +30,7 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
     publishedTime: post.publishedAt,
     modifiedTime: post.updatedAt ?? post.publishedAt,
     authors: ['Vella'],
+    image: `${SITE_URL}${post.socialImage ?? '/og.png'}`,
     rssTitle: copy.blog.title,
   });
 }
@@ -58,9 +59,10 @@ export default async function ArticlePage({ params }: { params: Promise<{ locale
           articleSection: post.category,
           inLanguage: value,
           mainEntityOfPage: articleUrl,
+          url: articleUrl,
           author: { '@type': 'Organization', name: 'Vella', url: SITE_URL },
           publisher: { '@type': 'Organization', name: 'Vella', url: SITE_URL, logo: { '@type': 'ImageObject', url: `${SITE_URL}/icon-512.png` } },
-          image: `${SITE_URL}/og.png`,
+          image: `${SITE_URL}${post.socialImage ?? '/og.png'}`,
         },
         {
           '@context': 'https://schema.org',
@@ -93,6 +95,7 @@ export default async function ArticlePage({ params }: { params: Promise<{ locale
             </div>
           </aside>
           <div className="article-prose">
+            {post.editorialNote ? <p className="article-editorial-note">{post.editorialNote}</p> : null}
             <blockquote className="article-quote">{post.heroQuote}</blockquote>
             {post.sections.map((section) => (
               <section key={section.heading}>
@@ -112,6 +115,15 @@ export default async function ArticlePage({ params }: { params: Promise<{ locale
                 <Link className="button button-dark" href={localizedPath(value, post.cta.path)}>{post.cta.label}<span aria-hidden="true">→</span></Link>
               </aside>
             ) : null}
+            <nav className="article-related" aria-label={UI_LABELS[value].relatedArticles}>
+              <h2>{UI_LABELS[value].relatedArticles}</h2>
+              <ul>{getRelatedPosts(value, post.slug).map((related) => (
+                <li key={related.slug}>
+                  <Link href={localizedPath(value, `/blog/${related.slug}`)}>{related.title}<span aria-hidden="true"> →</span></Link>
+                  <p>{related.description}</p>
+                </li>
+              ))}</ul>
+            </nav>
             <aside className="article-install-cta">
               <p className="eyebrow">{copy.download.contextualEyebrow}</p>
               <h2>{copy.download.contextualTitle}</h2>
