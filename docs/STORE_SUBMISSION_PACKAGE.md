@@ -87,12 +87,12 @@ The file was mechanically validated with these limits:
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | en | 5 | 28 | 154 | 76 | 68 | 2463 |
 | pt-BR | 5 | 25 | 151 | 75 | 62 | 2711 |
-| es-ES | 5 | 25 | 149 | 76 | 65 | 2505 |
-| fr-FR | 5 | 25 | 157 | 76 | 61 | 2647 |
-| de-DE | 5 | 29 | 155 | 73 | 56 | 2485 |
-| it-IT | 5 | 28 | 155 | 78 | 63 | 2495 |
-| ru | 5 | 22 | 135 | 70 | 89 | 2454 |
-| pl | 5 | 24 | 157 | 72 | 61 | 2427 |
+| es-ES | 5 | 25 | 149 | 76 | 65 | 2658 |
+| fr-FR | 5 | 25 | 157 | 76 | 61 | 2824 |
+| de-DE | 5 | 29 | 155 | 73 | 56 | 2693 |
+| it-IT | 5 | 28 | 155 | 78 | 63 | 2645 |
+| ru | 5 | 22 | 135 | 70 | 89 | 2618 |
+| pl | 5 | 24 | 157 | 72 | 61 | 2592 |
 
 The descriptions deliberately do not hard-code prices. They accurately disclose that Premium is required, monthly billing starts immediately, and eligible new annual subscribers may receive 14 days before paid annual renewal. The store-owned product sheet and in-app paywall must show eligibility plus the full localized annual renewal price and terms before confirmation.
 

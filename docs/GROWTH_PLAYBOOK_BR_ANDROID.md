@@ -32,7 +32,7 @@ Implementation prepared on 2026-10-18 (release evidence must be checked separate
 - Checkout analytics never waits for transport. Existing-subscription checks
   fail closed; native initialization, catalog, restore and validation are bounded,
   with generation-scoped listeners and stale-result protection.
-- Clear account requirements in the app's eight languages and PT/EN store-copy
+- Clear account requirements in the app's eight languages and all eight store-copy
   sources. Purchase/restore does not require a permanent Vella account; saving
   personal content, starting/tracking journeys, Community participation and sync do.
 - Existing guides surfaced on home/features in all eight languages, canonical
@@ -54,6 +54,29 @@ the additive nullable DB columns and backward-compatible validator in place.
 Remaining release gates: verify live API/OTA commit provenance; native QA;
 truthful platform-specific PT-BR store captures; named human review before any
 editorial packet publication. Do not count test purchases as acquisition success.
+
+Execution evidence, 2026-10-18:
+
+- The additive database migration passed a rolled-back live ingestion smoke test;
+  no synthetic funnel events remained. RLS and the service-role-only ingestion
+  boundary were preserved, with no new security-advisor findings.
+- API/site changes were verified live from `31e1cac4680136df09ab2d20465884ad091df8c6`
+  in Vercel deployment `dpl_8aFbyRb7jVhAr4Smmcv2XkX5UHHe`: health 200,
+  protected IAP diagnostic 401 without bearer, all eight home locales 200,
+  normalized PT canonical and 120 sitemap URLs. Subsequent store-source-only
+  synchronization must not be mistaken for a store-console publication.
+- Android QA APK compilation succeeded and installation on the dedicated Vella
+  emulator succeeded. Visual interaction could not be completed because the
+  Android Studio control surface did not respond. This is not a passed native
+  journey or purchase test; keep the new mobile OTA on hold until native QA.
+- A live public first-moment request took 7.65 seconds, followed by 0.21–0.51
+  second responses. The six-second client deadline deliberately still falls
+  back on slower requests; the recovery patch does not eliminate all cold-load
+  latency. Measure remote/fallback cohorts after release instead of claiming a
+  conversion improvement from automated tests.
+- Store-console text submission, truthful PT-BR screenshots and manual Search
+  Console index requests remain pending. No editorial packet was published and
+  no paid campaign was resumed.
 
 Evaluate organic progress in matched 28-day windows: non-brand Brazil
 impressions/clicks, indexed guide URLs, store visits/installations, successful

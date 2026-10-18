@@ -173,37 +173,37 @@ const storeDescriptionContract = {
   es: {
     mobileLocale: 'es-ES',
     tableLocale: 'es-ES',
-    firstExperience: 'Antes de crear la cuenta, cada nuevo usuario recibe exactamente un primer momento Vella anónimo y personalizado. La creación de la cuenta viene después de ese momento. Tras iniciar sesión, el contenido y las funciones de la app permanecen bloqueados hasta que se confirme una suscripción activa a Vella Premium o una prueba introductoria elegible activa; no hay un nivel gratuito permanente.',
+    firstExperience: "Antes de crear la cuenta, cada nuevo usuario recibe exactamente un primer momento Vella anónimo y personalizado. No necesitas una cuenta de Vella para comprar o restaurar una suscripción en este dispositivo. Necesitas una cuenta de Vella para guardar contenido personal, iniciar y seguir jornadas, participar en la Comunidad y sincronizar entre dispositivos compatibles. El contenido más allá de este primer momento requiere una suscripción activa a Vella Premium o una prueba introductoria elegible activa; no hay un nivel gratuito permanente.",
     subscription: 'El plan mensual se cobra de inmediato y no incluye prueba gratuita. Los nuevos suscriptores anuales elegibles pueden recibir exactamente 14 días de Apple o Google; la tienda determina la elegibilidad y muestra el precio anual completo de renovación y los términos localizados antes de la confirmación. La suscripción anual se renueva automáticamente. Adminístrala o cancélala en los ajustes de suscripciones de Apple o Google. Cancela antes de que termine la prueba y no se te cobrará el precio anual. Si no cumples los requisitos para la oferta anual o eliges el plan mensual, no se ofrece ninguna prueba gratuita.',
   },
   fr: {
     mobileLocale: 'fr-FR',
     tableLocale: 'fr-FR',
-    firstExperience: "Avant la création du compte, chaque nouvel utilisateur reçoit exactement un premier moment Vella anonyme et personnalisé. La création du compte suit ce moment. Après la connexion, les contenus et fonctions de l'app restent verrouillés jusqu'à la confirmation d'un abonnement Vella Premium actif ou d'un essai promotionnel éligible actif ; il n'existe aucune offre gratuite permanente.",
+    firstExperience: "Avant la création du compte, chaque nouvel utilisateur reçoit exactement un premier moment Vella anonyme et personnalisé. Aucun compte Vella n’est nécessaire pour acheter ou restaurer un abonnement sur cet appareil. Un compte Vella est nécessaire pour enregistrer du contenu personnel, commencer et suivre des parcours, participer à la Communauté et synchroniser les appareils compatibles. Le contenu au-delà de ce premier moment nécessite un abonnement Vella Premium actif ou un essai promotionnel éligible actif ; il n’existe aucune offre gratuite permanente.",
     subscription: "Le forfait mensuel est facturé immédiatement et ne comprend aucun essai gratuit. Les nouveaux abonnés annuels éligibles peuvent recevoir exactement 14 jours de la part d'Apple ou de Google ; la boutique détermine l'éligibilité et affiche le prix annuel complet du renouvellement et les conditions localisées avant confirmation. L'abonnement annuel se renouvelle automatiquement. Gérez-le ou annulez-le dans les réglages d'abonnement Apple ou Google. Annulez avant la fin de l'essai et le prix annuel ne vous sera pas facturé. Si vous n'êtes pas éligible à l'offre annuelle ou choisissez le forfait mensuel, aucun essai gratuit n'est proposé.",
   },
   de: {
     mobileLocale: 'de-DE',
     tableLocale: 'de-DE',
-    firstExperience: 'Vor der Kontoerstellung erhält jeder neue Nutzer genau einen anonymen, personalisierten ersten Vella-Moment. Danach wird das Konto erstellt. Nach der Anmeldung bleiben App-Inhalte und Funktionen gesperrt, bis ein aktives Vella-Premium-Abonnement oder ein aktiver berechtigter Einführungszeitraum bestätigt ist; es gibt keine dauerhaft kostenlose Stufe.',
+    firstExperience: "Vor der Kontoerstellung erhält jeder neue Nutzer genau einen anonymen, personalisierten ersten Vella-Moment. Zum Kaufen oder Wiederherstellen eines Abonnements auf diesem Gerät ist kein Vella-Konto erforderlich. Ein Vella-Konto ist nötig, um persönliche Inhalte zu speichern, Wege zu beginnen und zu verfolgen, an der Community teilzunehmen und unterstützte Geräte zu synchronisieren. Inhalte nach diesem ersten Moment erfordern ein aktives Vella-Premium-Abonnement oder einen aktiven berechtigten Einführungszeitraum; es gibt keine dauerhaft kostenlose Stufe.",
     subscription: 'Der Monatsplan wird sofort berechnet und hat keinen kostenlosen Testzeitraum. Berechtigte neue Jahresabonnenten können genau 14 Tage erhalten; Apple oder Google stellt sie bereit, und der Store bestimmt die Berechtigung und zeigt vor der Bestätigung den vollständigen lokalisierten Jahresverlängerungspreis und die Bedingungen. Das Jahresabonnement verlängert sich automatisch. Verwalte oder kündige es in den Abonnementeinstellungen von Apple oder Google. Kündige vor Ende des Testzeitraums; dann wird der Jahrespreis nicht berechnet. Wenn du für das Jahresangebot nicht berechtigt bist oder den Monatsplan wählst, gibt es keinen kostenlosen Testzeitraum.',
   },
   it: {
     mobileLocale: 'it',
     tableLocale: 'it-IT',
-    firstExperience: "Prima della creazione dell'account, ogni nuovo utente riceve esattamente un primo momento Vella anonimo e personalizzato. La creazione dell'account avviene dopo quel momento. Dopo l'accesso, i contenuti e le funzioni dell'app restano bloccati finché non viene confermato un abbonamento Vella Premium attivo o una prova introduttiva idonea attiva; non esiste un livello gratuito permanente.",
+    firstExperience: "Prima della creazione dell'account, ogni nuovo utente riceve esattamente un primo momento Vella anonimo e personalizzato. Non serve un account Vella per acquistare o ripristinare un abbonamento su questo dispositivo. Serve un account Vella per salvare contenuti personali, iniziare e seguire percorsi, partecipare alla Community e sincronizzare i dispositivi supportati. I contenuti oltre questo primo momento richiedono un abbonamento Vella Premium attivo o una prova introduttiva idonea attiva; non esiste un livello gratuito permanente.",
     subscription: "Il piano mensile viene addebitato subito e non include una prova gratuita. I nuovi abbonati annuali idonei possono ricevere esattamente 14 giorni da Apple o Google; lo store determina l'idoneità e mostra il prezzo annuale completo di rinnovo e i termini localizzati prima della conferma. L'abbonamento annuale si rinnova automaticamente. Gestiscilo o annullalo nelle impostazioni degli abbonamenti Apple o Google. Annulla prima della fine della prova e il prezzo annuale non ti verrà addebitato. Se non hai diritto all'offerta annuale o scegli il piano mensile, non viene offerta alcuna prova gratuita.",
   },
   ru: {
     mobileLocale: 'ru',
     tableLocale: 'ru',
-    firstExperience: 'До создания учётной записи каждый новый пользователь получает ровно один анонимный персонализированный первый момент Vella. Затем создаётся учётная запись. После входа контент и функции приложения остаются заблокированными, пока не будет подтверждена активная подписка Vella Premium или активный доступный вводный пробный период; постоянного бесплатного уровня нет.',
+    firstExperience: "До создания учётной записи каждый новый пользователь получает ровно один анонимный персонализированный первый момент Vella. Для покупки или восстановления подписки на этом устройстве аккаунт Vella не нужен. Аккаунт Vella необходим, чтобы сохранять личные материалы, начинать и отслеживать пути, участвовать в Сообществе и синхронизировать поддерживаемые устройства. Контент после этого первого момента требует активной подписки Vella Premium или активного доступного вводного пробного периода; постоянного бесплатного уровня нет.",
     subscription: 'Месячный план оплачивается сразу и не включает бесплатный пробный период. Отвечающие условиям новые годовые подписчики могут получить ровно 14 дней от Apple или Google; магазин определяет право и показывает полную локализованную годовую цену продления и условия до подтверждения. Годовая подписка продлевается автоматически. Управляйте ею или отмените её в настройках подписок Apple или Google. Отмените подписку до окончания пробного периода, и годовая цена не будет списана. Если вы не соответствуете условиям годового предложения или выбираете месячный план, бесплатный пробный период не предоставляется.',
   },
   pl: {
     mobileLocale: 'pl',
     tableLocale: 'pl',
-    firstExperience: 'Przed utworzeniem konta każdy nowy użytkownik otrzymuje dokładnie jeden anonimowy, spersonalizowany pierwszy moment Vella. Utworzenie konta następuje po tym momencie. Po zalogowaniu treści i funkcje aplikacji pozostają zablokowane do czasu potwierdzenia aktywnej subskrypcji Vella Premium lub aktywnego kwalifikującego się okresu próbnego; nie ma stałego bezpłatnego poziomu.',
+    firstExperience: "Przed utworzeniem konta każdy nowy użytkownik otrzymuje dokładnie jeden anonimowy, spersonalizowany pierwszy moment Vella. Konto Vella nie jest wymagane do zakupu lub przywrócenia subskrypcji na tym urządzeniu. Konto Vella jest wymagane do zapisywania osobistych treści, rozpoczynania i śledzenia dróg, uczestnictwa w Społeczności oraz synchronizacji obsługiwanych urządzeń. Treści poza tym pierwszym momentem wymagają aktywnej subskrypcji Vella Premium lub aktywnego kwalifikującego się okresu próbnego; nie ma stałego bezpłatnego poziomu.",
     subscription: 'Plan miesięczny jest płatny od razu i nie obejmuje bezpłatnego okresu próbnego. Uprawnieni nowi subskrybenci planu rocznego mogą otrzymać dokładnie 14 dni od Apple lub Google; sklep określa uprawnienie i pokazuje przed potwierdzeniem pełną zlokalizowaną roczną cenę odnowienia i warunki. Subskrypcja roczna odnawia się automatycznie. Zarządzaj nią lub anuluj ją w ustawieniach subskrypcji Apple lub Google. Anuluj przed końcem okresu próbnego, a roczna cena nie zostanie pobrana. Jeśli nie kwalifikujesz się do oferty rocznej lub wybierzesz plan miesięczny, bezpłatny okres próbny nie jest dostępny.',
   },
 } as const;
@@ -1283,6 +1283,14 @@ describe('Vella localized website', () => {
       expect(typeof mobileDescription).toBe('string');
       expect(storeMetadata.locales[locale].description === mobileDescription).toBe(true);
     }
+  });
+
+  it.each(LOCALES)('keeps the %s Google Play account-access paragraph aligned with canonical metadata', (locale) => {
+    const listingUrl = new URL(`../../mobile/store/google/${storeMetadata.locales[locale].playLocale}/listing.json`, import.meta.url);
+    // Standalone API checkouts do not contain the sibling store source.
+    if (!existsSync(listingUrl)) return;
+    const listing = JSON.parse(readFileSync(listingUrl, 'utf8')) as { fullDescription: string };
+    expect(listing.fullDescription.split('\n\n')).toContain(storeDescriptionContract[locale].firstExperience);
   });
 
   it('keeps every submission-package length derived from canonical metadata', () => {
