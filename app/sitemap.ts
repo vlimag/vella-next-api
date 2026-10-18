@@ -15,11 +15,12 @@ const STATIC_PATHS = [
   '/delete-account',
 ] as const;
 
-const HOME_UPDATED_AT = new Date('2026-09-07T00:00:00.000Z');
+// Actual home/features discovery and category-copy revision; article dates stay unchanged.
+const DISCOVERY_UPDATED_AT = new Date('2026-10-18T00:00:00.000Z');
 const PREVIOUS_STATIC_UPDATED_AT = new Date('2026-08-24T00:00:00.000Z');
 const STATIC_UPDATED_AT: Record<(typeof STATIC_PATHS)[number], Date> = {
-  '': HOME_UPDATED_AT,
-  '/features': PREVIOUS_STATIC_UPDATED_AT,
+  '': DISCOVERY_UPDATED_AT,
+  '/features': DISCOVERY_UPDATED_AT,
   [PRAYER_SPACE_PATH]: PREVIOUS_STATIC_UPDATED_AT,
   '/blog': PREVIOUS_STATIC_UPDATED_AT,
   '/support': PREVIOUS_STATIC_UPDATED_AT,

@@ -1,4 +1,4 @@
-import { LOCALES, STORE_CAMPAIGN, storeCtaId, type Locale, type StoreCtaPlacement } from './config';
+import { LOCALES, STORE_CAMPAIGN, WEB_CONTENT_CODES, WEB_REFERRER_CLASSES, storeCtaId, type Locale, type StoreCtaPlacement } from './config';
 
 export type WebGrowthEvent = {
   event_id: string;
@@ -17,8 +17,8 @@ const MAX_EVENTS = 20;
 const MAX_BYTES = 65_536;
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
-const SOURCES = new Set(['direct', 'search', 'social', 'referral', 'internal']);
-const ROUTES = new Set(['home', 'features', 'prayer_space', 'blog_index', 'blog_article', 'support', 'legal', 'other']);
+const SOURCES = new Set<string>(WEB_REFERRER_CLASSES);
+const CONTENT = new Set<string>(WEB_CONTENT_CODES);
 const PLACEMENTS: StoreCtaPlacement[] = ['hero', 'header-desktop', 'header-mobile', 'home-download', 'prayer-space', 'blog-article'];
 const EVENT_KEYS = new Set(['event_id', 'install_id', 'session_id', 'occurred_at', 'event_name', 'platform', 'app_version', 'locale', 'properties']);
 const PROPERTY_KEYS = new Set(['source', 'medium', 'campaign', 'content', 'cta_id', 'store']);
@@ -45,7 +45,7 @@ function validEvent(value: unknown): value is WebGrowthEvent {
   if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return false;
   const p = properties as Record<string, unknown>;
   if (Object.keys(p).some((key) => !PROPERTY_KEYS.has(key))) return false;
-  if (!SOURCES.has(p.source as string) || p.medium !== 'website' || p.campaign !== STORE_CAMPAIGN || !ROUTES.has(p.content as string)) return false;
+  if (!SOURCES.has(p.source as string) || p.medium !== 'website' || p.campaign !== STORE_CAMPAIGN || !CONTENT.has(p.content as string)) return false;
   if (event.event_name === 'landing_viewed') return p.cta_id === undefined && p.store === undefined;
   return event.event_name === 'store_cta_clicked' && (p.store === 'android' || p.store === 'ios') && isKnownStoreCta(p.cta_id, p.store);
 }

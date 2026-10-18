@@ -3,7 +3,7 @@ import type { SiteCopy } from "../types";
 export const pl: SiteCopy = {
   locale: "pl",
   seo: {
-    title: "Vella – przestrzeń na wiarę każdego dnia",
+    title: "Vella – aplikacja do Biblii i modlitwy na co dzień",
     description:
       "Vella wspiera codzienny rytm wiary przez Pismo, prywatną Przestrzeń Modlitwy, prowadzone ścieżki, notatki i moderowaną chrześcijańską społeczność.",
     featuresTitle: "Funkcje dla Twojego codziennego rytmu wiary | Vella",
@@ -35,11 +35,11 @@ export const pl: SiteCopy = {
     language: "Język",
   },
   hero: {
-    eyebrow: "Spokojniejszy rytm dla Twojej wiary",
-    title: "Znajdź miejsce na wiarę",
+    eyebrow: "Aplikacja do Biblii i modlitwy",
+    title: "Biblia i modlitwa",
     accent: "każdego dnia.",
     body:
-      "Vella łączy Pismo, modlitwę i małe, konsekwentne kroki w osobistą drogę wiary dopasowaną do prawdziwego życia.",
+      "Czytaj Biblię, korzystaj z prowadzonych ścieżek i zachowuj osobiste modlitwy oraz notatki w Vella — aplikacji do pielęgnowania wiary we własnym rytmie.",
     primaryCta: "Pobierz Vella",
     secondaryCta: "Poznaj funkcje",
     note: "Dostęp wymaga Premium. Uprawnieni nowi subskrybenci planu rocznego mogą otrzymać 14-dniowy okres próbny.",

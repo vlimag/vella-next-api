@@ -3,9 +3,26 @@
 import {
   STORE_CAMPAIGN,
   STORE_CTA_EVENT,
+  playStoreCampaignUrl,
   storeCtaId,
   type StoreCtaPlacement,
+  type WebFirstTouch,
 } from '@/lib/site/config';
+import { firstTouchContext } from '@/lib/site/webAttribution';
+
+let firstTouch: WebFirstTouch | undefined;
+
+export function browserFirstTouch(): WebFirstTouch {
+  if (firstTouch) return firstTouch;
+  let storage: Storage | undefined;
+  try { storage = window.sessionStorage; } catch { /* Disabled storage uses the in-memory snapshot. */ }
+  firstTouch = firstTouchContext(window.location.pathname, document.referrer, storage);
+  return firstTouch;
+}
+
+export function browserPlayStoreUrl(placement: StoreCtaPlacement): string {
+  return playStoreCampaignUrl(placement, browserFirstTouch());
+}
 
 export type VisitorPlatform = 'android' | 'ios' | 'desktop';
 

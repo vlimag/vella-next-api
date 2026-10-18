@@ -25,13 +25,32 @@ export type StoreCtaPlacement =
   | 'prayer-space'
   | 'blog-article';
 
-export function playStoreCampaignUrl(placement: StoreCtaPlacement): string {
+export const WEB_REFERRER_CLASSES = ['direct', 'search', 'social', 'referral', 'internal'] as const;
+export const WEB_CONTENT_CODES = [
+  'home', 'features', 'prayer_space', 'blog_index', 'blog_article', 'support', 'legal', 'other',
+  'guide_bible_start', 'guide_night_prayer', 'guide_prayer_space',
+  'guide_daily_scripture', 'guide_distracted_prayer', 'guide_scripture_curiosity',
+] as const;
+export type WebFirstTouch = {
+  source: (typeof WEB_REFERRER_CLASSES)[number];
+  content: (typeof WEB_CONTENT_CODES)[number];
+};
+
+export function isWebFirstTouch(value: unknown): value is WebFirstTouch {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const context = value as Record<string, unknown>;
+  return Object.keys(context).length === 2
+    && WEB_REFERRER_CLASSES.includes(context.source as WebFirstTouch['source'])
+    && WEB_CONTENT_CODES.includes(context.content as WebFirstTouch['content']);
+}
+
+export function playStoreCampaignUrl(placement: StoreCtaPlacement, context?: WebFirstTouch): string {
   const url = new URL(PLAY_STORE_URL);
   const referrer = new URLSearchParams({
     utm_source: 'vella.one',
     utm_medium: 'website',
     utm_campaign: STORE_CAMPAIGN,
-    utm_content: placement,
+    utm_content: isWebFirstTouch(context) ? `${context.source}.${context.content}.${placement}` : placement,
   });
   url.searchParams.set('referrer', referrer.toString());
   return url.toString();
@@ -85,7 +104,7 @@ export function isLocale(value: string): value is Locale {
 }
 
 export function localizedPath(locale: Locale, path = ''): string {
-  const normalized = path === '/' ? '' : path.startsWith('/') ? path : `/${path}`;
+  const normalized = path === '' || path === '/' ? '' : path.startsWith('/') ? path : `/${path}`;
   const prefix = locale === DEFAULT_LOCALE ? '' : `/${locale}`;
   return `${prefix}${normalized}` || '/';
 }

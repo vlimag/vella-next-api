@@ -85,8 +85,8 @@ The file was mechanically validated with these limits:
 
 | Locale | Name / 30 | Subtitle / 30 | Apple promo / 170 | Play short / 80 | Keywords bytes / 100 | Description / 4000 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| en | 5 | 28 | 154 | 76 | 68 | 2304 |
-| pt-BR | 5 | 25 | 151 | 75 | 62 | 2538 |
+| en | 5 | 28 | 154 | 76 | 68 | 2463 |
+| pt-BR | 5 | 25 | 151 | 75 | 62 | 2711 |
 | es-ES | 5 | 25 | 149 | 76 | 65 | 2505 |
 | fr-FR | 5 | 25 | 157 | 76 | 61 | 2647 |
 | de-DE | 5 | 29 | 155 | 73 | 56 | 2485 |

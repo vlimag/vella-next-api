@@ -360,7 +360,7 @@ describe('growth analytics ingestion', () => {
       properties: {
         cta_id: 'hero_primary',
         store: 'android',
-        source: 'Google',
+        source: 'Search',
         medium: 'CPC',
         campaign: 'Launch_BR',
       },

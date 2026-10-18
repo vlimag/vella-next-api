@@ -11,7 +11,7 @@ import {
   type StoreCtaPlacement,
 } from '@/lib/site/config';
 import type { SiteCopy } from '@/lib/site/types';
-import { detectVisitorPlatform, reportStoreCta, type VisitorPlatform } from './storeCtaClient';
+import { browserPlayStoreUrl, detectVisitorPlatform, reportStoreCta, type VisitorPlatform } from './storeCtaClient';
 
 export function StoreLinks({
   copy,
@@ -23,17 +23,19 @@ export function StoreLinks({
   placement?: StoreCtaPlacement;
 }) {
   const [platform, setPlatform] = useState<VisitorPlatform>('desktop');
+  const [androidHref, setAndroidHref] = useState(() => playStoreCampaignUrl(placement));
 
   useEffect(() => {
     setPlatform(detectVisitorPlatform());
-  }, []);
+    setAndroidHref(browserPlayStoreUrl(placement));
+  }, [placement]);
 
   const androidButton = ANDROID_STORE_AVAILABLE ? (
     <a
       id={storeCtaId(placement, 'android')}
       key="android"
       className="store-button store-button-primary"
-      href={playStoreCampaignUrl(placement)}
+      href={androidHref}
       target="_blank"
       rel="noopener noreferrer"
       aria-label={copy.playStore}
@@ -41,7 +43,10 @@ export function StoreLinks({
       data-cta-platform="android"
       data-cta-placement={placement}
       data-cta-campaign={STORE_CAMPAIGN}
-      onClick={() => reportStoreCta(placement, 'android')}
+      onClick={(event) => {
+        event.currentTarget.href = browserPlayStoreUrl(placement);
+        reportStoreCta(placement, 'android');
+      }}
     >
       <span className="store-mark store-mark-play" aria-hidden="true">▶</span>
       <span><small>Android</small>{copy.playStore}</span>

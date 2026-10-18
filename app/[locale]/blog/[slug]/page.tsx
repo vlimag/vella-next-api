@@ -9,6 +9,7 @@ import { SITE_URL, absoluteUrl, isLocale, localizedPath } from '@/lib/site/confi
 import { getCopy } from '@/lib/site/content';
 import { localizedMetadata } from '@/lib/site/metadata';
 import { UI_LABELS } from '@/lib/site/uiLabels';
+import { getPrayerSpaceCopy } from '@/lib/site/prayerSpace';
 
 export function generateStaticParams() {
   return BLOG_SLUGS.map((slug) => ({ slug }));
@@ -45,6 +46,20 @@ export default async function ArticlePage({ params }: { params: Promise<{ locale
   const articleUrl = absoluteUrl(value, path);
   const shareMessage = encodeURIComponent(`${post.title} — ${articleUrl}`);
   const shareSubject = encodeURIComponent(post.title);
+  const prayerSpace = getPrayerSpaceCopy(value);
+  const featureCta = post.cta ?? (post.slug === 'a-short-night-prayer-for-the-end-of-the-day' ? {
+    eyebrow: prayerSpace.eyebrow,
+    title: prayerSpace.promise.title,
+    body: prayerSpace.promise.body,
+    label: prayerSpace.primaryCta,
+    path: '/features/prayer-space',
+  } : post.slug === 'how-to-start-reading-the-bible-seven-day-plan' ? {
+    eyebrow: copy.features[0]!.eyebrow,
+    title: copy.features[0]!.title,
+    body: copy.features[0]!.body,
+    label: copy.nav.features,
+    path: '/features',
+  } : undefined);
 
   return (
     <PageShell locale={value} copy={copy} currentPath={path}>
@@ -107,12 +122,12 @@ export default async function ArticlePage({ params }: { params: Promise<{ locale
                 ) : null}
               </section>
             ))}
-            {post.cta ? (
+            {featureCta ? (
               <aside className="article-feature-cta">
-                <p className="eyebrow">{post.cta.eyebrow}</p>
-                <h2>{post.cta.title}</h2>
-                <p>{post.cta.body}</p>
-                <Link className="button button-dark" href={localizedPath(value, post.cta.path)}>{post.cta.label}<span aria-hidden="true">→</span></Link>
+                <p className="eyebrow">{featureCta.eyebrow}</p>
+                <h2>{featureCta.title}</h2>
+                <p>{featureCta.body}</p>
+                <Link className="button button-dark" href={localizedPath(value, featureCta.path)}>{featureCta.label}<span aria-hidden="true">→</span></Link>
               </aside>
             ) : null}
             <nav className="article-related" aria-label={UI_LABELS[value].relatedArticles}>

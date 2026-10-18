@@ -10,7 +10,7 @@ import {
   storeCtaId,
   type StoreCtaPlacement,
 } from '@/lib/site/config';
-import { detectVisitorPlatform, reportStoreCta, type VisitorPlatform } from './storeCtaClient';
+import { browserPlayStoreUrl, detectVisitorPlatform, reportStoreCta, type VisitorPlatform } from './storeCtaClient';
 
 export function StoreHeaderCta({
   className,
@@ -26,10 +26,12 @@ export function StoreHeaderCta({
   placement: Extract<StoreCtaPlacement, 'header-desktop' | 'header-mobile'>;
 }) {
   const [platform, setPlatform] = useState<VisitorPlatform | 'unknown'>('unknown');
+  const [androidHref, setAndroidHref] = useState(() => playStoreCampaignUrl(placement));
 
   useEffect(() => {
     setPlatform(detectVisitorPlatform());
-  }, []);
+    setAndroidHref(browserPlayStoreUrl(placement));
+  }, [placement]);
 
   const iosDirect = platform === 'ios' && IOS_STORE_AVAILABLE;
   const androidDirect = platform === 'android' && ANDROID_STORE_AVAILABLE;
@@ -38,7 +40,7 @@ export function StoreHeaderCta({
   const href = iosDirect
     ? APP_STORE_URL
     : androidDirect
-      ? playStoreCampaignUrl(placement)
+      ? androidHref
       : fallbackHref;
   const displayedLabel = platform === 'ios' && !IOS_STORE_AVAILABLE
     ? iosUnavailableLabel
@@ -55,7 +57,10 @@ export function StoreHeaderCta({
       data-cta-platform={isDirect ? storePlatform : platform}
       data-cta-placement={placement}
       data-cta-campaign={STORE_CAMPAIGN}
-      onClick={isDirect ? () => reportStoreCta(placement, storePlatform) : undefined}
+      onClick={isDirect ? (event) => {
+        if (storePlatform === 'android') event.currentTarget.href = browserPlayStoreUrl(placement);
+        reportStoreCta(placement, storePlatform);
+      } : undefined}
     >
       {displayedLabel}
     </a>

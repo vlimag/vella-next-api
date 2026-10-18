@@ -3,7 +3,7 @@ import type { SiteCopy } from "../types";
 export const es: SiteCopy = {
   locale: "es",
   seo: {
-    title: "Vella – Haz espacio para la fe cada día",
+    title: "Vella – App de Biblia y oración para cada día",
     description:
       "Vella acompaña tu fe con Escritura diaria, un Espacio de Oración privado, caminos personalizados, notas y una comunidad cristiana moderada.",
     featuresTitle: "Funciones para un ritmo de fe más constante | Vella",
@@ -35,11 +35,11 @@ export const es: SiteCopy = {
     language: "Idioma",
   },
   hero: {
-    eyebrow: "Un ritmo más sereno para tu fe",
-    title: "Haz espacio para la fe,",
+    eyebrow: "App de Biblia y oración",
+    title: "Biblia y oración,",
     accent: "un día a la vez.",
     body:
-      "Vella reúne Escritura, oración y pequeños pasos constantes en un camino personal que encaja en tu vida real.",
+      "Lee la Biblia, sigue caminos guiados y guarda tus oraciones y notas personales en Vella: una app para cultivar la fe a tu ritmo.",
     primaryCta: "Descargar Vella",
     secondaryCta: "Descubrir las funciones",
     note: "El acceso requiere Premium. Los nuevos suscriptores anuales elegibles pueden recibir 14 días de prueba.",

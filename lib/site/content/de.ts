@@ -3,7 +3,7 @@ import type { SiteCopy } from "../types";
 export const de: SiteCopy = {
   locale: "de",
   seo: {
-    title: "Vella – Glaube, der jeden Tag Raum bekommt",
+    title: "Vella – Bibel- und Gebets-App für den Alltag",
     description:
       "Vella begleitet dich mit täglicher Bibel, einem privaten Gebetsraum, geführten Glaubenswegen, Notizen und einer geschützten christlichen Gemeinschaft.",
     featuresTitle: "Funktionen für deinen täglichen Glaubensrhythmus | Vella",
@@ -35,11 +35,11 @@ export const de: SiteCopy = {
     language: "Sprache",
   },
   hero: {
-    eyebrow: "Ein ruhigerer Rhythmus für deinen Glauben",
-    title: "Gib dem Glauben",
-    accent: "jeden Tag Raum.",
+    eyebrow: "Bibel- und Gebets-App",
+    title: "Bibel und Gebet,",
+    accent: "Tag für Tag.",
     body:
-      "Vella verbindet Schrift, Gebet und kleine beständige Schritte zu einem persönlichen Glaubensweg, der zu deinem Alltag passt.",
+      "Lies die Bibel, folge geführten Glaubenswegen und bewahre persönliche Gebete und Notizen in Vella auf — einer App für Glauben in deinem eigenen Rhythmus.",
     primaryCta: "Vella herunterladen",
     secondaryCta: "Funktionen entdecken",
     note: "Für den Zugriff ist Premium erforderlich. Berechtigte neue Jahresabonnenten können 14 Tage kostenlos testen.",

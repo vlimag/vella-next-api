@@ -27,6 +27,7 @@ bun-debug.log*
 
 # Deployment metadata
 .vercel/
+supabase/.temp/
 
 # Editor / OS files
 .DS_Store

@@ -3,7 +3,7 @@ import type { SiteCopy } from "../types";
 export const fr: SiteCopy = {
   locale: "fr",
   seo: {
-    title: "Vella – Une place pour la foi, chaque jour",
+    title: "Vella – Application Bible et prière au quotidien",
     description:
       "Vella accompagne votre foi avec les Écritures au quotidien, un Espace de prière privé, des parcours personnalisés, des notes et une communauté chrétienne modérée.",
     featuresTitle: "Des fonctionnalités pour votre rythme de foi quotidien | Vella",
@@ -35,11 +35,11 @@ export const fr: SiteCopy = {
     language: "Langue",
   },
   hero: {
-    eyebrow: "Un rythme plus paisible pour votre foi",
-    title: "Faites une place à la foi,",
+    eyebrow: "Application Bible et prière",
+    title: "La Bible et la prière,",
     accent: "un jour après l'autre.",
     body:
-      "Vella réunit l'Écriture, la prière et de petits pas réguliers dans un parcours personnel qui s'adapte à votre vraie vie.",
+      "Lisez la Bible, suivez des parcours guidés et gardez vos prières et notes personnelles dans Vella : une application pour vivre votre foi à votre rythme.",
     primaryCta: "Télécharger Vella",
     secondaryCta: "Découvrir les fonctionnalités",
     note: "L'accès nécessite Premium. Les nouveaux abonnés annuels éligibles peuvent bénéficier de 14 jours d'essai.",

@@ -161,13 +161,13 @@ const storeDescriptionContract = {
   en: {
     mobileLocale: 'en-US',
     tableLocale: 'en',
-    firstExperience: 'Before account creation, each new user receives exactly one anonymous, personalized first Vella moment. Account creation follows that moment. After sign-in, app content and features remain locked until an active Vella Premium subscription or active eligible introductory trial is confirmed; there is no permanent free tier.',
+    firstExperience: "Before account creation, each new user receives exactly one anonymous, personalized first Vella moment. No Vella account is required to purchase or restore a subscription on this device. A Vella account is required to save personal content, start and track journeys, participate in Community, and sync across supported devices. App content beyond this first moment requires an active Vella Premium subscription or active eligible introductory trial; there is no permanent free tier.",
     subscription: 'The monthly plan is charged immediately and has no free trial. Eligible new annual subscribers may receive exactly 14 days from Apple or Google; the store determines eligibility and shows the full localized annual renewal price and terms before confirmation. The annual subscription renews automatically. Manage or cancel it in Apple or Google subscription settings. Cancel before the trial ends and you will not be charged the annual price. If you are not eligible for the annual offer or choose monthly, no free trial is offered.',
   },
   pt: {
     mobileLocale: 'pt-BR',
     tableLocale: 'pt-BR',
-    firstExperience: 'Antes da criação da conta, cada novo usuário recebe exatamente um primeiro momento Vella anônimo e personalizado. A criação da conta vem depois desse momento. Após o login, o conteúdo e os recursos do app ficam bloqueados até a confirmação de uma assinatura Vella Premium ativa ou de um teste introdutório elegível ativo; não há plano gratuito permanente.',
+    firstExperience: "Antes da criação da conta, cada novo usuário recebe exatamente um primeiro momento Vella anônimo e personalizado. Não é necessário criar uma conta Vella para comprar ou restaurar uma assinatura neste dispositivo. Uma conta Vella é necessária para salvar conteúdo pessoal, iniciar e acompanhar jornadas, participar da Comunidade e sincronizar entre dispositivos compatíveis. O conteúdo além desse primeiro momento exige uma assinatura Vella Premium ativa ou um teste introdutório elegível ativo; não há plano gratuito permanente.",
     subscription: 'O plano mensal é cobrado imediatamente e não tem teste grátis. Novos assinantes anuais elegíveis podem receber exatamente 14 dias da Apple ou do Google; a loja determina a elegibilidade e exibe o preço anual completo de renovação e os termos localizados antes da confirmação. A assinatura anual é renovada automaticamente. Gerencie ou cancele nos ajustes de assinaturas da Apple ou do Google. Cancele antes do fim do teste e o preço anual não será cobrado. Se você não for elegível para a oferta anual ou escolher o plano mensal, não haverá teste grátis.',
   },
   es: {
@@ -842,6 +842,9 @@ describe('Vella localized website', () => {
   it('keeps English canonical and all other locales prefixed', () => {
     expect(DEFAULT_LOCALE).toBe('en');
     expect(localizedPath('en')).toBe('/');
+    expect(localizedPath('pt')).toBe('/pt');
+    expect(localizedPath('pt', '/')).toBe('/pt');
+    expect(absoluteUrl('pt')).toBe('https://vella.one/pt');
     expect(localizedPath('en', '/features')).toBe('/features');
     expect(localizedPath('pt', '/features')).toBe('/pt/features');
     expect(Object.keys(languageAlternates('/blog'))).toHaveLength(LOCALES.length + 1);
@@ -909,8 +912,8 @@ describe('Vella localized website', () => {
     expect(entries.every((entry) => new URL(entry.url).hostname === 'vella.one')).toBe(true);
     expect(entries.every((entry) => !new URL(entry.url).pathname.startsWith('/en'))).toBe(true);
     const expectedStaticDates = new Map<string, string>([
-      ['', '2026-09-07T00:00:00.000Z'],
-      ['/features', '2026-08-24T00:00:00.000Z'],
+      ['', '2026-10-18T00:00:00.000Z'],
+      ['/features', '2026-10-18T00:00:00.000Z'],
       [PRAYER_SPACE_PATH, '2026-08-24T00:00:00.000Z'],
       ['/blog', '2026-10-04T00:00:00.000Z'],
       ['/support', '2026-08-24T00:00:00.000Z'],
@@ -1227,6 +1230,14 @@ describe('Vella localized website', () => {
     expect(referrer.get('utm_content')).toBe('blog-article');
     expect(STORE_CTA_EVENT).toBe('vella:store-cta-click');
     expect(storeCtaId('prayer-space', 'android')).toBe('vella-store-cta-prayer-space-android');
+  });
+
+  it('adds only bounded coarse first-touch context to the Play creative code', () => {
+    const build = playStoreCampaignUrl as (placement: 'blog-article', context?: { source: string; content: string }) => string;
+    const referrer = (context: { source: string; content: string }) => new URLSearchParams(new URL(build('blog-article', context)).searchParams.get('referrer')!);
+    expect(referrer({ source: 'search', content: 'guide_night_prayer' }).get('utm_content')).toBe('search.guide_night_prayer.blog-article');
+    expect(referrer({ source: 'https://google.com/private', content: 'guide_night_prayer' }).get('utm_content')).toBe('blog-article');
+    expect(referrer({ source: 'search', content: 'my-private-prayer' }).get('utm_content')).toBe('blog-article');
   });
 
   it('publishes current App Store and Google Play availability copy in every locale', async () => {

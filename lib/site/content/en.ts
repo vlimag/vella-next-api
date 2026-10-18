@@ -3,9 +3,9 @@ import type { SiteCopy } from '../types';
 export const en: SiteCopy = {
   locale: 'en',
   seo: {
-    title: 'Vella — Make room for faith, every day',
+    title: 'Vella — Bible and prayer app for everyday faith',
     description:
-      'A calmer daily rhythm for Scripture, private prayer, guided journeys, notes, and meaningful faith community.',
+      'A Bible and prayer app for daily Scripture, private prayer, guided journeys, notes, and meaningful faith community.',
     featuresTitle: 'Features designed for a steadier faith rhythm',
     featuresDescription:
       'Explore Vella’s private Prayer Space, daily Scripture, guided journeys, thoughtful search, notes, family groups, and safer faith community.',
@@ -31,11 +31,11 @@ export const en: SiteCopy = {
     language: 'Language',
   },
   hero: {
-    eyebrow: 'A calmer daily rhythm',
-    title: 'Make room for faith,',
+    eyebrow: 'Bible and prayer app',
+    title: 'Scripture and prayer,',
     accent: 'one day at a time.',
     body:
-      'Vella brings Scripture, guided reflection, prayerful habits, and trusted community into one beautiful daily practice—shaped around the season you are living through.',
+      'Read daily Scripture, follow guided journeys, and keep personal prayers and notes in Vella—a Bible and prayer app for your everyday faith.',
     primaryCta: 'Discover Vella',
     secondaryCta: 'Read the journal',
     note: 'Premium access is required. Eligible new annual subscribers may receive a 14-day trial.',

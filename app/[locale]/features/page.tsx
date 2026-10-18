@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { JsonLd } from '@/components/site/JsonLd';
 import { PageShell } from '@/components/site/PageShell';
 import { PrayerSpaceSpotlight } from '@/components/site/PrayerSpaceSpotlight';
+import { PracticeGuides } from '@/components/site/PracticeGuides';
 import { isLocale, localizedPath, absoluteUrl } from '@/lib/site/config';
 import { getCopy } from '@/lib/site/content';
 import { localizedMetadata } from '@/lib/site/metadata';
@@ -57,6 +58,7 @@ export default async function FeaturesPage({ params }: { params: Promise<{ local
           ))}
         </div>
       </section>
+      <PracticeGuides locale={value} copy={copy} />
       <section className="safety-banner">
         <div className="shell safety-inner">
           <span aria-hidden="true">i</span>

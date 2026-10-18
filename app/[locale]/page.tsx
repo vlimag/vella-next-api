@@ -6,6 +6,7 @@ import { HeroStoreLinks } from '@/components/site/HeroStoreLinks';
 import { PageShell } from '@/components/site/PageShell';
 import { PhonePreview } from '@/components/site/PhonePreview';
 import { PrayerSpaceSpotlight } from '@/components/site/PrayerSpaceSpotlight';
+import { PracticeGuides } from '@/components/site/PracticeGuides';
 import { StoreLinks } from '@/components/site/StoreLinks';
 import {
   isLocale,
@@ -38,7 +39,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
             <p className="hero-body">{copy.hero.body}</p>
             <div className="hero-actions">
               <HeroStoreLinks copy={copy.download} />
-              <Link className="button button-ghost" href={localizedPath(locale, '/blog')}>{copy.hero.secondaryCta}</Link>
+              <Link className="button button-ghost" href={localizedPath(locale, '/features')}>{copy.nav.features}</Link>
             </div>
             <p className="hero-note"><span aria-hidden="true">✓</span>{copy.hero.note}</p>
           </div>
@@ -139,18 +140,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
         </div>
       </section>
 
-      <section className="section journal-teaser">
-        <div className="shell journal-teaser-inner">
-          <div>
-            <p className="eyebrow">{copy.blog.eyebrow}</p>
-            <h2>{copy.blog.title}</h2>
-          </div>
-          <div>
-            <p>{copy.blog.body}</p>
-            <Link className="button button-dark" href={localizedPath(locale, '/blog')}>{copy.blog.readAll}<span aria-hidden="true">→</span></Link>
-          </div>
-        </div>
-      </section>
+      <PracticeGuides locale={locale} copy={copy} />
 
       <section className="download-section" id="download">
         <div className="download-glow"></div>

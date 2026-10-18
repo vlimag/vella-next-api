@@ -11,6 +11,19 @@ function event(index = 1): WebGrowthEvent {
 }
 
 describe('website growth outbox', () => {
+  it('delivers an allowlisted article identifier and drops private content in restored events', async () => {
+    const cache = storage();
+    const valid = { ...event(1), properties: { ...event(1).properties, content: 'guide_night_prayer' } };
+    cache.setItem(WEB_GROWTH_STORAGE_KEY, JSON.stringify([
+      valid,
+      { ...event(2), properties: { ...event(2).properties, content: '/pt/blog/private-prayer' } },
+    ]));
+    const delivered: WebGrowthEvent[] = [];
+    const queue = createWebGrowthQueue(cache, async (events) => { delivered.push(...events); return { ok: true, status: 202 }; });
+    await queue.flush();
+    expect(delivered).toEqual([valid]);
+    expect(cache.getItem(WEB_GROWTH_STORAGE_KEY)).not.toContain('private-prayer');
+  });
   it('drops a parseable timestamp containing private text without blocking a valid click', async () => {
     const cache = storage();
     cache.setItem(WEB_GROWTH_STORAGE_KEY, JSON.stringify([

@@ -1,6 +1,16 @@
 # Google Ads — Vella Brazil Android setup
 
-Last updated: 2026-09-09
+Last updated: 2026-10-18
+
+## Operator override — 2026-10-18
+
+Paid acquisition is explicitly excluded from the approved organic/reliability
+work. Keep campaigns paused; do not modify budgets, bidding, goals, creatives or
+targeting. At least one new store-verified non-operator paid subscriber is a
+prerequisite for reconsideration, never an automatic restart authorization.
+The September settings and deadlines below are historical snapshots.
+See `GROWTH_PLAYBOOK_BR_ANDROID.md` for the October evidence, organic repair scope,
+measurement caveats and release gates. No campaign change accompanies that work.
 
 This records the verified live configuration separately from older campaign
 snapshots and pre-launch plans. The production campaign was re-enabled by

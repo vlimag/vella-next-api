@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { NextRequest } from 'next/server';
 import { middleware } from '@/middleware';
 import ArticlePage, { generateMetadata } from '@/app/[locale]/blog/[slug]/page';
+import HomePage from '@/app/[locale]/page';
+import FeaturesPage from '@/app/[locale]/features/page';
 import { GET as feed } from '@/app/[locale]/blog/feed.xml/route';
 import sitemap from '@/app/sitemap';
 import { getPost, getPosts } from '@/lib/site/blog';
@@ -13,6 +15,32 @@ const render = createRequire(import.meta.url)('react-dom/server').renderToStatic
 const slugs = ['how-to-start-reading-the-bible-seven-day-plan', 'a-short-night-prayer-for-the-end-of-the-day'];
 
 describe('organic article cluster', () => {
+  it('offers the product explanation beside the home store downloads in every locale', async () => {
+    for (const locale of LOCALES) {
+      const html = render(await HomePage({ params: Promise.resolve({ locale }) }));
+      const heroActions = html.match(/<div class="hero-actions">[\s\S]*?<\/div><p class="hero-note">/)?.[0];
+      expect(heroActions, locale).toContain(`href="${localizedPath(locale, '/features')}"`);
+    }
+  });
+  it('makes the existing beginner Bible and evening prayer guides directly discoverable from home and features in each language', async () => {
+    for (const locale of LOCALES) {
+      const params = Promise.resolve({ locale });
+      for (const page of [HomePage, FeaturesPage]) {
+        const html = render(await page({ params }));
+        const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((match) => match[1]);
+        for (const slug of slugs) expect(hrefs, `${locale}/${page.name}/${slug}`).toContain(localizedPath(locale, `/blog/${slug}`));
+      }
+    }
+  });
+
+  it('connects the complete existing practice guides to the matching product context without requiring installation', async () => {
+    for (const locale of LOCALES) for (const slug of slugs) {
+      const html = render(await ArticlePage({ params: Promise.resolve({ locale, slug }) }));
+      const contextual = html.match(/<aside class="article-feature-cta">[\s\S]*?<\/aside>/)?.[0];
+      expect(contextual, `${locale}/${slug}`).toBeDefined();
+      expect(contextual).toContain(`href="${localizedPath(locale, slug === slugs[1] ? '/features/prayer-space' : '/features')}"`);
+    }
+  });
   it('serves editorial image URLs without locale rewrites while still routing English articles', () => {
     for (const locale of LOCALES) for (const kind of ['reading', 'evening']) {
       const response = middleware(new NextRequest(`https://vella.one/blog/${kind}-${locale}.png`));

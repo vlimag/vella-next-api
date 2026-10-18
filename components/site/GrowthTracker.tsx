@@ -6,8 +6,9 @@ import {
   STORE_CTA_EVENT,
   type Locale,
 } from '@/lib/site/config';
-import { canonicalCampaign, canonicalRouteClass, coarseReferrerClass, storeClickRouteClass } from '@/lib/site/webAttribution';
+import { canonicalCampaign, publicContentCode } from '@/lib/site/webAttribution';
 import { createWebGrowthQueue, isKnownStoreCta, type WebGrowthEvent } from '@/lib/site/webGrowthQueue';
+import { browserFirstTouch } from './storeCtaClient';
 
 type Attribution = {
   source?: string;
@@ -43,9 +44,9 @@ function resolveAttribution(): Attribution {
 
 function webContext(): Attribution {
   return {
-    source: coarseReferrerClass(document.referrer),
+    source: browserFirstTouch().source,
     medium: 'website',
-    content: canonicalRouteClass(window.location.pathname),
+    content: publicContentCode(window.location.pathname),
   };
 }
 
@@ -118,7 +119,7 @@ export function GrowthTracker({ locale }: { locale: Locale }) {
         medium: context.medium,
         campaign: attribution.campaign ?? STORE_CAMPAIGN,
         // Soft navigation does not rerun this effect, so classify the route at the click.
-        content: storeClickRouteClass(window.location.pathname),
+        content: publicContentCode(window.location.pathname),
         cta_id: ctaId,
         store,
       });

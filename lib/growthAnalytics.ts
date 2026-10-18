@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { fail } from '@/lib/http';
 import { createServiceClient } from '@/lib/supabase';
+import { WEB_CONTENT_CODES, WEB_REFERRER_CLASSES } from '@/lib/site/config';
 
 export const MAX_GROWTH_EVENT_BATCH = 20;
 export const MAX_GROWTH_REQUEST_BYTES = 32 * 1024;
@@ -169,6 +170,8 @@ const eventBase = z.object({
   app_version: safeVersionSchema,
   build_number: safeBuildSchema.optional(),
   runtime_version: safeVersionSchema.optional(),
+  update_id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/).optional(),
+  traffic_type: z.enum(['production', 'test']).optional(),
   funnel_variant: funnelVariantSchema.optional(),
   locale: localeSchema.optional(),
   session_id: uuidSchema.optional(),
@@ -264,7 +267,12 @@ const growthEventUnionSchema = z.union([
         'navigation_failed',
         'unknown',
       ]),
-    }).strict(),
+      reason_code: z.enum(['timeout', 'network_unavailable', 'server_unavailable', 'unauthorized', 'invalid_response', 'content_unavailable', 'unknown']).optional(),
+      duration_bucket: diagnosticDurationBucketSchema.optional(),
+      attempt_count: z.number().int().min(1).max(2).optional(),
+    }).strict().refine((value) => value.stage === 'content_load' || (
+      value.reason_code === undefined && value.duration_bucket === undefined && value.attempt_count === undefined
+    ), { message: 'load diagnostics require content_load stage' }),
   }).strict(),
   eventBase.extend({
     event_name: z.literal('onboarding_started'),
@@ -706,6 +714,14 @@ export const GROWTH_EVENT_NAMES = growthEventUnionSchema.options.map((option) =>
 ));
 
 export const growthEventSchema = growthEventUnionSchema.superRefine((event, context) => {
+  if (event.platform === 'web' && (event.event_name === 'landing_viewed' || event.event_name === 'store_cta_clicked')) {
+    for (const [key, allowed] of [['source', WEB_REFERRER_CLASSES], ['content', WEB_CONTENT_CODES]] as const) {
+      const value = event.properties[key];
+      if (value !== undefined && !(allowed as readonly string[]).includes(value)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, message: 'unknown public website code', path: ['properties', key] });
+      }
+    }
+  }
   if (event.event_name === 'first_experience_viewed') {
     const matchesEnvelope = event.properties.variant === 'compact_v2'
       ? event.funnel_variant === 'compact_v2'

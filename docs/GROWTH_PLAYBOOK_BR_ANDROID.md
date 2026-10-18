@@ -1,6 +1,64 @@
 # Vella Brazil Android Growth Playbook
 
-Last updated: 2026-09-09
+Last updated: 2026-10-18
+
+## Controlling decision — organic repair, no paid acquisition
+
+The operator approved reliability, conversion presentation, measurement and organic
+discovery improvements on 2026-10-18, explicitly excluding paid acquisition.
+Keep campaigns paused. At least one new store-verified, non-operator paid
+subscription is a prerequisite to reconsider acquisition, not permission to
+restart it automatically. September budgets below are historical, not current
+spend authorization. Prices, plans, trial eligibility and entitlements are unchanged.
+
+Matched Search Console window (2026-09-19 through 2026-10-16): Vella had 3 clicks
+and 207 impressions; Youp had 25 clicks and about 2.1K impressions. Youp's
+`youp` and `www.youp` queries contributed 1,455 impressions. This comparison
+supports a discovery/brand-demand gap, not proof that Youp's blog or onboarding
+caused its growth. The Vella three-month Brazil slice had 13 impressions and
+zero clicks. Small samples cannot establish a conversion rate improvement.
+
+Vella's ordered mobile cohort for 2026-09-20 through 2026-10-17 contained 24
+first opens, 8 onboarding completions and 2 checkouts, with zero new verified
+production paid/trial starts. Operator contamination remains possible. Four
+preview views used fallback; three installations recorded 11 catalog failures
+without observed recovery. Web totals (349 landing events, including 140 legal
+page events, and one store CTA) are events, not unique people.
+
+Implementation prepared on 2026-10-18 (release evidence must be checked separately):
+
+- One six-second preview deadline, bounded explicit-transient retry, finite
+  failure reason/latency/attempt fields; no raw errors or spiritual answers.
+- Checkout analytics never waits for transport. Existing-subscription checks
+  fail closed; native initialization, catalog, restore and validation are bounded,
+  with generation-scoped listeners and stale-result protection.
+- Clear account requirements in the app's eight languages and PT/EN store-copy
+  sources. Purchase/restore does not require a permanent Vella account; saving
+  personal content, starting/tracking journeys, Community participation and sync do.
+- Existing guides surfaced on home/features in all eight languages, canonical
+  root URLs normalized, regional search referrals recognized, and bounded
+  first-touch/public-content codes propagated to Play links. No new article or
+  human-review claim was invented.
+- Optional actual OTA UUID and runtime traffic classification are persisted per
+  event, including queued events. Legacy NULL means unknown. `production` means
+  a production runtime, not a proven external person: operator tests on a release
+  build still need explicit exclusion. Anonymous purchase-to-install linkage is
+  not fully solved by these fields; never equate account signup with all purchases.
+
+DB deployment order: apply only the reviewed `faith_harbor` migration
+`20261018161207_organic_reliability_observability.sql`, verify legacy/new ingestion,
+then deploy the API and mobile. Do not push unrelated shared-project migrations.
+Rollback application code to the previous clean main snapshot if needed; leave
+the additive nullable DB columns and backward-compatible validator in place.
+
+Remaining release gates: verify live API/OTA commit provenance; native QA;
+truthful platform-specific PT-BR store captures; named human review before any
+editorial packet publication. Do not count test purchases as acquisition success.
+
+Evaluate organic progress in matched 28-day windows: non-brand Brazil
+impressions/clicks, indexed guide URLs, store visits/installations, successful
+previews/catalog recovery, verified external paid starts and retention. Compare
+funnel cohorts by OTA; do not relabel historical events with the latest release.
 
 ## Objective
 
