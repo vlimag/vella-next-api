@@ -5,7 +5,8 @@ import { JsonLd } from '@/components/site/JsonLd';
 import { PageShell } from '@/components/site/PageShell';
 import { PrayerSpacePreview } from '@/components/site/PrayerSpacePreview';
 import { StoreLinks } from '@/components/site/StoreLinks';
-import { ANDROID_STORE_AVAILABLE, IOS_STORE_AVAILABLE, absoluteUrl, isLocale, localizedPath } from '@/lib/site/config';
+import { absoluteUrl, isLocale, localizedPath } from '@/lib/site/config';
+import { buildApplicationStructuredData } from '@/lib/site/applicationStructuredData';
 import { getCopy } from '@/lib/site/content';
 import { localizedMetadata } from '@/lib/site/metadata';
 import {
@@ -44,16 +45,7 @@ export default async function PrayerSpacePage({ params }: { params: Promise<{ lo
           url: pageUrl,
           inLanguage: value,
           isPartOf: { '@type': 'WebSite', name: 'Vella', url: absoluteUrl(value) },
-          about: {
-            '@type': 'SoftwareApplication',
-            name: 'Vella Prayer Space',
-            applicationCategory: 'LifestyleApplication',
-            operatingSystem: [
-              ...(ANDROID_STORE_AVAILABLE ? ['Android'] : []),
-              ...(IOS_STORE_AVAILABLE ? ['iOS'] : []),
-            ].join(', '),
-            featureList: prayer.promise.points,
-          },
+          about: buildApplicationStructuredData(value, siteCopy.seo.description, prayer.promise.points),
         },
         {
           '@context': 'https://schema.org',

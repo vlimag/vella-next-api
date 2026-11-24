@@ -89,14 +89,14 @@ describe('organic article cluster', () => {
     }
   });
 
-  it('includes the full catalog in RSS and advances blog sitemap dates from actual content', async () => {
+  it('includes the full catalog in RSS and never dates the revised blog index before its newest article', async () => {
     const entries = sitemap();
     for (const locale of LOCALES) {
       const xml = await (await feed(new Request('https://vella.one'), { params: Promise.resolve({ locale }) })).text();
       for (const slug of slugs) expect(xml).toContain(absoluteUrl(locale, `/blog/${slug}`));
       const latest = Math.max(...getPosts(locale).map((post) => Date.parse(post.updatedAt ?? post.publishedAt)));
       const entry = entries.find((item) => item.url === absoluteUrl(locale, '/blog'));
-      expect(new Date(entry!.lastModified!).getTime()).toBe(latest);
+      expect(new Date(entry!.lastModified!).getTime()).toBeGreaterThanOrEqual(latest);
     }
     expect(entries).toHaveLength(120);
   });

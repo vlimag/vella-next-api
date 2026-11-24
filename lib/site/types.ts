@@ -1,4 +1,5 @@
 import type { Locale } from './config';
+import type { BlogSlug } from './blog';
 
 export type LinkItem = {
   label: string;
@@ -153,6 +154,7 @@ export type SiteCopy = {
       title: string;
       body: string;
       bullets: string[];
+      guideSlug?: BlogSlug;
     }>;
     safetyTitle: string;
     safetyBody: string;

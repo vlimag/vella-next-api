@@ -6,12 +6,12 @@ export const pt: SiteCopy = {
     title: "Vella – App de Bíblia e oração para o dia a dia",
     description:
       "Vella acompanha sua fé com Escritura diária, Espaço de Oração privado, jornadas personalizadas, notas e uma comunidade cristã moderada.",
-    featuresTitle: "Recursos para um ritmo de fé mais constante | Vella",
+    featuresTitle: "Bíblia diária, diário de oração e jornadas guiadas | Vella",
     featuresDescription:
-      "Conheça o Espaço de Oração privado, a busca bíblica assistida por IA, notas e favoritos, jornadas guiadas, grupos e o Faith Feed moderado da Vella.",
-    blogTitle: "Vella Journal – Fé, oração e Bíblia na vida real",
+      "Conheça a leitura bíblica diária, o diário de oração privado, a busca bíblica e as jornadas da Vella. Veja como o app apoia um ritmo de fé no dia a dia.",
+    blogTitle: "Guias de leitura bíblica e oração | Vella Journal",
     blogDescription:
-      "Conteúdos práticos e cuidadosos sobre leitura bíblica, oração, hábitos espirituais, família e uma fé vivida no cotidiano.",
+      "Comece a ler a Bíblia com um plano de sete dias, experimente uma oração da noite e cultive um ritmo bíblico diário. Leia os guias completos no site.",
     supportTitle: "Ajuda e suporte | Vella",
     supportDescription:
       "Encontre respostas sobre conta, privacidade, notificações, Premium, busca bíblica, grupos e Faith Feed ou fale com o suporte da Vella.",
@@ -224,6 +224,7 @@ export const pt: SiteCopy = {
     sections: [
       {
         title: "Seu ritmo diário de fé",
+        guideSlug: 'a-gentle-daily-scripture-rhythm',
         body:
           "A personalização inicial considera seu objetivo e o tempo disponível sem prender você a um programa imutável.",
         bullets: [
@@ -235,6 +236,7 @@ export const pt: SiteCopy = {
       },
       {
         title: "Explore a Bíblia com mais facilidade",
+        guideSlug: 'read-scripture-with-curiosity',
         body:
           "Pesquise uma referência exata ou descreva um tema com suas palavras. A IA pode expandir a intenção, enquanto os resultados sempre apontam para passagens bíblicas concretas.",
         bullets: [
@@ -246,6 +248,7 @@ export const pt: SiteCopy = {
       },
       {
         title: "Jornadas guiadas em etapas possíveis",
+        guideSlug: 'how-to-start-reading-the-bible-seven-day-plan',
         body:
           "Jornadas estruturadas ajudam você a permanecer por alguns dias em um tema espiritual e perceber o caminho percorrido.",
         bullets: [

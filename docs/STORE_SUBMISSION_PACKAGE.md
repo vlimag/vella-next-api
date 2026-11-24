@@ -85,14 +85,14 @@ The file was mechanically validated with these limits:
 
 | Locale | Name / 30 | Subtitle / 30 | Apple promo / 170 | Play short / 80 | Keywords bytes / 100 | Description / 4000 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| en | 5 | 28 | 154 | 76 | 68 | 2463 |
-| pt-BR | 5 | 25 | 151 | 75 | 62 | 2711 |
-| es-ES | 5 | 25 | 149 | 76 | 65 | 2658 |
-| fr-FR | 5 | 25 | 157 | 76 | 61 | 2824 |
-| de-DE | 5 | 29 | 155 | 73 | 56 | 2693 |
-| it-IT | 5 | 28 | 155 | 78 | 63 | 2645 |
-| ru | 5 | 22 | 135 | 70 | 89 | 2618 |
-| pl | 5 | 24 | 157 | 72 | 61 | 2592 |
+| en | 5 | 28 | 154 | 76 | 68 | 2476 |
+| pt-BR | 5 | 25 | 151 | 75 | 62 | 2738 |
+| es-ES | 5 | 25 | 149 | 76 | 65 | 2680 |
+| fr-FR | 5 | 25 | 157 | 76 | 61 | 2862 |
+| de-DE | 5 | 29 | 155 | 73 | 56 | 2723 |
+| it-IT | 5 | 28 | 155 | 78 | 63 | 2679 |
+| ru | 5 | 22 | 135 | 70 | 89 | 2638 |
+| pl | 5 | 24 | 157 | 72 | 61 | 2608 |
 
 The descriptions deliberately do not hard-code prices. They accurately disclose that Premium is required, monthly billing starts immediately, and eligible new annual subscribers may receive 14 days before paid annual renewal. The store-owned product sheet and in-app paywall must show eligibility plus the full localized annual renewal price and terms before confirmation.
 

@@ -7,6 +7,8 @@ import { PrayerSpaceSpotlight } from '@/components/site/PrayerSpaceSpotlight';
 import { PracticeGuides } from '@/components/site/PracticeGuides';
 import { isLocale, localizedPath, absoluteUrl } from '@/lib/site/config';
 import { getCopy } from '@/lib/site/content';
+import { getPost } from '@/lib/site/blog';
+import { buildApplicationStructuredData } from '@/lib/site/applicationStructuredData';
 import { localizedMetadata } from '@/lib/site/metadata';
 import { getPrayerSpaceCopy } from '@/lib/site/prayerSpace';
 
@@ -33,6 +35,7 @@ export default async function FeaturesPage({ params }: { params: Promise<{ local
         url: absoluteUrl(value, '/features'),
         inLanguage: value,
         isPartOf: { '@type': 'WebSite', name: 'Vella', url: absoluteUrl(value) },
+        about: buildApplicationStructuredData(value, copy.seo.description, copy.features.map((feature) => feature.eyebrow)),
       }} />
       <section className="subpage-hero feature-page-hero">
         <div className="hero-ambient ambient-one"></div>
@@ -52,6 +55,7 @@ export default async function FeaturesPage({ params }: { params: Promise<{ local
                 <span>{String(index + 1).padStart(2, '0')}</span>
                 <h2>{section.title}</h2>
                 <p>{section.body}</p>
+                {section.guideSlug ? <p><Link className="text-link" href={localizedPath(value, `/blog/${section.guideSlug}`)}>{getPost(value, section.guideSlug)!.title}<span aria-hidden="true"> →</span></Link></p> : null}
               </div>
               <ul>{section.bullets.map((bullet) => <li key={bullet}><span>✓</span>{bullet}</li>)}</ul>
             </article>

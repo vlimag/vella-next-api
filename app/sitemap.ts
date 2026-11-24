@@ -15,14 +15,15 @@ const STATIC_PATHS = [
   '/delete-account',
 ] as const;
 
-// Actual home/features discovery and category-copy revision; article dates stay unchanged.
-const DISCOVERY_UPDATED_AT = new Date('2026-10-18T00:00:00.000Z');
+// Product schema, contextual links and discovery metadata revised on this date.
+// Legal/support pages and the unchanged article bodies retain their own dates.
+const DISCOVERY_UPDATED_AT = new Date('2026-11-24T00:00:00.000Z');
 const PREVIOUS_STATIC_UPDATED_AT = new Date('2026-08-24T00:00:00.000Z');
 const STATIC_UPDATED_AT: Record<(typeof STATIC_PATHS)[number], Date> = {
   '': DISCOVERY_UPDATED_AT,
   '/features': DISCOVERY_UPDATED_AT,
-  [PRAYER_SPACE_PATH]: PREVIOUS_STATIC_UPDATED_AT,
-  '/blog': PREVIOUS_STATIC_UPDATED_AT,
+  [PRAYER_SPACE_PATH]: DISCOVERY_UPDATED_AT,
+  '/blog': DISCOVERY_UPDATED_AT,
   '/support': PREVIOUS_STATIC_UPDATED_AT,
   '/privacy': PREVIOUS_STATIC_UPDATED_AT,
   '/terms': PREVIOUS_STATIC_UPDATED_AT,
@@ -35,7 +36,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     LOCALES.map((locale) => ({
       url: absoluteUrl(locale, path),
       lastModified: path === '/blog'
-        ? new Date(Math.max(...getPosts(locale).map((post) => Date.parse(post.updatedAt ?? post.publishedAt))))
+        ? new Date(Math.max(STATIC_UPDATED_AT[path].getTime(), ...getPosts(locale).map((post) => Date.parse(post.updatedAt ?? post.publishedAt))))
         : STATIC_UPDATED_AT[path],
       changeFrequency: path === '' ? ('weekly' as const) : path === '/blog' ? ('weekly' as const) : ('monthly' as const),
       priority: path === '' ? 1 : path === PRAYER_SPACE_PATH ? 0.95 : path === '/features' ? 0.9 : path === '/blog' ? 0.8 : 0.6,

@@ -6,12 +6,12 @@ export const pl: SiteCopy = {
     title: "Vella – aplikacja do Biblii i modlitwy na co dzień",
     description:
       "Vella wspiera codzienny rytm wiary przez Pismo, prywatną Przestrzeń Modlitwy, prowadzone ścieżki, notatki i moderowaną chrześcijańską społeczność.",
-    featuresTitle: "Funkcje dla Twojego codziennego rytmu wiary | Vella",
+    featuresTitle: "Biblia na co dzień, dziennik modlitwy i ścieżki | Vella",
     featuresDescription:
-      "Poznaj prywatną Przestrzeń Modlitwy, wyszukiwanie Biblii wspomagane przez AI, notatki, prowadzone ścieżki, grupy oraz moderowany Faith Feed.",
-    blogTitle: "Dziennik Vella – wiara, modlitwa i Biblia na co dzień",
+      "Poznaj codzienne czytanie Biblii, prywatny dziennik modlitwy, wyszukiwanie biblijne i ścieżki Vella — aplikacji wspierającej Twój rytm wiary.",
+    blogTitle: "Jak czytać Biblię i modlić się: poradniki | Vella",
     blogDescription:
-      "Praktyczne, starannie przygotowane teksty o czytaniu Biblii, modlitwie, duchowych nawykach i wierze przeżywanej każdego dnia.",
+      "Zacznij czytać Biblię z planem na siedem dni, wypróbuj krótką modlitwę wieczorną i znajdź rytm lektury. Przeczytaj pełne poradniki na stronie.",
     supportTitle: "Pomoc i wsparcie | Vella",
     supportDescription:
       "Odpowiedzi na pytania o konto, prywatność, powiadomienia, Premium, wyszukiwanie Biblii, grupy i Faith Feed oraz kontakt ze wsparciem Vella.",
@@ -224,6 +224,7 @@ export const pl: SiteCopy = {
     sections: [
       {
         title: "Twój codzienny rytm wiary",
+        guideSlug: 'a-gentle-daily-scripture-rhythm',
         body:
           "Początkowa personalizacja uwzględnia Twój cel i dostępny czas, ale nie zamyka Cię w niezmiennym planie.",
         bullets: [
@@ -235,6 +236,7 @@ export const pl: SiteCopy = {
       },
       {
         title: "Łatwiejsze odkrywanie Biblii",
+        guideSlug: 'read-scripture-with-curiosity',
         body:
           "Wyszukaj konkretny odnośnik lub opisz temat własnymi słowami. AI może rozszerzyć intencję zapytania, a wyniki zawsze prowadzą do konkretnych fragmentów Biblii.",
         bullets: [
@@ -246,6 +248,7 @@ export const pl: SiteCopy = {
       },
       {
         title: "Prowadzone ścieżki w przystępnych krokach",
+        guideSlug: 'how-to-start-reading-the-bible-seven-day-plan',
         body:
           "Uporządkowane ścieżki pomagają przez kilka dni pozostać przy jednym duchowym temacie i zobaczyć swój postęp.",
         bullets: [

@@ -62,7 +62,7 @@ export default async function BlogPage({ params }: { params: Promise<{ locale: s
                 <div className="blog-card-visual"><span>{String(index + 1).padStart(2, '0')} · {post.category}</span></div>
                 <div className="blog-card-content">
                   <div className="blog-meta"><span>{post.dateLabel}</span><span>·</span><span>{post.readTime}</span></div>
-                  <h2>{post.title}</h2>
+                  <h2><Link href={localizedPath(value, `/blog/${post.slug}`)}>{post.title}</Link></h2>
                   <p>{post.description}</p>
                   <Link className="text-link" href={localizedPath(value, `/blog/${post.slug}`)}>{copy.blog.readArticle}<span aria-hidden="true">→</span></Link>
                 </div>

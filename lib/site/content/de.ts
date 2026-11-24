@@ -6,12 +6,12 @@ export const de: SiteCopy = {
     title: "Vella – Bibel- und Gebets-App für den Alltag",
     description:
       "Vella begleitet dich mit täglicher Bibel, einem privaten Gebetsraum, geführten Glaubenswegen, Notizen und einer geschützten christlichen Gemeinschaft.",
-    featuresTitle: "Funktionen für deinen täglichen Glaubensrhythmus | Vella",
+    featuresTitle: "Tägliches Bibellesen, Gebetstagebuch und Wege | Vella",
     featuresDescription:
-      "Entdecke den privaten Gebetsraum, Bibelsuche mit KI-Unterstützung, Notizen, Favoriten, geführte Wege, Gruppen und den moderierten Faith Feed von Vella.",
-    blogTitle: "Vella Journal – Glaube, Gebet und Bibel im Alltag",
+      "Entdecke tägliches Bibellesen, ein privates Gebetstagebuch, Bibelsuche und geführte Wege in Vella. Lerne die App für deinen Glaubensalltag kennen.",
+    blogTitle: "Bibel lesen und beten: praktische Anleitungen | Vella",
     blogDescription:
-      "Praktische, sorgfältig geschriebene Impulse für Bibellesen, Gebet, christliche Gewohnheiten und ein glaubensvolles Leben im Alltag.",
+      "Beginne das Bibellesen mit einem Sieben-Tage-Plan, probiere ein kurzes Abendgebet und finde deinen Leserhythmus. Lies die vollständigen Anleitungen online.",
     supportTitle: "Hilfe und Support | Vella",
     supportDescription:
       "Antworten zu Konto, Datenschutz, Benachrichtigungen, Premium, Bibelsuche, Gruppen und Faith Feed sowie direkter Kontakt zum Vella-Support.",
@@ -224,6 +224,7 @@ export const de: SiteCopy = {
     sections: [
       {
         title: "Dein persönlicher täglicher Rhythmus",
+        guideSlug: 'a-gentle-daily-scripture-rhythm',
         body:
           "Der Einstieg berücksichtigt dein Ziel und deine verfügbare Zeit, ohne dich auf einen unveränderlichen Plan festzulegen.",
         bullets: [
@@ -235,6 +236,7 @@ export const de: SiteCopy = {
       },
       {
         title: "Die Bibel leichter erkunden",
+        guideSlug: 'read-scripture-with-curiosity',
         body:
           "Suche direkt nach einer Referenz oder beschreibe ein Thema in deinen eigenen Worten. KI kann die Absicht erweitern, während das Ergebnis immer zu konkreten Bibelstellen zurückführt.",
         bullets: [
@@ -246,6 +248,7 @@ export const de: SiteCopy = {
       },
       {
         title: "Geführte Wege mit überschaubaren Schritten",
+        guideSlug: 'how-to-start-reading-the-bible-seven-day-plan',
         body:
           "Strukturierte Wege helfen dir, über mehrere Tage an einem Glaubensthema dranzubleiben und Fortschritt sichtbar zu machen.",
         bullets: [

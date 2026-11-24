@@ -6,12 +6,12 @@ export const en: SiteCopy = {
     title: 'Vella — Bible and prayer app for everyday faith',
     description:
       'A Bible and prayer app for daily Scripture, private prayer, guided journeys, notes, and meaningful faith community.',
-    featuresTitle: 'Features designed for a steadier faith rhythm',
+    featuresTitle: 'Daily Bible reading, prayer journal and guided journeys',
     featuresDescription:
-      'Explore Vella’s private Prayer Space, daily Scripture, guided journeys, thoughtful search, notes, family groups, and safer faith community.',
-    blogTitle: 'The Vella Journal — thoughtful guidance for everyday faith',
+      'Explore daily Scripture, a private prayer journal, Bible search and guided journeys in Vella. See how the app supports a practical rhythm of faith.',
+    blogTitle: 'Bible reading and prayer guides | Vella Journal',
     blogDescription:
-      'Substantial, practical reflections on Scripture, prayer, spiritual habits, family faith, and finding stillness in a noisy world.',
+      'Start reading the Bible with a seven-day plan, try a short night prayer, and build a daily Scripture rhythm. Read the complete guides on the web.',
     supportTitle: 'Vella Support',
     supportDescription: 'Get help with your Vella account, subscription, privacy, notifications, and daily journey.',
     privacyTitle: 'Vella Privacy Policy',
@@ -210,16 +210,19 @@ export const en: SiteCopy = {
     sections: [
       {
         title: 'Your daily home',
+        guideSlug: 'a-gentle-daily-scripture-rhythm',
         body: 'A focused starting place for today rather than another stream asking for attention.',
         bullets: ['Daily Scripture reflection', 'Active journey and progress at a glance', 'Private favorites and reflection notes', 'Gentle consistency milestones'],
       },
       {
         title: 'Scripture discovery',
+        guideSlug: 'read-scripture-with-curiosity',
         body: 'Find a known passage or explore what the Bible says about a theme you cannot yet name precisely.',
         bullets: ['Direct reference and keyword search', 'Natural-language intent expansion', 'Interface available in eight languages', 'Save, revisit, and reflect privately'],
       },
       {
         title: 'Journeys with direction',
+        guideSlug: 'how-to-start-reading-the-bible-seven-day-plan',
         body: 'Turn broad intentions into small daily practices through guided, multi-day experiences.',
         bullets: ['Personalized seven-day starting recommendation', 'Goal, time, and life-season inputs', 'Realistic daily time choices', 'Progress that encourages rather than pressures'],
       },

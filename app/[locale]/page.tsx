@@ -23,7 +23,7 @@ export default async function HomePage({ params }: { params: Promise<{ locale: s
   const copy = await getCopy(locale);
   const prayerSpace = getPrayerSpaceCopy(locale);
 
-  const structuredData = buildHomeStructuredData(locale, copy.seo.description);
+  const structuredData = buildHomeStructuredData(locale, copy.seo.description, copy.features.map((feature) => feature.eyebrow));
 
   return (
     <PageShell locale={locale} copy={copy}>

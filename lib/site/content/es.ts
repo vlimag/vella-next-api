@@ -6,12 +6,12 @@ export const es: SiteCopy = {
     title: "Vella – App de Biblia y oración para cada día",
     description:
       "Vella acompaña tu fe con Escritura diaria, un Espacio de Oración privado, caminos personalizados, notas y una comunidad cristiana moderada.",
-    featuresTitle: "Funciones para un ritmo de fe más constante | Vella",
+    featuresTitle: "Biblia diaria, diario de oración y caminos guiados | Vella",
     featuresDescription:
-      "Descubre el Espacio de Oración privado, la búsqueda bíblica asistida por IA, notas y favoritos, caminos guiados, grupos y el Faith Feed moderado de Vella.",
-    blogTitle: "Vella Journal – Fe, oración y Biblia en la vida diaria",
+      "Descubre la lectura bíblica diaria, el diario de oración privado, la búsqueda bíblica y los caminos de Vella. Conoce la app para tu ritmo de fe diario.",
+    blogTitle: "Guías de lectura bíblica y oración | Vella Journal",
     blogDescription:
-      "Artículos prácticos y cuidadosamente escritos sobre lectura bíblica, oración, hábitos espirituales, familia y una fe vivida cada día.",
+      "Empieza a leer la Biblia con un plan de siete días, prueba una oración de la noche y crea un ritmo bíblico diario. Lee las guías completas en la web.",
     supportTitle: "Ayuda y soporte | Vella",
     supportDescription:
       "Encuentra respuestas sobre tu cuenta, privacidad, notificaciones, Premium, búsqueda bíblica, grupos y Faith Feed, o contacta con el soporte de Vella.",
@@ -224,6 +224,7 @@ export const es: SiteCopy = {
     sections: [
       {
         title: "Tu ritmo diario de fe",
+        guideSlug: 'a-gentle-daily-scripture-rhythm',
         body:
           "La personalización inicial tiene en cuenta tu objetivo y el tiempo disponible sin encerrarte en un programa inamovible.",
         bullets: [
@@ -235,6 +236,7 @@ export const es: SiteCopy = {
       },
       {
         title: "Explora la Biblia con más facilidad",
+        guideSlug: 'read-scripture-with-curiosity',
         body:
           "Busca una referencia exacta o describe un tema con tus palabras. La IA puede ampliar la intención, mientras los resultados siempre apuntan a pasajes bíblicos concretos.",
         bullets: [
@@ -246,6 +248,7 @@ export const es: SiteCopy = {
       },
       {
         title: "Caminos guiados en etapas posibles",
+        guideSlug: 'how-to-start-reading-the-bible-seven-day-plan',
         body:
           "Los caminos estructurados te ayudan a permanecer varios días con un tema espiritual y a ver el trayecto recorrido.",
         bullets: [

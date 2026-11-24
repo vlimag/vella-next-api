@@ -1,6 +1,59 @@
 # Vella Brazil Android Growth Playbook
 
-Last updated: 2026-10-18
+Last updated: 2026-11-24
+
+## November 24 conversion recovery
+
+The operator authorized the fixes, onboarding/SEO improvements, clean main
+integration and production OTA release on November 24. Paid acquisition remains
+paused; prices, plans, trial eligibility and access rules are unchanged.
+
+Read-only audit, October 25 through November 23 (America/Sao_Paulo): 18 Android
+first-open installation IDs, four ordered onboarding/preview/paywall completions,
+zero checkouts. Fourteen backgrounded the first goal screen. All four new
+previews used fallback; three of the four paywalls logged ten product-query
+failures without observed recovery, leaving one with a loaded offer. These are
+installation IDs, not verified unique external people. No new Vella profiles or
+production receipts were recorded; the two recent iOS receipts were Sandbox.
+Web recorded 402 landing events (193 legal, 18 Portuguese) and one store CTA.
+Search Console was unavailable without sign-in; no fresh ranking claim is made.
+
+At audit time the production OTA was still October 4 group
+`ff6d0986-7734-4f35-86c7-ff7e6d62f4ac`, commit `44f8e363`. The October 18 fixes
+had not reached mobile users. The November release includes that pending work.
+
+Implemented: immediate first-moment CTA with optional goals, compact language
+selection and clear Bible/prayer category copy in eight languages. An empty
+selection uses the existing daily-rhythm default internally; it emits the
+already-supported empty onboarding completion payload and exact zero-choice
+step-result diagnostics. It is not a claimed selected preference.
+
+Catalog reads receive at most one retry after 500 ms for recoverable native
+codes. Explicit permanent/empty/configuration responses and local timeouts are
+not retried; no purchase is retried. Bare `query_product` is deliberately eligible
+for this single read retry but does not establish that the root cause is transient.
+The per-query 15-second deadline and stale-generation fences remain active.
+
+Website improvements cover search-intent feature/journal metadata, contextual
+guide links and one truthful Vella application schema in eight locales. Canonical
+URLs and reciprocal alternates remain; only revised page dates changed. Store
+copy sources now describe optional personalization; a source commit is not a
+store-console publication. No new editorial packet was published.
+
+Fresh checks: 1,025 mobile tests, 900 API tests, both typechecks, website build
+and iOS/Android exports passed. Independent review found no critical/important
+source findings. Actual website navigation passed in the local production build.
+Android boot and APK installation succeeded; Android Studio's visual control
+failed, so an interactive native journey and licensed purchase must not be
+reported as passed. Release metadata must be verified separately after publishing.
+
+Evaluate the new OTA's catalog-loaded rate, remote-preview rate, first-screen
+continuation and verified external subscriptions after seven days, then compare
+organic discovery and the complete funnel in matched 28-day windows. Counts from
+test devices and Sandbox purchases must remain excluded from success claims.
+
+Rollback: republish the previous tested main snapshot on the production channel
+if new release errors regress. Keep the additive October DB fields in place.
 
 ## Controlling decision — organic repair, no paid acquisition
 

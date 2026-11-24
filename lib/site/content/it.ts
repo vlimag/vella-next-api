@@ -6,12 +6,12 @@ export const it: SiteCopy = {
     title: "Vella – App Bibbia e preghiera per ogni giorno",
     description:
       "Vella accompagna la tua fede con la Scrittura quotidiana, uno Spazio di Preghiera privato, percorsi guidati, note e una comunità cristiana moderata.",
-    featuresTitle: "Funzioni per il tuo ritmo di fede quotidiano | Vella",
+    featuresTitle: "Bibbia quotidiana, diario di preghiera e percorsi | Vella",
     featuresDescription:
-      "Scopri lo Spazio di Preghiera privato, la ricerca biblica assistita dall'IA, note e preferiti, percorsi guidati, gruppi e il Faith Feed moderato di Vella.",
-    blogTitle: "Vella Journal – Fede, preghiera e Bibbia nella vita quotidiana",
+      "Scopri la lettura biblica quotidiana, il diario di preghiera privato, la ricerca biblica e i percorsi Vella: un'app per il tuo ritmo di fede quotidiano.",
+    blogTitle: "Guide alla lettura della Bibbia e alla preghiera | Vella",
     blogDescription:
-      "Articoli pratici e curati sulla lettura della Bibbia, la preghiera, le abitudini spirituali e una fede vissuta con costanza.",
+      "Inizia la Bibbia con un piano di sette giorni, prova una breve preghiera della sera e trova un ritmo di lettura. Leggi le guide complete sul sito.",
     supportTitle: "Assistenza e supporto | Vella",
     supportDescription:
       "Trova risposte su account, privacy, notifiche, Premium, ricerca biblica, gruppi e Faith Feed oppure contatta il supporto Vella.",
@@ -224,6 +224,7 @@ export const it: SiteCopy = {
     sections: [
       {
         title: "Il tuo ritmo di fede quotidiano",
+        guideSlug: 'a-gentle-daily-scripture-rhythm',
         body:
           "L'esperienza iniziale considera il tuo obiettivo e il tempo disponibile senza rinchiuderti in un programma immutabile.",
         bullets: [
@@ -235,6 +236,7 @@ export const it: SiteCopy = {
       },
       {
         title: "Esplora la Bibbia con più facilità",
+        guideSlug: 'read-scripture-with-curiosity',
         body:
           "Cerca un riferimento preciso o descrivi un tema con parole tue. L'IA può ampliare l'intento della ricerca, mentre i risultati rimandano sempre a passi biblici concreti.",
         bullets: [
@@ -246,6 +248,7 @@ export const it: SiteCopy = {
       },
       {
         title: "Percorsi guidati in tappe accessibili",
+        guideSlug: 'how-to-start-reading-the-bible-seven-day-plan',
         body:
           "Percorsi strutturati aiutano a restare su un tema spirituale per più giorni e a vedere il cammino compiuto.",
         bullets: [
