@@ -22,11 +22,16 @@ At audit time the production OTA was still October 4 group
 `ff6d0986-7734-4f35-86c7-ff7e6d62f4ac`, commit `44f8e363`. The October 18 fixes
 had not reached mobile users. The November release includes that pending work.
 
-Implemented: immediate first-moment CTA with optional goals, compact language
-selection and clear Bible/prayer category copy in eight languages. An empty
-selection uses the existing daily-rhythm default internally; it emits the
-already-supported empty onboarding completion payload and exact zero-choice
-step-result diagnostics. It is not a claimed selected preference.
+Controlling correction, November 24: the operator explicitly rejected another
+preview-first experiment because it had already been tried. Restore the approved
+September 14 conversion-v3 sequence: selected goals -> persisted profile ->
+personalized Premium offer. No Scripture request, guided moment, completion
+screen or permanent-account requirement belongs before that offer. Interrupted
+legacy preview drafts and preview deep links must resolve through current access
+truth, with existing subscribers going to the app. Keep legacy preview fields
+readable for compatibility, but do not add that step back as a conversion fix.
+The initial November 24 preview-first OTA `ff22a854-6241-45e6-9858-ee57ec1581a2`
+is superseded only when the corrective release receipt confirms publication.
 
 Catalog reads receive at most one retry after 500 ms for recoverable native
 codes. Explicit permanent/empty/configuration responses and local timeouts are
@@ -37,23 +42,27 @@ The per-query 15-second deadline and stale-generation fences remain active.
 Website improvements cover search-intent feature/journal metadata, contextual
 guide links and one truthful Vella application schema in eight locales. Canonical
 URLs and reciprocal alternates remain; only revised page dates changed. Store
-copy sources now describe optional personalization; a source commit is not a
+copy sources now describe goal selection followed by the Premium offer; a source commit is not a
 store-console publication. No new editorial packet was published.
 
-Fresh checks: 1,025 mobile tests, 900 API tests, both typechecks, website build
+Initial release checks: 1,025 mobile tests, 900 API tests, both typechecks, website build
 and iOS/Android exports passed. Independent review found no critical/important
 source findings. Actual website navigation passed in the local production build.
 Android boot and APK installation succeeded; Android Studio's visual control
 failed, so an interactive native journey and licensed purchase must not be
 reported as passed. Release metadata must be verified separately after publishing.
 
-Evaluate the new OTA's catalog-loaded rate, remote-preview rate, first-screen
-continuation and verified external subscriptions after seven days, then compare
+The corrective release must be verified separately after fresh tests; do not
+reuse the initial release counts as evidence for the correction.
+
+Evaluate the corrective OTA's catalog-loaded rate, goal-to-offer continuation,
+checkout starts and verified external subscriptions after seven days, then compare
 organic discovery and the complete funnel in matched 28-day windows. Counts from
 test devices and Sandbox purchases must remain excluded from success claims.
 
-Rollback: republish the previous tested main snapshot on the production channel
-if new release errors regress. Keep the additive October DB fields in place.
+Rollback: republish a tested main snapshot that retains direct goal-to-Premium
+routing and the ownership/reliability fixes. Do not roll back wholesale to the
+rejected preview-first OTA or the older October release. Keep additive DB fields.
 
 ## Controlling decision — organic repair, no paid acquisition
 
